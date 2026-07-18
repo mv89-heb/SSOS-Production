@@ -1,0 +1,83 @@
+{
+  "common": {
+    "search": "Search...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "loading": "Loading...",
+    "noData": "No data found",
+    "actions": "Actions",
+    "success": "Action completed successfully",
+    "error": "An error occurred while processing"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "suppliers": "Suppliers",
+    "catalog": "Product Catalog",
+    "orders": "Purchase Orders",
+    "audit": "Audit Log",
+    "settings": "System Settings"
+  },
+  "header": {
+    "userProfile": "User Profile",
+    "logout": "Log Out",
+    "tenant": "Active Organization",
+    "notifications": "Notifications",
+    "roles": {
+      "admin": "System Admin",
+      "manager": "Manager",
+      "employee": "Employee"
+    }
+  },
+  "dashboard": {
+    "title": "General Dashboard",
+    "welcome": "Welcome back",
+    "totalOrders": "Active Orders",
+    "totalSuppliers": "Registered Suppliers",
+    "pendingApprovals": "Pending Approvals"
+  },
+  "suppliers": {
+    "title": "Supplier Management",
+    "addSupplier": "New Supplier",
+    "supplierName": "Supplier Name",
+    "companyId": "Company ID",
+    "email": "Email Address",
+    "phone": "Contact Phone",
+    "status": "Supplier Status",
+    "emptyState": "No registered suppliers found."
+  },
+  "catalog": {
+    "title": "Product Catalog",
+    "addProduct": "Add Product",
+    "sku": "SKU",
+    "productName": "Product Name",
+    "price": "Unit Price",
+    "supplier": "Associated Supplier",
+    "emptyState": "No products in catalog."
+  },
+  "orders": {
+    "title": "Purchase Orders",
+    "newOrder": "Create New Order",
+    "orderId": "Order ID",
+    "date": "Creation Date",
+    "total": "Total Amount",
+    "status": "Order Status",
+    "emptyState": "No purchase orders found.",
+    "statuses": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "sent": "Sent to Supplier"
+    }
+  },
+  "audit": {
+    "title": "Audit Log",
+    "timestamp": "Timestamp",
+    "user": "User",
+    "action": "Action Type",
+    "details": "Details",
+    "ipAddress": "IP Address",
+    "emptyState": "Audit log is empty."
+  }
+}

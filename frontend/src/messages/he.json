@@ -1,0 +1,78 @@
+{
+  "common": {
+    "search": "חיפוש...",
+    "save": "שמירה",
+    "cancel": "ביטול",
+    "delete": "מחיקה",
+    "edit": "עריכה",
+    "loading": "טוען נתונים...",
+    "noData": "לא נמצאו נתונים",
+    "actions": "פעולות",
+    "success": "הפעולה בוצעה בהצלחה",
+    "error": "אירעה שגיאה בעיבוד הבקשה"
+  },
+  "navigation": {
+    "dashboard": "לוח בקרה",
+    "suppliers": "ניהול ספקים",
+    "catalog": "קטלוג מוצרים",
+    "orders": "הזמנות רכש",
+    "audit": "לוג ביקורת",
+    "settings": "הגדרות מערכת"
+  },
+  "header": {
+    "userProfile": "פרופיל משתמש",
+    "logout": "התנתק מהמערכת",
+    "tenant": "ארגון פעיל",
+    "notifications": "התראות"
+  },
+  "dashboard": {
+    "title": "לוח בקרה כללי",
+    "welcome": "שלום, שמחים לראותך שוב",
+    "totalOrders": "סה\"כ הזמנות פעילות",
+    "totalSuppliers": "ספקים רשומים במערכת",
+    "pendingApprovals": "הזמנות הממתינות לאישור"
+  },
+  "suppliers": {
+    "title": "ניהול ספקים",
+    "addSupplier": "ספק חדש",
+    "supplierName": "שם הספק",
+    "companyId": "ח.פ / מזהה חברה",
+    "email": "כתובת אימייל",
+    "phone": "טלפון ליצירת קשר",
+    "status": "סטטוס ספק",
+    "emptyState": "לא נמצאו ספקים רשומים במערכת."
+  },
+  "catalog": {
+    "title": "קטלוג מוצרים",
+    "addProduct": "הוספת מוצר",
+    "sku": "מק\"ט",
+    "productName": "שם המוצר",
+    "price": "מחיר ליחידה",
+    "supplier": "ספק משויך",
+    "emptyState": "לא נמצאו מוצרים בקטלוג."
+  },
+  "orders": {
+    "title": "ניהול הזמנות רכש",
+    "newOrder": "יצירת הזמנה חדשה",
+    "orderId": "מספר הזמנה",
+    "date": "תאריך יצירה",
+    "total": "סה\"כ לתשלום",
+    "status": "סטטוס הזמנה",
+    "emptyState": "לא נמצאו הזמנות רכש במערכת.",
+    "statuses": {
+      "pending": "ממתין לאישור",
+      "approved": "אושר",
+      "rejected": "נדחה",
+      "sent": "נשלח לספק"
+    }
+  },
+  "audit": {
+    "title": "לוג ביקורת (Audit Log)",
+    "timestamp": "תאריך ושעה",
+    "user": "משתמש מבצע",
+    "action": "סוג הפעולה",
+    "details": "פרטי השינוי",
+    "ipAddress": "כתובת IP",
+    "emptyState": "לוג הביקורת ריק."
+  }
+}

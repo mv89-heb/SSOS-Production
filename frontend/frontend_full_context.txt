@@ -1,0 +1,3957 @@
+
+================================================================================
+PROJECT STRUCTURE
+================================================================================
+
+[FILE] export_project_context.py
+[FILE] next-env.d.ts
+[FILE] next.config.ts
+[FILE] package.json
+[FILE] postcss.config.js
+[DIR ] src
+[DIR ] src\app
+[DIR ] src\app\[locale]
+[FILE] src\app\[locale]\layout.tsx
+[DIR ] src\app\dashboard
+[DIR ] src\app\dashboard\audit
+[FILE] src\app\dashboard\audit\page.tsx
+[DIR ] src\app\dashboard\catalog
+[FILE] src\app\dashboard\catalog\page.tsx
+[FILE] src\app\dashboard\layout.tsx
+[DIR ] src\app\dashboard\orders
+[DIR ] src\app\dashboard\orders\[id]
+[FILE] src\app\dashboard\orders\[id]\page.tsx
+[DIR ] src\app\dashboard\orders\new
+[FILE] src\app\dashboard\orders\new\page.tsx
+[FILE] src\app\dashboard\orders\page.tsx
+[FILE] src\app\dashboard\page.tsx
+[DIR ] src\app\dashboard\settings
+[FILE] src\app\dashboard\settings\page.tsx
+[DIR ] src\app\dashboard\suppliers
+[DIR ] src\app\dashboard\suppliers\[id]
+[FILE] src\app\dashboard\suppliers\[id]\page.tsx
+[FILE] src\app\dashboard\suppliers\page.tsx
+[FILE] src\app\globals.css
+[FILE] src\app\layout.tsx
+[DIR ] src\app\login
+[FILE] src\app\login\page.tsx
+[FILE] src\app\page.tsx
+[DIR ] src\components
+[DIR ] src\components\layout
+[FILE] src\components\layout\header.tsx
+[FILE] src\components\layout\sidebar.tsx
+[DIR ] src\components\ui
+[FILE] src\components\ui\badge.tsx
+[FILE] src\components\ui\button.tsx
+[FILE] src\components\ui\card.tsx
+[FILE] src\components\ui\empty-state.tsx
+[FILE] src\components\ui\error-state.tsx
+[FILE] src\components\ui\input.tsx
+[FILE] src\components\ui\modal.tsx
+[FILE] src\components\ui\select.tsx
+[FILE] src\components\ui\skeleton.tsx
+[FILE] src\components\ui\table.tsx
+[DIR ] src\hooks
+[FILE] src\hooks\use-audit.ts
+[FILE] src\hooks\use-catalog.ts
+[FILE] src\hooks\use-orders.ts
+[DIR ] src\i18n
+[FILE] src\i18n\request.ts
+[FILE] src\i18n\routing.ts
+[DIR ] src\lib
+[FILE] src\lib\permissions.ts
+[FILE] src\lib\toast-bus.ts
+[FILE] src\lib\utils.ts
+[DIR ] src\messages
+[FILE] src\messages\en.json
+[FILE] src\messages\he.json
+[DIR ] src\providers
+[FILE] src\providers\auth-provider.tsx
+[FILE] src\providers\query-provider.tsx
+[FILE] src\providers\toast-provider.tsx
+[DIR ] src\services
+[FILE] src\services\api-client.ts
+[FILE] src\services\audit-service.ts
+[FILE] src\services\auth-service.ts
+[FILE] src\services\catalog-service.ts
+[FILE] src\services\order-service.ts
+[DIR ] src\types
+[FILE] src\types\index.ts
+[FILE] tailwind.config.ts
+[FILE] tsconfig.json
+
+
+================================================================================
+SOURCE FILES
+================================================================================
+
+################################################################################
+# FILE: next-env.d.ts
+################################################################################
+
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/building-your-application/configuring/typescript for more information.
+
+
+################################################################################
+# FILE: next.config.ts
+################################################################################
+
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+  reactStrictMode: true,
+};
+
+export default nextConfig;
+
+
+################################################################################
+# FILE: package.json
+################################################################################
+
+{
+  "name": "ssos-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^3.9.0",
+    "@tanstack/react-query": "^5.59.0",
+    "@tanstack/react-query-devtools": "^5.59.0",
+    "axios": "^1.7.7",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.453.0",
+    "next": "15.0.0",
+    "next-intl": "^3.26.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.53.1",
+    "tailwind-merge": "^2.5.4",
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.11",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.7",
+    "autoprefixer": "^10.5.4",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.3"
+  }
+}
+
+################################################################################
+# FILE: postcss.config.js
+################################################################################
+
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
+
+
+################################################################################
+# FILE: src\app\[locale]\layout.tsx
+################################################################################
+
+import type { Metadata } from "next";
+import { Assistant } from "next/font/google";
+import "../../globals.css"; // מיקום יחסי מעודכן
+import QueryProvider from "@/providers/query-provider";
+import { AuthProvider } from "@/providers/auth-provider";
+import { ToastProvider } from "@/providers/toast-provider";
+import { cn } from "@/lib/utils";
+import { getMessages } from "next-intl/server";
+import { notFound } from "next/navigation";
+import { routing } from "@/i18n/routing";
+import { NextIntlClientProvider } from "next-intl";
+
+export const dynamic = "force-dynamic";
+
+const assistant = Assistant({
+  subsets: ["hebrew", "latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  variable: "--font-sans",
+});
+
+export const metadata: Metadata = {
+  title: "SSOS - Smart Supplier Order System",
+  description: "Enterprise Order Management Platform",
+};
+
+export default async function LocaleLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+
+  // ולידציה של השפה המבוקשת
+  if (!routing.locales.includes(locale as any)) {
+    notFound();
+  }
+
+  const messages = await getMessages();
+  const dir = locale === "he" ? "rtl" : "ltr";
+
+  return (
+    <html lang={locale} dir={dir} className={assistant.variable}>
+      <body className={cn("font-sans antialiased bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100")}>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <QueryProvider>
+            <ToastProvider>
+              <AuthProvider>{children}</AuthProvider>
+            </ToastProvider>
+          </QueryProvider>
+        </NextIntlClientProvider>
+      </body>
+    </html>
+  );
+}
+
+
+################################################################################
+# FILE: src\app\dashboard\audit\page.tsx
+################################################################################
+
+"use client";
+import { ShieldCheck, ClipboardList } from "lucide-react";
+import { useAuth } from "@/providers/auth-provider";
+import { permissions } from "@/lib/permissions";
+import { useAuditLogs } from "@/hooks/use-audit";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell } from "@/components/ui/table";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { Badge } from "@/components/ui/badge";
+
+// The action string always encodes its domain as a prefix (order.created,
+// catalog.product_created, auth.login, ...) — reuse that instead of adding
+// a separate "entity" field that would just duplicate it.
+function entityFromAction(action: string) {
+  return action.split(".")[0] ?? action;
+}
+
+export default function AuditPage() {
+  const { user } = useAuth();
+  const canView = permissions.canViewAudit(user);
+
+  const { data: logs, isLoading, isError, refetch } = useAuditLogs();
+
+  if (!canView) {
+    return (
+      <ErrorState
+        title="No permission"
+        description="Audit trail is only visible to managers and admins."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold text-slate-900">Audit Trail</h1>
+
+      {isLoading && (
+        <div className="rounded-lg border bg-white shadow-sm">
+          <TableSkeleton rows={8} cols={5} />
+        </div>
+      )}
+
+      {isError && <ErrorState description="Could not load audit logs." onRetry={() => refetch()} />}
+
+      {!isLoading && !isError && (!logs || logs.length === 0) && (
+        <EmptyState icon={ClipboardList} title="No audit events yet" description="Actions taken across the system will show up here." />
+      )}
+
+      {!isLoading && !isError && logs && logs.length > 0 && (
+        <Table>
+          <TableHead>
+            <tr>
+              <TableHeaderCell>User</TableHeaderCell>
+              <TableHeaderCell>Action</TableHeaderCell>
+              <TableHeaderCell>Entity</TableHeaderCell>
+              <TableHeaderCell>Timestamp</TableHeaderCell>
+              <TableHeaderCell>Hash</TableHeaderCell>
+            </tr>
+          </TableHead>
+          <TableBody>
+            {logs.map((log) => (
+              <TableRow key={log.id}>
+                <TableCell className="text-slate-900">{log.user_full_name || log.user_email || "System"}</TableCell>
+                <TableCell>
+                  <span className="font-mono text-xs text-slate-600">{log.action}</span>
+                  {log.title && <div className="text-xs text-slate-400">{log.title}</div>}
+                </TableCell>
+                <TableCell className="capitalize text-slate-500">{entityFromAction(log.action)}</TableCell>
+                <TableCell className="text-slate-500">{new Date(log.created_at).toLocaleString()}</TableCell>
+                <TableCell>
+                  <Badge variant="success" className="inline-flex items-center gap-1 font-mono">
+                    <ShieldCheck size={12} />
+                    {log.hash_chain.slice(0, 10)}…
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\app\dashboard\catalog\page.tsx
+################################################################################
+
+"use client";
+import { useState, useMemo } from "react";
+import { Search, Plus, Pencil, Power, Package } from "lucide-react";
+import { useAuth } from "@/providers/auth-provider";
+import { permissions } from "@/lib/permissions";
+import { useProducts, useSuppliers, useCreateProduct, useUpdateProduct, useToggleProductActive } from "@/hooks/use-catalog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Modal } from "@/components/ui/modal";
+import { ActiveBadge } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell } from "@/components/ui/table";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { Product } from "@/types";
+
+interface ProductFormState {
+  supplier_id: string;
+  name: string;
+  sku: string;
+  description: string;
+  current_price: string;
+  currency: string;
+}
+
+const EMPTY_FORM: ProductFormState = {
+  supplier_id: "",
+  name: "",
+  sku: "",
+  description: "",
+  current_price: "",
+  currency: "ILS",
+};
+
+export default function CatalogPage() {
+  const { user } = useAuth();
+  const canManage = permissions.canManageCatalog(user);
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [form, setForm] = useState<ProductFormState>(EMPTY_FORM);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const { data: products, isLoading, isError, refetch } = useProducts();
+  const { data: suppliers } = useSuppliers();
+  const createProduct = useCreateProduct();
+  const updateProduct = useUpdateProduct(editingProduct?.id ?? -1);
+  const toggleActive = useToggleProductActive(editingProduct?.id ?? -1);
+
+  const supplierName = (supplierId: number) =>
+    suppliers?.find((s) => s.id === supplierId)?.name ?? `#${supplierId}`;
+
+  const filtered = useMemo(() => {
+    if (!products) return [];
+    return products.filter((p) => {
+      const matchesSearch =
+        !search ||
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        (p.sku ?? "").toLowerCase().includes(search.toLowerCase());
+      const matchesStatus =
+        statusFilter === "all" || (statusFilter === "active" ? p.active : !p.active);
+      return matchesSearch && matchesStatus;
+    });
+  }, [products, search, statusFilter]);
+
+  const openCreateModal = () => {
+    setEditingProduct(null);
+    setForm(EMPTY_FORM);
+    setFormError(null);
+    setModalOpen(true);
+  };
+
+  const openEditModal = (product: Product) => {
+    setEditingProduct(product);
+    setForm({
+      supplier_id: String(product.supplier_id),
+      name: product.name,
+      sku: product.sku ?? "",
+      description: product.description ?? "",
+      current_price: String(product.current_price),
+      currency: product.currency,
+    });
+    setFormError(null);
+    setModalOpen(true);
+  };
+
+  const handleSubmit = () => {
+    setFormError(null);
+    if (!form.supplier_id) return setFormError("Select a supplier.");
+    if (!form.name.trim()) return setFormError("Product name is required.");
+    const price = Number(form.current_price);
+    if (!Number.isFinite(price) || price < 0) return setFormError("Enter a valid price.");
+
+    const payload = {
+      supplier_id: Number(form.supplier_id),
+      name: form.name.trim(),
+      sku: form.sku.trim() || undefined,
+      description: form.description.trim() || undefined,
+      current_price: price,
+      currency: form.currency,
+    };
+
+    if (editingProduct) {
+      updateProduct.mutate(payload, { onSuccess: () => setModalOpen(false) });
+    } else {
+      createProduct.mutate(payload, { onSuccess: () => setModalOpen(false) });
+    }
+  };
+
+  const isSaving = createProduct.isPending || updateProduct.isPending;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-slate-900">Catalog</h1>
+        {canManage && (
+          <Button onClick={openCreateModal}>
+            <Plus size={16} />
+            New Product
+          </Button>
+        )}
+      </div>
+
+      <div className="flex gap-3">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          <Input
+            placeholder="Search by name or SKU…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} className="w-40">
+          <option value="all">All statuses</option>
+          <option value="active">Active only</option>
+          <option value="inactive">Inactive only</option>
+        </Select>
+      </div>
+
+      {isLoading && (
+        <div className="rounded-lg border bg-white shadow-sm">
+          <TableSkeleton rows={5} cols={5} />
+        </div>
+      )}
+
+      {isError && <ErrorState description="Could not load the catalog." onRetry={() => refetch()} />}
+
+      {!isLoading && !isError && filtered.length === 0 && (
+        <EmptyState
+          icon={Package}
+          title={products && products.length > 0 ? "No products match your filters" : "No products yet"}
+          description={
+            products && products.length > 0
+              ? "Try a different search or status filter."
+              : canManage
+              ? "Create your first product to start building orders against it."
+              : undefined
+          }
+          actionLabel={canManage && (!products || products.length === 0) ? "New Product" : undefined}
+          onAction={openCreateModal}
+        />
+      )}
+
+      {!isLoading && !isError && filtered.length > 0 && (
+        <Table>
+          <TableHead>
+            <tr>
+              <TableHeaderCell>SKU</TableHeaderCell>
+              <TableHeaderCell>Name</TableHeaderCell>
+              <TableHeaderCell>Supplier</TableHeaderCell>
+              <TableHeaderCell>Price</TableHeaderCell>
+              <TableHeaderCell>Status</TableHeaderCell>
+              {canManage && <TableHeaderCell>Actions</TableHeaderCell>}
+            </tr>
+          </TableHead>
+          <TableBody>
+            {filtered.map((product) => (
+              <TableRow key={product.id}>
+                <TableCell className="text-slate-500">{product.sku || "—"}</TableCell>
+                <TableCell className="font-medium text-slate-900">{product.name}</TableCell>
+                <TableCell>{supplierName(product.supplier_id)}</TableCell>
+                <TableCell>
+                  {product.currency} {product.current_price.toLocaleString()}
+                </TableCell>
+                <TableCell>
+                  <ActiveBadge active={product.active} />
+                </TableCell>
+                {canManage && (
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => openEditModal(product)}
+                        className="text-slate-400 hover:text-slate-700"
+                        aria-label="Edit product"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingProduct(product);
+                          toggleActive.mutate(!product.active);
+                        }}
+                        className="text-slate-400 hover:text-slate-700"
+                        aria-label={product.active ? "Deactivate product" : "Activate product"}
+                        title={product.active ? "Deactivate (soft delete)" : "Activate"}
+                      >
+                        <Power size={16} />
+                      </button>
+                    </div>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editingProduct ? "Edit Product" : "New Product"}
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Supplier</label>
+            <Select
+              value={form.supplier_id}
+              onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))}
+            >
+              <option value="">Select a supplier…</option>
+              {suppliers?.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Name</label>
+            <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">SKU</label>
+              <Input value={form.sku} onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Price</label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={form.current_price}
+                onChange={(e) => setForm((f) => ({ ...f, current_price: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Description</label>
+            <textarea
+              className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+              rows={2}
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            />
+          </div>
+
+          {editingProduct && (
+            <p className="text-xs text-slate-400">
+              Changing the price only affects future orders — orders already placed keep the price
+              they were created with (Snapshot Integrity).
+            </p>
+          )}
+
+          {formError && <p className="text-sm text-red-500">{formError}</p>}
+
+          <div className="flex gap-2 pt-2">
+            <Button onClick={handleSubmit} disabled={isSaving}>
+              {isSaving ? "Saving…" : editingProduct ? "Save Changes" : "Create Product"}
+            </Button>
+            <Button variant="ghost" onClick={() => setModalOpen(false)} disabled={isSaving}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\app\dashboard\layout.tsx
+################################################################################
+
+import Sidebar from "@/components/layout/sidebar";
+import Header from "@/components/layout/header";
+
+// מניעת שמירה סטטית של אזור הניהול
+export const dynamic = "force-dynamic";
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-900">
+      <Sidebar />
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <Header />
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          <div className="mx-auto max-w-7xl">
+            {children}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\app\dashboard\orders\[id]\page.tsx
+################################################################################
+
+"use client";
+import { use, useState } from "react";
+import Link from "next/link";
+import { OrderStatusBadge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/providers/auth-provider";
+import { permissions } from "@/lib/permissions";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import {
+  useOrder,
+  useUpdateDraftOrder,
+  useSubmitOrder,
+  useApproveOrder,
+  useRejectOrder,
+  useMarkSentOrder,
+  useCompleteOrder,
+} from "@/hooks/use-orders";
+
+export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const orderId = Number(id);
+  const { user } = useAuth();
+
+  const { data: order, isLoading, isError, error } = useOrder(orderId);
+
+  const [isEditingDraft, setIsEditingDraft] = useState(false);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [rejectReason, setRejectReason] = useState("");
+  const [isRejecting, setIsRejecting] = useState(false);
+
+  const updateDraft = useUpdateDraftOrder(orderId);
+  const submit = useSubmitOrder(orderId);
+  const approve = useApproveOrder(orderId);
+  const reject = useRejectOrder(orderId);
+  const markSent = useMarkSentOrder(orderId);
+  const complete = useCompleteOrder(orderId);
+
+  const isMutating =
+    updateDraft.isPending ||
+    submit.isPending ||
+    approve.isPending ||
+    reject.isPending ||
+    markSent.isPending ||
+    complete.isPending;
+
+  const canCreateOrEdit = permissions.canCreateOrders(user);
+  const isManagerOrAdmin = permissions.canApproveOrders(user);
+
+  const startEditingDraft = () => {
+    setNotesDraft(order?.notes ?? "");
+    setIsEditingDraft(true);
+  };
+
+  const saveDraft = () => {
+    updateDraft.mutate(
+      { notes: notesDraft },
+      { onSuccess: () => setIsEditingDraft(false) }
+    );
+  };
+
+  const handleReject = () => {
+    reject.mutate(rejectReason, {
+      onSuccess: () => {
+        setIsRejecting(false);
+        setRejectReason("");
+      },
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-400">
+        <Loader2 className="animate-spin" size={16} />
+        Loading order…
+      </div>
+    );
+  }
+
+  if (isError) {
+    const status = (error as { response?: { status?: number } })?.response?.status;
+    if (status === 404) {
+      return <p className="text-sm text-slate-400">Order not found</p>;
+    }
+    return <p className="text-sm text-red-500">Server error</p>;
+  }
+
+  if (!order) return <p className="text-sm text-slate-400">Order not found</p>;
+
+  return (
+    <div className="space-y-6">
+      <Link
+        href="/dashboard/orders"
+        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900"
+      >
+        <ArrowLeft size={16} />
+        Back to orders
+      </Link>
+
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">{order.order_number}</h1>
+          <p className="text-sm text-slate-500">{order.supplier_name}</p>
+          <p className="text-xs text-slate-400">
+            Created {new Date(order.created_at).toLocaleString()}
+          </p>
+        </div>
+        <OrderStatusBadge status={order.status} />
+      </div>
+
+      {/* Actions by role */}
+      <div className="flex flex-wrap items-center gap-3">
+        {canCreateOrEdit && order.status === "draft" && !isEditingDraft && (
+          <Button variant="secondary" onClick={startEditingDraft} disabled={isMutating}>
+            Edit Draft
+          </Button>
+        )}
+        {canCreateOrEdit && order.status === "draft" && (
+          <Button onClick={() => submit.mutate()} disabled={isMutating}>
+            {submit.isPending ? "Submitting…" : "Submit"}
+          </Button>
+        )}
+
+        {isManagerOrAdmin && order.status === "submitted" && !isRejecting && (
+          <>
+            <Button onClick={() => approve.mutate()} disabled={isMutating}>
+              {approve.isPending ? "Approving…" : "Approve"}
+            </Button>
+            <Button variant="danger" onClick={() => setIsRejecting(true)} disabled={isMutating}>
+              Reject
+            </Button>
+          </>
+        )}
+
+        {/* Backend requires approved -> sent -> completed; exposed here so
+            the full lifecycle can actually be driven from this page. */}
+        {isManagerOrAdmin && order.status === "approved" && (
+          <Button onClick={() => markSent.mutate()} disabled={isMutating}>
+            {markSent.isPending ? "Marking sent…" : "Mark Sent"}
+          </Button>
+        )}
+        {isManagerOrAdmin && order.status === "sent" && (
+          <Button onClick={() => complete.mutate()} disabled={isMutating}>
+            {complete.isPending ? "Completing…" : "Complete"}
+          </Button>
+        )}
+      </div>
+
+      {isRejecting && (
+        <Card>
+          <CardContent className="pt-6 space-y-3">
+            <label className="block text-sm font-medium text-slate-700">Rejection reason</label>
+            <textarea
+              className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+              rows={2}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button variant="danger" onClick={handleReject} disabled={isMutating}>
+                {reject.isPending ? "Rejecting…" : "Confirm Reject"}
+              </Button>
+              <Button variant="ghost" onClick={() => setIsRejecting(false)} disabled={isMutating}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {isEditingDraft && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base text-slate-900">Edit Draft — Notes</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-3">
+            <textarea
+              className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+              rows={3}
+              value={notesDraft}
+              onChange={(e) => setNotesDraft(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button onClick={saveDraft} disabled={isMutating}>
+                {updateDraft.isPending ? "Saving…" : "Save"}
+              </Button>
+              <Button variant="ghost" onClick={() => setIsEditingDraft(false)} disabled={isMutating}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Snapshot line items — rendered straight from order.items, never
+          re-fetched from the live Catalog, so this always reflects what the
+          order actually charged even if the product changed or was deleted
+          afterward. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base text-slate-900">Line Items (Snapshot)</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b text-slate-500">
+              <tr>
+                <th className="py-2 font-medium">SKU</th>
+                <th className="py-2 font-medium">Product</th>
+                <th className="py-2 font-medium">Qty</th>
+                <th className="py-2 font-medium">Frozen Unit Price</th>
+                <th className="py-2 font-medium">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {order.items.map((item, idx) => (
+                <tr key={`${item.product_id}-${idx}`}>
+                  <td className="py-2 text-slate-500">{item.sku}</td>
+                  <td className="py-2 text-slate-900">{item.product_name}</td>
+                  <td className="py-2">{item.quantity}</td>
+                  <td className="py-2">
+                    {order.currency} {item.unit_price.toLocaleString()}
+                  </td>
+                  <td className="py-2 font-medium">
+                    {order.currency} {item.total_price.toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="mt-4 ml-auto w-64 space-y-1 text-sm">
+            <div className="flex justify-between text-slate-500">
+              <span>Subtotal</span>
+              <span>{order.currency} {order.subtotal.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between text-slate-500">
+              <span>Discount</span>
+              <span>-{order.currency} {order.discount_total.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between text-slate-500">
+              <span>Tax</span>
+              <span>{order.currency} {order.tax_total.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between border-t pt-1 font-semibold text-slate-900">
+              <span>Total</span>
+              <span>{order.currency} {order.final_total.toLocaleString()}</span>
+            </div>
+          </div>
+
+          {order.notes && !isEditingDraft && (
+            <p className="mt-4 rounded-md bg-slate-50 p-3 text-sm text-slate-600 whitespace-pre-line">
+              {order.notes}
+            </p>
+          )}
+
+          {order.snapshot_taken_at && (
+            <p className="mt-2 text-xs text-slate-400">
+              Snapshot frozen at {new Date(order.snapshot_taken_at).toLocaleString()} — later catalog
+              or price changes do not affect this order.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\app\dashboard\orders\new\page.tsx
+################################################################################
+
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { catalogService } from "@/services/catalog-service";
+import { orderService } from "@/services/order-service";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { ArrowLeft, Trash2, Plus } from "lucide-react";
+
+interface DraftLine {
+  product_id: number | "";
+  quantity: number;
+}
+
+export default function NewOrderPage() {
+  const router = useRouter();
+  const [supplierId, setSupplierId] = useState<number | "">("");
+  const [notes, setNotes] = useState("");
+  const [lines, setLines] = useState<DraftLine[]>([{ product_id: "", quantity: 1 }]);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const { data: suppliers } = useQuery({
+    queryKey: ["suppliers"],
+    queryFn: () => catalogService.listSuppliers(true),
+  });
+
+  const { data: products } = useQuery({
+    queryKey: ["products", supplierId],
+    queryFn: () => catalogService.listProducts(supplierId === "" ? undefined : supplierId),
+    enabled: supplierId !== "",
+  });
+
+  const createMutation = useMutation({
+    mutationFn: orderService.createOrder,
+    onSuccess: (order) => router.push(`/dashboard/orders/${order.id}`),
+  });
+
+  const updateLine = (index: number, patch: Partial<DraftLine>) => {
+    setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)));
+  };
+
+  const removeLine = (index: number) => {
+    setLines((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = () => {
+    setFormError(null);
+    if (supplierId === "") {
+      setFormError("Select a supplier first.");
+      return;
+    }
+    const items = lines.filter((l) => l.product_id !== "" && l.quantity > 0);
+    if (items.length === 0) {
+      setFormError("Add at least one product line.");
+      return;
+    }
+    createMutation.mutate({
+      supplier_id: supplierId,
+      notes: notes || undefined,
+      items: items.map((l) => ({ product_id: l.product_id as number, quantity: l.quantity })),
+    });
+  };
+
+  const inputClass =
+    "block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20";
+
+  return (
+    <div className="space-y-6">
+      <Link
+        href="/dashboard/orders"
+        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900"
+      >
+        <ArrowLeft size={16} />
+        Back to orders
+      </Link>
+
+      <h1 className="text-2xl font-bold text-slate-900">New Order</h1>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base text-slate-900">Supplier</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <select
+            className={inputClass}
+            value={supplierId}
+            onChange={(e) => {
+              setSupplierId(e.target.value ? Number(e.target.value) : "");
+              setLines([{ product_id: "", quantity: 1 }]);
+            }}
+          >
+            <option value="">Select a supplier…</option>
+            {suppliers?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base text-slate-900">Line Items</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 space-y-3">
+          {lines.map((line, index) => (
+            <div key={index} className="flex items-center gap-3">
+              <select
+                className={cn(inputClass, "flex-1")}
+                value={line.product_id}
+                disabled={supplierId === ""}
+                onChange={(e) =>
+                  updateLine(index, { product_id: e.target.value ? Number(e.target.value) : "" })
+                }
+              >
+                <option value="">Select a product…</option>
+                {products?.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.sku} — {p.name} ({p.currency} {p.current_price.toLocaleString()})
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min={1}
+                className={cn(inputClass, "w-24")}
+                value={line.quantity}
+                onChange={(e) => updateLine(index, { quantity: Number(e.target.value) })}
+              />
+              <button
+                onClick={() => removeLine(index)}
+                className="text-slate-400 hover:text-red-500"
+                aria-label="Remove line"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
+          ))}
+          <Button
+            variant="secondary"
+            onClick={() => setLines((prev) => [...prev, { product_id: "", quantity: 1 }])}
+            disabled={supplierId === ""}
+          >
+            <Plus size={16} />
+            Add line
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base text-slate-900">Notes</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <textarea
+            className={inputClass}
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </CardContent>
+      </Card>
+
+      {formError && <p className="text-sm text-red-500">{formError}</p>}
+      {createMutation.isError && (
+        <p className="text-sm text-red-500">Could not create order — check the fields and try again.</p>
+      )}
+
+      <Button onClick={handleSubmit} disabled={createMutation.isPending}>
+        {createMutation.isPending ? "Creating…" : "Create Order"}
+      </Button>
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\app\dashboard\orders\page.tsx
+################################################################################
+
+"use client";
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { orderService } from "@/services/order-service";
+import { OrderStatusBadge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+
+export default function OrdersPage() {
+  const { data: orders, isLoading } = useQuery({
+    queryKey: ["orders"],
+    queryFn: () => orderService.getOrders(),
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-slate-900">Purchase Orders</h1>
+        <Link href="/dashboard/orders/new">
+          <Button>
+            <Plus size={16} />
+            New Order
+          </Button>
+        </Link>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+        <table className="w-full text-left">
+          <thead className="border-b bg-slate-50">
+            <tr>
+              <th className="p-4 text-sm font-semibold text-slate-600">Order #</th>
+              <th className="p-4 text-sm font-semibold text-slate-600">Supplier</th>
+              <th className="p-4 text-sm font-semibold text-slate-600">Status</th>
+              <th className="p-4 text-sm font-semibold text-slate-600">Total</th>
+              <th className="p-4 text-sm font-semibold text-slate-600">Created</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {isLoading && (
+              <tr>
+                <td colSpan={5} className="p-4 text-sm text-slate-400">
+                  Loading orders…
+                </td>
+              </tr>
+            )}
+            {!isLoading && orders?.length === 0 && (
+              <tr>
+                <td colSpan={5} className="p-4 text-sm text-slate-400">
+                  No orders yet — create the first one.
+                </td>
+              </tr>
+            )}
+            {orders?.map((order) => (
+              <tr key={order.id} className="hover:bg-slate-50">
+                <td className="p-4 font-medium text-slate-900">
+                  <Link href={`/dashboard/orders/${order.id}`} className="hover:underline">
+                    {order.order_number}
+                  </Link>
+                </td>
+                <td className="p-4 text-slate-700">{order.supplier_name}</td>
+                <td className="p-4">
+                  <OrderStatusBadge status={order.status} />
+                </td>
+                <td className="p-4 text-slate-700">
+                  {order.currency} {order.final_total.toLocaleString()}
+                </td>
+                <td className="p-4 text-slate-500">
+                  {new Date(order.created_at).toLocaleDateString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\app\dashboard\page.tsx
+################################################################################
+
+"use client";
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { orderService } from "@/services/order-service";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { OrderStatusBadge } from "@/components/ui/badge";
+import { ShoppingBag, Clock, CheckCircle2, Ban } from "lucide-react";
+
+export default function DashboardPage() {
+  const { data: orders, isLoading } = useQuery({
+    queryKey: ["orders"],
+    queryFn: () => orderService.getOrders(),
+  });
+
+  const stats = [
+    {
+      label: "Total Orders",
+      value: orders?.length ?? 0,
+      icon: ShoppingBag,
+      color: "text-blue-600",
+    },
+    {
+      label: "Pending Approval",
+      value: orders?.filter((o) => o.status === "submitted").length ?? 0,
+      icon: Clock,
+      color: "text-amber-500",
+    },
+    {
+      label: "Completed",
+      value: orders?.filter((o) => o.status === "completed").length ?? 0,
+      icon: CheckCircle2,
+      color: "text-green-600",
+    },
+    {
+      label: "Cancelled",
+      value: orders?.filter((o) => o.status === "cancelled").length ?? 0,
+      icon: Ban,
+      color: "text-red-500",
+    },
+  ];
+
+  const recentOrders = [...(orders ?? [])]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 5);
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        {stats.map((stat) => (
+          <Card key={stat.label}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-slate-500">{stat.label}</CardTitle>
+              <stat.icon className={stat.color} size={20} />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-slate-900">{stat.value}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base text-slate-900">Recent Orders</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {isLoading && <p className="text-sm text-slate-400">Loading…</p>}
+          {!isLoading && recentOrders.length === 0 && (
+            <p className="text-sm text-slate-400">No orders yet.</p>
+          )}
+          <div className="divide-y">
+            {recentOrders.map((order) => (
+              <Link
+                key={order.id}
+                href={`/dashboard/orders/${order.id}`}
+                className="flex items-center justify-between py-3 hover:bg-slate-50 -mx-2 px-2 rounded-md"
+              >
+                <div>
+                  <div className="text-sm font-medium text-slate-900">{order.order_number}</div>
+                  <div className="text-xs text-slate-500">{order.supplier_name}</div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-slate-700">
+                    {order.currency} {order.final_total.toLocaleString()}
+                  </span>
+                  <OrderStatusBadge status={order.status} />
+                </div>
+              </Link>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\app\dashboard\settings\page.tsx
+################################################################################
+
+"use client";
+import { useAuth } from "@/providers/auth-provider";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Bell } from "lucide-react";
+
+export default function SettingsPage() {
+  const { user, tenant } = useAuth();
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base text-slate-900">User Profile</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <dl className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <dt className="text-slate-500">Name</dt>
+              <dd className="text-slate-900">{user?.full_name ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Email</dt>
+              <dd className="text-slate-900">{user?.email ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Role</dt>
+              <dd>
+                <Badge variant="default" className="capitalize">{user?.role ?? "—"}</Badge>
+              </dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base text-slate-900">Organization</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <dl className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <dt className="text-slate-500">Tenant name</dt>
+              <dd className="text-slate-900">{tenant?.name ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Tenant slug</dt>
+              <dd className="text-slate-900">{tenant?.slug ?? "—"}</dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base text-slate-900">Preferences</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="flex items-center gap-3 rounded-lg border border-dashed border-slate-200 p-4 text-sm text-slate-400">
+            <Bell size={18} />
+            Notification preferences are coming soon.
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\app\dashboard\suppliers\[id]\page.tsx
+################################################################################
+
+"use client";
+import { use, useState, useEffect } from "react";
+import Link from "next/link";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import { useAuth } from "@/providers/auth-provider";
+import { permissions } from "@/lib/permissions";
+import { useSupplier, useUpdateSupplier, useProducts } from "@/hooks/use-catalog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ActiveBadge } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell } from "@/components/ui/table";
+
+export default function SupplierDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const supplierId = Number(id);
+  const { user } = useAuth();
+  const canManage = permissions.canManageCatalog(user);
+
+  const { data: supplier, isLoading, isError } = useSupplier(supplierId);
+  const { data: products } = useProducts(supplierId);
+  const updateSupplier = useUpdateSupplier(supplierId);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [form, setForm] = useState({ name: "", contact_name: "", email: "", phone: "" });
+
+  useEffect(() => {
+    if (supplier) {
+      setForm({
+        name: supplier.name,
+        contact_name: supplier.contact_name ?? "",
+        email: supplier.email ?? "",
+        phone: supplier.phone ?? "",
+      });
+    }
+  }, [supplier]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-400">
+        <Loader2 className="animate-spin" size={16} />
+        Loading supplier…
+      </div>
+    );
+  }
+
+  if (isError || !supplier) return <p className="text-sm text-slate-400">Supplier not found</p>;
+
+  const save = () => {
+    updateSupplier.mutate(form, { onSuccess: () => setIsEditing(false) });
+  };
+
+  const toggleActive = () => {
+    updateSupplier.mutate({ active: !supplier.active });
+  };
+
+  return (
+    <div className="space-y-6">
+      <Link href="/dashboard/suppliers" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900">
+        <ArrowLeft size={16} />
+        Back to suppliers
+      </Link>
+
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">{supplier.name}</h1>
+          <div className="mt-1">
+            <ActiveBadge active={supplier.active} />
+          </div>
+        </div>
+        {canManage && !isEditing && (
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setIsEditing(true)}>
+              Edit
+            </Button>
+            <Button variant={supplier.active ? "danger" : "primary"} onClick={toggleActive} disabled={updateSupplier.isPending}>
+              {supplier.active ? "Deactivate" : "Activate"}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base text-slate-900">Details</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {isEditing ? (
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Name</label>
+                <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Contact Name</label>
+                <Input value={form.contact_name} onChange={(e) => setForm((f) => ({ ...f, contact_name: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+                  <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Phone</label>
+                  <Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button onClick={save} disabled={updateSupplier.isPending}>
+                  {updateSupplier.isPending ? "Saving…" : "Save Changes"}
+                </Button>
+                <Button variant="ghost" onClick={() => setIsEditing(false)} disabled={updateSupplier.isPending}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <dl className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <dt className="text-slate-500">Contact</dt>
+                <dd className="text-slate-900">{supplier.contact_name || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Email</dt>
+                <dd className="text-slate-900">{supplier.email || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Phone</dt>
+                <dd className="text-slate-900">{supplier.phone || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Added</dt>
+                <dd className="text-slate-900">{new Date(supplier.created_at).toLocaleDateString()}</dd>
+              </div>
+            </dl>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base text-slate-900">Products from this supplier</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {!products || products.length === 0 ? (
+            <p className="text-sm text-slate-400">No products yet.</p>
+          ) : (
+            <Table>
+              <TableHead>
+                <tr>
+                  <TableHeaderCell>SKU</TableHeaderCell>
+                  <TableHeaderCell>Name</TableHeaderCell>
+                  <TableHeaderCell>Price</TableHeaderCell>
+                  <TableHeaderCell>Status</TableHeaderCell>
+                </tr>
+              </TableHead>
+              <TableBody>
+                {products.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="text-slate-500">{p.sku || "—"}</TableCell>
+                    <TableCell className="font-medium text-slate-900">{p.name}</TableCell>
+                    <TableCell>
+                      {p.currency} {p.current_price.toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <ActiveBadge active={p.active} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\app\dashboard\suppliers\page.tsx
+################################################################################
+
+"use client";
+import { useState, useMemo } from "react";
+import Link from "next/link";
+import { Search, Plus, Users } from "lucide-react";
+import { useAuth } from "@/providers/auth-provider";
+import { permissions } from "@/lib/permissions";
+import { useSuppliers, useCreateSupplier } from "@/hooks/use-catalog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
+import { ActiveBadge } from "@/components/ui/badge";
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell } from "@/components/ui/table";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+
+const EMPTY_FORM = { name: "", contact_name: "", email: "", phone: "" };
+
+export default function SuppliersPage() {
+  const { user } = useAuth();
+  const canManage = permissions.canManageCatalog(user);
+
+  const [search, setSearch] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const { data: suppliers, isLoading, isError, refetch } = useSuppliers();
+  const createSupplier = useCreateSupplier();
+
+  const filtered = useMemo(() => {
+    if (!suppliers) return [];
+    if (!search) return suppliers;
+    return suppliers.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()));
+  }, [suppliers, search]);
+
+  const openCreateModal = () => {
+    setForm(EMPTY_FORM);
+    setFormError(null);
+    setModalOpen(true);
+  };
+
+  const handleSubmit = () => {
+    setFormError(null);
+    if (!form.name.trim()) return setFormError("Supplier name is required.");
+    createSupplier.mutate(
+      {
+        name: form.name.trim(),
+        contact_name: form.contact_name.trim() || undefined,
+        email: form.email.trim() || undefined,
+        phone: form.phone.trim() || undefined,
+      },
+      { onSuccess: () => setModalOpen(false) }
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-slate-900">Suppliers</h1>
+        {canManage && (
+          <Button onClick={openCreateModal}>
+            <Plus size={16} />
+            New Supplier
+          </Button>
+        )}
+      </div>
+
+      <div className="relative max-w-sm">
+        <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+        <Input placeholder="Search suppliers…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      </div>
+
+      {isLoading && (
+        <div className="rounded-lg border bg-white shadow-sm">
+          <TableSkeleton rows={5} cols={4} />
+        </div>
+      )}
+
+      {isError && <ErrorState description="Could not load suppliers." onRetry={() => refetch()} />}
+
+      {!isLoading && !isError && filtered.length === 0 && (
+        <EmptyState
+          icon={Users}
+          title={suppliers && suppliers.length > 0 ? "No suppliers match your search" : "No suppliers yet"}
+          description={canManage ? "Add a supplier before creating products against it." : undefined}
+          actionLabel={canManage && (!suppliers || suppliers.length === 0) ? "New Supplier" : undefined}
+          onAction={openCreateModal}
+        />
+      )}
+
+      {!isLoading && !isError && filtered.length > 0 && (
+        <Table>
+          <TableHead>
+            <tr>
+              <TableHeaderCell>Name</TableHeaderCell>
+              <TableHeaderCell>Contact</TableHeaderCell>
+              <TableHeaderCell>Email</TableHeaderCell>
+              <TableHeaderCell>Status</TableHeaderCell>
+            </tr>
+          </TableHead>
+          <TableBody>
+            {filtered.map((supplier) => (
+              <TableRow key={supplier.id}>
+                <TableCell className="font-medium text-slate-900">
+                  <Link href={`/dashboard/suppliers/${supplier.id}`} className="hover:underline">
+                    {supplier.name}
+                  </Link>
+                </TableCell>
+                <TableCell>{supplier.contact_name || "—"}</TableCell>
+                <TableCell>{supplier.email || "—"}</TableCell>
+                <TableCell>
+                  <ActiveBadge active={supplier.active} />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="New Supplier">
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Name</label>
+            <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Contact Name</label>
+            <Input value={form.contact_name} onChange={(e) => setForm((f) => ({ ...f, contact_name: e.target.value }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+              <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Phone</label>
+              <Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+            </div>
+          </div>
+
+          {formError && <p className="text-sm text-red-500">{formError}</p>}
+
+          <div className="flex gap-2 pt-2">
+            <Button onClick={handleSubmit} disabled={createSupplier.isPending}>
+              {createSupplier.isPending ? "Creating…" : "Create Supplier"}
+            </Button>
+            <Button variant="ghost" onClick={() => setModalOpen(false)} disabled={createSupplier.isPending}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\app\globals.css
+################################################################################
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+
+################################################################################
+# FILE: src\app\layout.tsx
+################################################################################
+
+import type { Metadata } from "next";
+import { Assistant } from "next/font/google";
+import "./globals.css";
+import QueryProvider from "@/providers/query-provider";
+import { AuthProvider } from "@/providers/auth-provider";
+import { ToastProvider } from "@/providers/toast-provider";
+import { cn } from "@/lib/utils";
+import { cookies } from "next/headers";
+import { NextIntlClientProvider } from "next-intl";
+
+// הגדרה קריטית המונעת מ-Next.js להציג דפים סטטיים ישנים ומכריחה טעינה דינמית על בסיס העוגיות של המשתמש
+export const dynamic = "force-dynamic";
+
+const assistant = Assistant({
+  subsets: ["hebrew", "latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  variable: "--font-sans",
+});
+
+export const metadata: Metadata = {
+  title: "SSOS - Smart Supplier Order System",
+  description: "Enterprise Order Management Platform",
+};
+
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const cookieStore = await cookies();
+  const locale = cookieStore.get("NEXT_LOCALE")?.value || "he";
+  const dir = locale === "he" ? "rtl" : "ltr";
+
+  let messages;
+  try {
+    messages = (await import(`../messages/${locale}.json`)).default;
+  } catch (e) {
+    messages = (await import(`../messages/he.json`)).default;
+  }
+
+  return (
+    <html lang={locale} dir={dir} className={assistant.variable}>
+      <body className={cn("font-sans antialiased bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100")}>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <QueryProvider>
+            <ToastProvider>
+              <AuthProvider>{children}</AuthProvider>
+            </ToastProvider>
+          </QueryProvider>
+        </NextIntlClientProvider>
+      </body>
+    </html>
+  );
+}
+
+
+################################################################################
+# FILE: src\app\login\page.tsx
+################################################################################
+
+'use client';
+
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { useAuth } from '@/providers/auth-provider';
+import { Lock, Mail, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+// סכימת וולידציה עם Zod
+const loginSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
+type LoginFormValues = z.infer<typeof loginSchema>;
+
+function loginErrorMessage(error: unknown): string {
+  const status = (error as { response?: { status?: number; data?: { message?: string } } })?.response?.status;
+  const serverMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+
+  if (status === 401) return "Invalid email or password.";
+  if (status === 429) return "Too many attempts. Please wait a moment and try again.";
+  if (status === 400 && serverMessage) return serverMessage; // e.g. missing/expired CSRF token
+  if (status && status >= 500) return "Server error. Please try again shortly.";
+  return "Could not sign in. Please check your connection and try again.";
+}
+
+export default function LoginPage() {
+  const { login, isLoggingIn, loginError } = useAuth();
+  
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+  });
+
+  const onSubmit = (data: LoginFormValues) => {
+    login(data);
+  };
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-10 shadow-xl shadow-slate-200/50">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">SSOS</h1>
+          <p className="mt-2 text-sm text-slate-500">Sign in to manage your supplier orders</p>
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-6">
+          <div className="space-y-4">
+            {/* Email Field */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Email Address</label>
+              <div className="relative mt-1">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                  <Mail size={18} />
+                </div>
+                <input
+                  {...register('email')}
+                  type="email"
+                  className={cn(
+                    "block w-full rounded-lg border border-slate-200 py-3 pl-10 pr-3 text-slate-900 placeholder-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 sm:text-sm transition-all",
+                    errors.email && "border-red-500 focus:border-red-500 focus:ring-red-100"
+                  )}
+                  placeholder="name@company.com"
+                />
+              </div>
+              {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email.message}</p>}
+            </div>
+
+            {/* Password Field */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Password</label>
+              <div className="relative mt-1">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                  <Lock size={18} />
+                </div>
+                <input
+                  {...register('password')}
+                  type="password"
+                  className={cn(
+                    "block w-full rounded-lg border border-slate-200 py-3 pl-10 pr-3 text-slate-900 placeholder-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 sm:text-sm transition-all",
+                    errors.password && "border-red-500 focus:border-red-500 focus:ring-red-100"
+                  )}
+                  placeholder="••••••••"
+                />
+              </div>
+              {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password.message}</p>}
+            </div>
+          </div>
+
+          {/* Error Message from Server — distinguishes the actual cause instead
+              of a single generic string, since a masked message here is what
+              made the CSRF-token bug undiagnosable from the UI. */}
+          {Boolean(loginError) && (
+            <div className="rounded-lg bg-red-50 p-3 text-center text-sm font-medium text-red-600">
+              {loginErrorMessage(loginError)}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isLoggingIn}
+            className="flex w-full items-center justify-center rounded-lg bg-primary py-3 text-sm font-semibold text-white shadow-lg shadow-primary/30 transition-all hover:bg-primary/90 focus:ring-2 focus:ring-primary/20 active:scale-[0.98] disabled:opacity-70"
+          >
+            {isLoggingIn ? (
+              <Loader2 className="animate-spin" size={20} />
+            ) : (
+              "Sign In"
+            )}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\app\page.tsx
+################################################################################
+
+import { redirect } from "next/navigation";
+
+// The app has no real landing page yet — AuthProvider handles the
+// authenticated/unauthenticated split once inside /dashboard or /login.
+export default function RootPage() {
+  redirect("/dashboard");
+}
+
+
+################################################################################
+# FILE: src\components\layout\header.tsx
+################################################################################
+
+"use client";
+
+import { useTranslations, useLocale } from "next-intl";
+import { useRouter } from "next/navigation";
+import { Globe, LogOut } from "lucide-react";
+import { useAuth } from "@/providers/auth-provider";
+
+export default function Header() {
+  const t = useTranslations("header");
+  const locale = useLocale();
+  const router = useRouter();
+  const { user, tenant, logout } = useAuth();
+
+  const toggleLanguage = () => {
+    const nextLocale = locale === "he" ? "en" : "he";
+    // ה-layout הראשי קורא את השפה מהעוגייה NEXT_LOCALE (force-dynamic),
+    // כך שרענון רך של ה-router מספיק כדי להחליף שפה וכיוון (RTL/LTR)
+    document.cookie = `NEXT_LOCALE=${nextLocale}; path=/; max-age=31536000; samesite=lax`;
+    router.refresh();
+  };
+
+  const roleLabel: Record<string, string> = {
+    admin: t("roles.admin"),
+    manager: t("roles.manager"),
+    employee: t("roles.employee"),
+  };
+
+  return (
+    <header className="h-16 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 flex items-center px-6 justify-between">
+      <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+        <span className="font-semibold">{t("tenant")}:</span>
+        <span className="bg-slate-100 dark:bg-slate-900 px-2.5 py-1 rounded-md text-xs font-mono text-slate-800 dark:text-slate-200">
+          {tenant?.name ?? "—"}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-4">
+        {/* כפתור החלפת שפה גלובלי */}
+        <button
+          onClick={toggleLanguage}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors text-slate-700 dark:text-slate-300"
+        >
+          <Globe className="h-3.5 w-3.5" />
+          <span>{locale === "he" ? "English" : "עברית"}</span>
+        </button>
+
+        <div className="flex items-center gap-3">
+          <div className="text-end hidden sm:block">
+            <div className="text-xs font-semibold">{user?.full_name ?? ""}</div>
+            <div className="text-[10px] text-slate-500">
+              {user ? roleLabel[user.role] ?? user.role : ""}
+            </div>
+          </div>
+          <button
+            onClick={logout}
+            className="p-1.5 rounded-full text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
+            title={t("logout")}
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+
+################################################################################
+# FILE: src\components\layout\sidebar.tsx
+################################################################################
+
+"use client";
+
+import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+import { 
+  LayoutDashboard, 
+  Users, 
+  Package, 
+  ShoppingCart, 
+  Settings, 
+  History 
+} from "lucide-react";
+
+export default function Sidebar() {
+  const pathname = usePathname();
+  const t = useTranslations("navigation");
+
+  const navigation = [
+    { name: t("dashboard"), href: "/dashboard", icon: LayoutDashboard },
+    { name: t("suppliers"), href: "/dashboard/suppliers", icon: Users },
+    { name: t("catalog"), href: "/dashboard/catalog", icon: Package },
+    { name: t("orders"), href: "/dashboard/orders", icon: ShoppingCart },
+    { name: t("audit"), href: "/dashboard/audit", icon: History },
+    { name: t("settings"), href: "/dashboard/settings", icon: Settings },
+  ];
+
+  return (
+    <aside className="hidden md:flex w-64 flex-col bg-white dark:bg-slate-950 border-e border-slate-200 dark:border-slate-800 h-screen sticky top-0">
+      <div className="h-16 flex items-center px-6 border-b border-slate-200 dark:border-slate-800">
+        <span className="text-lg font-bold text-slate-900 dark:text-white">SSOS Platform</span>
+      </div>
+
+      <nav className="flex-1 space-y-1 px-4 py-4 overflow-y-auto">
+        {navigation.map((item) => {
+          // "/dashboard" מקבל התאמה מדויקת בלבד, כדי שלא יודגש בכל תת-עמוד
+          const isActive =
+            pathname === item.href ||
+            (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
+          const Icon = item.icon;
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "group flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-md transition-colors",
+                isActive
+                  ? "bg-slate-950 text-white dark:bg-slate-800"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-white"
+              )}
+            >
+              <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span>{item.name}</span>
+            </Link>
+          );
+        })}
+      </nav>
+    </aside>
+  );
+}
+
+
+################################################################################
+# FILE: src\components\ui\badge.tsx
+################################################################################
+
+import { OrderStatus } from "@/types";
+import { cn } from "@/lib/utils";
+
+const STATUS_STYLES: Record<OrderStatus, string> = {
+  draft: "bg-slate-100 text-slate-600",
+  submitted: "bg-amber-100 text-amber-700",
+  approved: "bg-blue-100 text-blue-700",
+  sent: "bg-indigo-100 text-indigo-700",
+  completed: "bg-green-100 text-green-700",
+  cancelled: "bg-red-100 text-red-700",
+};
+
+export function OrderStatusBadge({ status }: { status: OrderStatus }) {
+  return (
+    <span
+      className={cn(
+        "inline-block rounded-full px-2.5 py-1 text-xs font-medium uppercase tracking-wide",
+        STATUS_STYLES[status]
+      )}
+    >
+      {status}
+    </span>
+  );
+}
+
+type BadgeVariant = "default" | "success" | "warning" | "danger";
+
+const BADGE_VARIANT_STYLES: Record<BadgeVariant, string> = {
+  default: "bg-slate-100 text-slate-600",
+  success: "bg-green-100 text-green-700",
+  warning: "bg-amber-100 text-amber-700",
+  danger: "bg-red-100 text-red-700",
+};
+
+export function Badge({
+  children,
+  variant = "default",
+  className,
+}: {
+  children: React.ReactNode;
+  variant?: BadgeVariant;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-block rounded-full px-2.5 py-1 text-xs font-medium",
+        BADGE_VARIANT_STYLES[variant],
+        className
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+export function ActiveBadge({ active }: { active: boolean }) {
+  return <Badge variant={active ? "success" : "default"}>{active ? "Active" : "Inactive"}</Badge>;
+}
+
+
+################################################################################
+# FILE: src\components\ui\button.tsx
+################################################################################
+
+import { ButtonHTMLAttributes, forwardRef } from "react";
+import { cn } from "@/lib/utils";
+
+type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant;
+}
+
+const variantClasses: Record<ButtonVariant, string> = {
+  primary: "bg-primary text-white hover:bg-primary/90 shadow-sm shadow-primary/30",
+  secondary: "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50",
+  danger: "bg-red-600 text-white hover:bg-red-700",
+  ghost: "bg-transparent text-slate-600 hover:bg-slate-100",
+};
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant = "primary", disabled, ...props }, ref) => {
+    return (
+      <button
+        ref={ref}
+        disabled={disabled}
+        className={cn(
+          "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none",
+          variantClasses[variant],
+          className
+        )}
+        {...props}
+      />
+    );
+  }
+);
+Button.displayName = "Button";
+
+
+################################################################################
+# FILE: src\components\ui\card.tsx
+################################################################################
+
+import { HTMLAttributes } from "react";
+import { cn } from "@/lib/utils";
+
+export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn("rounded-xl border border-slate-200 bg-white shadow-sm", className)}
+      {...props}
+    />
+  );
+}
+
+export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("flex flex-col space-y-1.5 p-6", className)} {...props} />;
+}
+
+export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
+  return <h3 className={cn("text-sm font-medium leading-none", className)} {...props} />;
+}
+
+export function CardContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("p-6 pt-0", className)} {...props} />;
+}
+
+
+################################################################################
+# FILE: src\components\ui\empty-state.tsx
+################################################################################
+
+import { LucideIcon } from "lucide-react";
+import { Button } from "./button";
+
+interface EmptyStateProps {
+  icon: LucideIcon;
+  title: string;
+  description?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}
+
+export function EmptyState({ icon: Icon, title, description, actionLabel, onAction }: EmptyStateProps) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-slate-200 py-16 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+        <Icon size={22} />
+      </div>
+      <div>
+        <p className="text-sm font-medium text-slate-900">{title}</p>
+        {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+      </div>
+      {actionLabel && onAction && (
+        <Button onClick={onAction} className="mt-2">
+          {actionLabel}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\components\ui\error-state.tsx
+################################################################################
+
+import { AlertTriangle } from "lucide-react";
+import { Button } from "./button";
+
+interface ErrorStateProps {
+  title?: string;
+  description?: string;
+  onRetry?: () => void;
+}
+
+export function ErrorState({
+  title = "Something went wrong",
+  description = "Please try again.",
+  onRetry,
+}: ErrorStateProps) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-red-100 bg-red-50 py-16 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-500">
+        <AlertTriangle size={22} />
+      </div>
+      <div>
+        <p className="text-sm font-medium text-slate-900">{title}</p>
+        <p className="mt-1 text-sm text-slate-500">{description}</p>
+      </div>
+      {onRetry && (
+        <Button variant="secondary" onClick={onRetry} className="mt-2">
+          Retry
+        </Button>
+      )}
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\components\ui\input.tsx
+################################################################################
+
+import { InputHTMLAttributes, forwardRef } from "react";
+import { cn } from "@/lib/utils";
+
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  ({ className, ...props }, ref) => {
+    return (
+      <input
+        ref={ref}
+        className={cn(
+          "block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 transition-all focus:border-primary focus:ring-2 focus:ring-primary/20",
+          className
+        )}
+        {...props}
+      />
+    );
+  }
+);
+Input.displayName = "Input";
+
+
+################################################################################
+# FILE: src\components\ui\modal.tsx
+################################################################################
+
+"use client";
+import { ReactNode, useEffect } from "react";
+import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface ModalProps {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+  className?: string;
+}
+
+export function Modal({ open, onClose, title, children, className }: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-slate-900/40"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        className={cn(
+          "relative z-50 w-full max-w-lg rounded-xl bg-white p-6 shadow-xl",
+          className
+        )}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 id="modal-title" className="text-lg font-semibold text-slate-900">
+            {title}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-700"
+            aria-label="Close"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\components\ui\select.tsx
+################################################################################
+
+import { SelectHTMLAttributes, forwardRef } from "react";
+import { cn } from "@/lib/utils";
+
+export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
+  ({ className, children, ...props }, ref) => {
+    return (
+      <select
+        ref={ref}
+        className={cn(
+          "block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 transition-all focus:border-primary focus:ring-2 focus:ring-primary/20",
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </select>
+    );
+  }
+);
+Select.displayName = "Select";
+
+
+################################################################################
+# FILE: src\components\ui\skeleton.tsx
+################################################################################
+
+import { HTMLAttributes } from "react";
+import { cn } from "@/lib/utils";
+
+export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("animate-pulse rounded-md bg-slate-200", className)} {...props} />;
+}
+
+export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: number }) {
+  return (
+    <div className="space-y-3 p-4">
+      {Array.from({ length: rows }).map((_, r) => (
+        <div key={r} className="flex gap-4">
+          {Array.from({ length: cols }).map((_, c) => (
+            <Skeleton key={c} className="h-4 flex-1" />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+################################################################################
+# FILE: src\components\ui\table.tsx
+################################################################################
+
+import { HTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from "react";
+import { cn } from "@/lib/utils";
+
+export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>) {
+  return (
+    <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <table className={cn("w-full text-left text-sm", className)} {...props} />
+    </div>
+  );
+}
+
+export function TableHead({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
+  return <thead className={cn("border-b bg-slate-50", className)} {...props} />;
+}
+
+export function TableBody({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
+  return <tbody className={cn("divide-y", className)} {...props} />;
+}
+
+export function TableRow({ className, ...props }: HTMLAttributes<HTMLTableRowElement>) {
+  return <tr className={cn("hover:bg-slate-50", className)} {...props} />;
+}
+
+export function TableHeaderCell({ className, ...props }: ThHTMLAttributes<HTMLTableCellElement>) {
+  return <th className={cn("p-4 text-sm font-semibold text-slate-600", className)} {...props} />;
+}
+
+export function TableCell({ className, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {
+  return <td className={cn("p-4 text-slate-700", className)} {...props} />;
+}
+
+
+################################################################################
+# FILE: src\hooks\use-audit.ts
+################################################################################
+
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import { auditService } from "@/services/audit-service";
+
+export function useAuditLogs(limit = 100, offset = 0) {
+  return useQuery({
+    queryKey: ["audit-logs", limit, offset],
+    queryFn: () => auditService.listLogs(limit, offset),
+  });
+}
+
+
+################################################################################
+# FILE: src\hooks\use-catalog.ts
+################################################################################
+
+"use client";
+
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  catalogService,
+  CreateSupplierInput,
+  UpdateSupplierInput,
+  CreateProductInput,
+  UpdateProductInput,
+} from "@/services/catalog-service";
+
+const SUPPLIERS_KEY = ["suppliers"] as const;
+const PRODUCTS_KEY = ["products"] as const;
+const supplierKey = (id: number) => ["supplier", id] as const;
+const productKey = (id: number) => ["product", id] as const;
+
+// Suppliers
+export function useSuppliers(activeOnly = false) {
+  return useQuery({
+    queryKey: [...SUPPLIERS_KEY, activeOnly],
+    queryFn: () => catalogService.listSuppliers(activeOnly),
+  });
+}
+
+export function useSupplier(id: number) {
+  return useQuery({
+    queryKey: supplierKey(id),
+    queryFn: () => catalogService.getSupplierById(id),
+    enabled: Number.isFinite(id),
+  });
+}
+
+export function useCreateSupplier() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateSupplierInput) => catalogService.createSupplier(input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SUPPLIERS_KEY }),
+  });
+}
+
+export function useUpdateSupplier(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateSupplierInput) => catalogService.updateSupplier(id, input),
+    onSuccess: (supplier) => {
+      queryClient.setQueryData(supplierKey(id), supplier);
+      queryClient.invalidateQueries({ queryKey: SUPPLIERS_KEY });
+    },
+  });
+}
+
+// Products
+export function useProducts(supplierId?: number, activeOnly = false) {
+  return useQuery({
+    queryKey: [...PRODUCTS_KEY, supplierId ?? "all", activeOnly],
+    queryFn: () => catalogService.listProducts(supplierId, activeOnly),
+  });
+}
+
+export function useProduct(id: number) {
+  return useQuery({
+    queryKey: productKey(id),
+    queryFn: () => catalogService.getProductById(id),
+    enabled: Number.isFinite(id),
+  });
+}
+
+export function useCreateProduct() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateProductInput) => catalogService.createProduct(input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: PRODUCTS_KEY }),
+  });
+}
+
+export function useUpdateProduct(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateProductInput) => catalogService.updateProduct(id, input),
+    onSuccess: (product) => {
+      queryClient.setQueryData(productKey(id), product);
+      queryClient.invalidateQueries({ queryKey: PRODUCTS_KEY });
+    },
+  });
+}
+
+export function useToggleProductActive(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (active: boolean) =>
+      active ? catalogService.activateProduct(id) : catalogService.deactivateProduct(id),
+    onSuccess: (product) => {
+      queryClient.setQueryData(productKey(id), product);
+      queryClient.invalidateQueries({ queryKey: PRODUCTS_KEY });
+    },
+  });
+}
+
+
+################################################################################
+# FILE: src\hooks\use-orders.ts
+################################################################################
+
+"use client";
+
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { orderService, UpdateDraftOrderInput } from "@/services/order-service";
+import { CreateOrderInput } from "@/types";
+
+const ORDERS_KEY = ["orders"] as const;
+const orderKey = (id: number) => ["order", id] as const;
+
+export function useOrders(status?: string) {
+  return useQuery({
+    queryKey: status ? [...ORDERS_KEY, status] : ORDERS_KEY,
+    queryFn: () => orderService.getOrders(status),
+  });
+}
+
+export function useOrder(id: number) {
+  return useQuery({
+    queryKey: orderKey(id),
+    queryFn: () => orderService.getOrderById(id),
+    enabled: Number.isFinite(id),
+  });
+}
+
+export function useCreateOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateOrderInput) => orderService.createOrder(input),
+    onSuccess: (order) => {
+      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      queryClient.setQueryData(orderKey(order.id), order);
+    },
+  });
+}
+
+export function useUpdateDraftOrder(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: UpdateDraftOrderInput) => orderService.updateDraftOrder(id, payload),
+    onSuccess: (order) => {
+      queryClient.setQueryData(orderKey(id), order);
+      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+    },
+  });
+}
+
+export function useSubmitOrder(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => orderService.submitOrder(id),
+    onSuccess: (order) => {
+      queryClient.setQueryData(orderKey(id), order);
+      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+    },
+  });
+}
+
+export function useApproveOrder(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => orderService.approveOrder(id),
+    onSuccess: (order) => {
+      queryClient.setQueryData(orderKey(id), order);
+      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+    },
+  });
+}
+
+export function useRejectOrder(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (reason?: string) => orderService.rejectOrder(id, reason),
+    onSuccess: (order) => {
+      queryClient.setQueryData(orderKey(id), order);
+      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+    },
+  });
+}
+
+// Not explicitly requested, but required for the manual test flow in Step 5
+// (Approve -> Complete): the backend only allows mark_completed from
+// `sent`, so a "Complete" action needs this transition first. See summary.
+export function useMarkSentOrder(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => orderService.markSent(id),
+    onSuccess: (order) => {
+      queryClient.setQueryData(orderKey(id), order);
+      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+    },
+  });
+}
+
+export function useCompleteOrder(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => orderService.markCompleted(id),
+    onSuccess: (order) => {
+      queryClient.setQueryData(orderKey(id), order);
+      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+    },
+  });
+}
+
+
+################################################################################
+# FILE: src\i18n\request.ts
+################################################################################
+
+import { getRequestConfig } from "next-intl/server";
+
+import { routing } from "./routing";
+
+
+export default getRequestConfig(
+  async ({ requestLocale }) => {
+
+    let locale = await requestLocale;
+
+
+    if (
+      !locale ||
+      !routing.locales.includes(
+        locale as any
+      )
+    ) {
+      locale = routing.defaultLocale;
+    }
+
+
+    return {
+
+      locale,
+
+      messages:
+        (
+          await import(
+            `../../messages/${locale}.json`
+          )
+        ).default,
+
+    };
+
+  }
+);
+
+
+################################################################################
+# FILE: src\i18n\routing.ts
+################################################################################
+
+import { defineRouting } from "next-intl/routing";
+import { createNavigation } from "next-intl/navigation";
+
+export const routing = defineRouting({
+  locales: ["he", "en"],
+  defaultLocale: "he",
+  localePrefix: "always", // מבטיח שכל נתיב יקבל תמיד קידומת /he או /en
+});
+
+export const { Link, redirect, usePathname, useRouter, getPathname } =
+  createNavigation(routing);
+
+
+################################################################################
+# FILE: src\lib\permissions.ts
+################################################################################
+
+// Mirrors app/services/permission_service.py — the backend role hierarchy is
+// employee < manager < admin. The backend is the source of truth (every route
+// re-checks); these helpers only decide what UI to render.
+import { User, UserRole } from "@/types";
+
+const ROLE_LEVEL: Record<UserRole, number> = {
+  employee: 1,
+  manager: 2,
+  admin: 3,
+};
+
+function atLeast(user: User | null | undefined, role: UserRole): boolean {
+  if (!user) return false;
+  return (ROLE_LEVEL[user.role] ?? 0) >= ROLE_LEVEL[role];
+}
+
+export const permissions = {
+  /** GET /api/audit requires manager+ */
+  canViewAudit: (user: User | null | undefined) => atLeast(user, "manager"),
+  /** Catalog/supplier writes require manager+ */
+  canManageCatalog: (user: User | null | undefined) => atLeast(user, "manager"),
+  /** Order create/edit/submit requires employee+ (any authenticated role) */
+  canCreateOrders: (user: User | null | undefined) => atLeast(user, "employee"),
+  /** Approve/reject/sent/complete/delete require manager+ */
+  canApproveOrders: (user: User | null | undefined) => atLeast(user, "manager"),
+  /** Tenant settings are admin-only */
+  canEditSettings: (user: User | null | undefined) => atLeast(user, "admin"),
+};
+
+export function hasPermission(
+  user: User | null | undefined,
+  permission: keyof typeof permissions
+): boolean {
+  return permissions[permission](user);
+}
+
+
+################################################################################
+# FILE: src\lib\toast-bus.ts
+################################################################################
+
+// Minimal pub/sub so non-component code (the axios interceptor) can trigger
+// a toast without importing React. ToastProvider is the single subscriber;
+// it registers itself on mount and clears itself on unmount.
+export type ToastVariant = "error" | "info";
+
+interface ToastMessage {
+  id: number;
+  message: string;
+  variant: ToastVariant;
+}
+
+type Listener = (toast: ToastMessage) => void;
+
+let listener: Listener | null = null;
+let nextId = 1;
+
+export function setToastListener(fn: Listener | null) {
+  listener = fn;
+}
+
+export function emitToast(message: string, variant: ToastVariant = "error") {
+  listener?.({ id: nextId++, message, variant });
+}
+
+export type { ToastMessage };
+
+
+################################################################################
+# FILE: src\lib\utils.ts
+################################################################################
+
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+/**
+ * פונקציה המשלבת Class Names של Tailwind בצורה חכמה (מונעת התנגשויות)
+ */
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+
+################################################################################
+# FILE: src\messages\en.json
+################################################################################
+
+{
+  "common": {
+    "search": "Search...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "loading": "Loading...",
+    "noData": "No data found",
+    "actions": "Actions",
+    "success": "Action completed successfully",
+    "error": "An error occurred while processing"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "suppliers": "Suppliers",
+    "catalog": "Product Catalog",
+    "orders": "Purchase Orders",
+    "audit": "Audit Log",
+    "settings": "System Settings"
+  },
+  "header": {
+    "userProfile": "User Profile",
+    "logout": "Log Out",
+    "tenant": "Active Organization",
+    "notifications": "Notifications",
+    "roles": {
+      "admin": "System Admin",
+      "manager": "Manager",
+      "employee": "Employee"
+    }
+  },
+  "dashboard": {
+    "title": "General Dashboard",
+    "welcome": "Welcome back",
+    "totalOrders": "Active Orders",
+    "totalSuppliers": "Registered Suppliers",
+    "pendingApprovals": "Pending Approvals"
+  },
+  "suppliers": {
+    "title": "Supplier Management",
+    "addSupplier": "New Supplier",
+    "supplierName": "Supplier Name",
+    "companyId": "Company ID",
+    "email": "Email Address",
+    "phone": "Contact Phone",
+    "status": "Supplier Status",
+    "emptyState": "No registered suppliers found."
+  },
+  "catalog": {
+    "title": "Product Catalog",
+    "addProduct": "Add Product",
+    "sku": "SKU",
+    "productName": "Product Name",
+    "price": "Unit Price",
+    "supplier": "Associated Supplier",
+    "emptyState": "No products in catalog."
+  },
+  "orders": {
+    "title": "Purchase Orders",
+    "newOrder": "Create New Order",
+    "orderId": "Order ID",
+    "date": "Creation Date",
+    "total": "Total Amount",
+    "status": "Order Status",
+    "emptyState": "No purchase orders found.",
+    "statuses": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "sent": "Sent to Supplier"
+    }
+  },
+  "audit": {
+    "title": "Audit Log",
+    "timestamp": "Timestamp",
+    "user": "User",
+    "action": "Action Type",
+    "details": "Details",
+    "ipAddress": "IP Address",
+    "emptyState": "Audit log is empty."
+  }
+}
+
+################################################################################
+# FILE: src\messages\he.json
+################################################################################
+
+{
+  "common": {
+    "search": "חיפוש...",
+    "save": "שמירה",
+    "cancel": "ביטול",
+    "delete": "מחיקה",
+    "edit": "עריכה",
+    "loading": "טוען נתונים...",
+    "noData": "לא נמצאו נתונים",
+    "actions": "פעולות",
+    "success": "הפעולה בוצעה בהצלחה",
+    "error": "אירעה שגיאה בעיבוד הבקשה"
+  },
+  "navigation": {
+    "dashboard": "לוח בקרה",
+    "suppliers": "ניהול ספקים",
+    "catalog": "קטלוג מוצרים",
+    "orders": "הזמנות רכש",
+    "audit": "לוג ביקורת",
+    "settings": "הגדרות מערכת"
+  },
+  "header": {
+    "userProfile": "פרופיל משתמש",
+    "logout": "התנתק מהמערכת",
+    "tenant": "ארגון פעיל",
+    "notifications": "התראות"
+  },
+  "dashboard": {
+    "title": "לוח בקרה כללי",
+    "welcome": "שלום, שמחים לראותך שוב",
+    "totalOrders": "סה\"כ הזמנות פעילות",
+    "totalSuppliers": "ספקים רשומים במערכת",
+    "pendingApprovals": "הזמנות הממתינות לאישור"
+  },
+  "suppliers": {
+    "title": "ניהול ספקים",
+    "addSupplier": "ספק חדש",
+    "supplierName": "שם הספק",
+    "companyId": "ח.פ / מזהה חברה",
+    "email": "כתובת אימייל",
+    "phone": "טלפון ליצירת קשר",
+    "status": "סטטוס ספק",
+    "emptyState": "לא נמצאו ספקים רשומים במערכת."
+  },
+  "catalog": {
+    "title": "קטלוג מוצרים",
+    "addProduct": "הוספת מוצר",
+    "sku": "מק\"ט",
+    "productName": "שם המוצר",
+    "price": "מחיר ליחידה",
+    "supplier": "ספק משויך",
+    "emptyState": "לא נמצאו מוצרים בקטלוג."
+  },
+  "orders": {
+    "title": "ניהול הזמנות רכש",
+    "newOrder": "יצירת הזמנה חדשה",
+    "orderId": "מספר הזמנה",
+    "date": "תאריך יצירה",
+    "total": "סה\"כ לתשלום",
+    "status": "סטטוס הזמנה",
+    "emptyState": "לא נמצאו הזמנות רכש במערכת.",
+    "statuses": {
+      "pending": "ממתין לאישור",
+      "approved": "אושר",
+      "rejected": "נדחה",
+      "sent": "נשלח לספק"
+    }
+  },
+  "audit": {
+    "title": "לוג ביקורת (Audit Log)",
+    "timestamp": "תאריך ושעה",
+    "user": "משתמש מבצע",
+    "action": "סוג הפעולה",
+    "details": "פרטי השינוי",
+    "ipAddress": "כתובת IP",
+    "emptyState": "לוג הביקורת ריק."
+  }
+}
+
+
+################################################################################
+# FILE: src\providers\auth-provider.tsx
+################################################################################
+
+"use client";
+
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+
+import { useRouter, usePathname } from "next/navigation";
+import apiClient from "@/services/api-client";
+
+import type { User, Tenant } from "@/types";
+
+interface AuthMeResponse {
+  user: User;
+  tenant?: Tenant | null;
+}
+
+interface AuthContextType {
+  user: User | null;
+  tenant: Tenant | null;
+
+  isLoading: boolean;
+  isLoggingIn: boolean;
+  loginError: string | null;
+  isAuthenticated: boolean;
+
+  login: (credentials: {
+    email: string;
+    password: string;
+  }) => Promise<void>;
+
+  logout: () => Promise<void>;
+
+  checkAuthStatus: () => Promise<void>;
+}
+
+
+const AuthContext = createContext<AuthContextType | undefined>(
+  undefined
+);
+
+
+export function AuthProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+
+  const [user, setUser] = useState<User | null>(null);
+
+  const [tenant, setTenant] =
+    useState<Tenant | null>(null);
+
+
+  const [isLoading, setIsLoading] =
+    useState(true);
+
+
+  const [isLoggingIn, setIsLoggingIn] =
+    useState(false);
+
+
+  const [loginError, setLoginError] =
+    useState<string | null>(null);
+
+
+  const [isAuthenticated, setIsAuthenticated] =
+    useState(false);
+
+
+  const router = useRouter();
+  const pathname = usePathname();
+
+
+
+  /**
+   * בדיקת Session מול Flask-Login
+   *
+   * Browser שולח HttpOnly Cookie אוטומטית
+   */
+  const checkAuthStatus = async () => {
+
+    try {
+
+      const response =
+        await apiClient.get<AuthMeResponse>(
+          "/auth/me"
+        );
+
+
+      if (response.data?.user) {
+
+        setUser(response.data.user);
+
+        setTenant(
+          response.data.tenant ?? null
+        );
+
+        setIsAuthenticated(true);
+
+      } else {
+
+        setUser(null);
+        setTenant(null);
+        setIsAuthenticated(false);
+
+      }
+
+
+    } catch {
+
+      setUser(null);
+      setTenant(null);
+      setIsAuthenticated(false);
+
+
+    } finally {
+
+      setIsLoading(false);
+
+    }
+  };
+
+
+
+  /**
+   * טעינה ראשונית
+   */
+  useEffect(() => {
+
+    checkAuthStatus();
+
+  }, []);
+
+
+
+  /**
+   * הגנת נתיבים
+   */
+  useEffect(() => {
+
+    if (isLoading) {
+      return;
+    }
+
+
+    const isLoginPage =
+      pathname.includes("/login");
+
+
+    const isProtected =
+      pathname.includes("/dashboard");
+
+
+    if (
+      isProtected &&
+      !isAuthenticated
+    ) {
+
+      router.push("/login");
+
+    }
+
+
+    if (
+      isLoginPage &&
+      isAuthenticated
+    ) {
+
+      router.push("/dashboard");
+
+    }
+
+
+  }, [
+    pathname,
+    isAuthenticated,
+    isLoading,
+    router,
+  ]);
+
+
+
+
+  /**
+   * Login
+   *
+   * Flask יוצר Session Cookie
+   */
+  const login = async (
+    credentials: {
+      email: string;
+      password: string;
+    }
+  ) => {
+
+
+    setIsLoggingIn(true);
+
+    setLoginError(null);
+
+
+
+    try {
+
+
+      await apiClient.post(
+        "/auth/login",
+        credentials
+      );
+
+
+      await checkAuthStatus();
+
+
+
+    } catch (error: any) {
+
+
+      setUser(null);
+      setTenant(null);
+
+      setIsAuthenticated(false);
+
+
+      const message =
+        error?.friendlyMessage ||
+        "שגיאה בהתחברות";
+
+
+      setLoginError(message);
+
+
+      throw error;
+
+
+
+    } finally {
+
+
+      setIsLoggingIn(false);
+
+
+    }
+
+  };
+
+
+
+
+  /**
+   * Logout
+   */
+  const logout = async () => {
+
+
+    try {
+
+
+      await apiClient.post(
+        "/auth/logout"
+      );
+
+
+    } catch (error) {
+
+
+      console.error(
+        "Logout failed",
+        error
+      );
+
+
+    } finally {
+
+
+      setUser(null);
+
+      setTenant(null);
+
+      setIsAuthenticated(false);
+
+      setLoginError(null);
+
+
+      router.push("/login");
+
+
+    }
+
+  };
+
+
+
+  return (
+
+    <AuthContext.Provider
+      value={{
+        user,
+        tenant,
+
+        isLoading,
+        isLoggingIn,
+        loginError,
+
+        isAuthenticated,
+
+        login,
+        logout,
+
+        checkAuthStatus,
+      }}
+    >
+
+      {children}
+
+    </AuthContext.Provider>
+
+  );
+
+}
+
+
+
+export function useAuth() {
+
+  const context =
+    useContext(AuthContext);
+
+
+  if (!context) {
+
+    throw new Error(
+      "useAuth must be used inside AuthProvider"
+    );
+
+  }
+
+
+  return context;
+
+}
+
+
+################################################################################
+# FILE: src\providers\query-provider.tsx
+################################################################################
+
+'use client';
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { useState, ReactNode } from 'react';
+
+export default function QueryProvider({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 1000 * 60 * 5, // 5 דקות של נתונים "טריים"
+            retry: 1, // ניסיון אחד נוסף במקרה של שגיאה
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  );
+}
+
+
+################################################################################
+# FILE: src\providers\toast-provider.tsx
+################################################################################
+
+"use client";
+
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { AlertCircle, Info, X } from "lucide-react";
+import { setToastListener, emitToast, ToastMessage } from "@/lib/toast-bus";
+import { cn } from "@/lib/utils";
+
+const ToastContext = createContext<{ showToast: typeof emitToast } | undefined>(undefined);
+
+const AUTO_DISMISS_MS = 5000;
+
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const dismiss = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  useEffect(() => {
+    setToastListener((toast) => {
+      setToasts((prev) => [...prev, toast]);
+      setTimeout(() => dismiss(toast.id), AUTO_DISMISS_MS);
+    });
+    return () => setToastListener(null);
+  }, [dismiss]);
+
+  return (
+    <ToastContext.Provider value={{ showToast: emitToast }}>
+      {children}
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className={cn(
+              "flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium shadow-lg",
+              t.variant === "error" ? "bg-red-600 text-white" : "bg-slate-900 text-white"
+            )}
+          >
+            {t.variant === "error" ? <AlertCircle size={16} /> : <Info size={16} />}
+            <span>{t.message}</span>
+            <button onClick={() => dismiss(t.id)} className="ml-2 opacity-70 hover:opacity-100">
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+
+export const useToast = () => {
+  const context = useContext(ToastContext);
+  if (!context) throw new Error("useToast must be used within ToastProvider");
+  return context;
+};
+
+
+################################################################################
+# FILE: src\services\api-client.ts
+################################################################################
+
+import axios from "axios";
+
+const apiClient = axios.create({
+  // כל הקריאות עוברות דרך Next.js Rewrite Proxy
+  baseURL: "/api",
+
+  // חובה עבור Flask-Login HttpOnly Session Cookie
+  withCredentials: true,
+
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+// טיפול מרכזי בשגיאות API
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+
+    const errorMessage =
+      error.response?.data?.message ||
+      error.response?.data?.error ||
+      "אירעה שגיאה בתקשורת עם השרת";
+
+    return Promise.reject({
+      ...error,
+      status,
+      friendlyMessage: errorMessage,
+    });
+  }
+);
+
+// תמיכה בשני סוגי Imports קיימים בפרויקט:
+// import apiClient from "@/services/api-client"
+// וגם:
+// import { apiClient } from "@/services/api-client"
+
+export { apiClient };
+export default apiClient;
+
+
+################################################################################
+# FILE: src\services\audit-service.ts
+################################################################################
+
+import { apiClient } from "./api-client";
+import { AuditLogEntry } from "@/types";
+
+export const auditService = {
+  // Requires manager/admin — the backend returns 403 for employees, which the
+  // shared axios interceptor already turns into a "No permission" toast.
+  listLogs: async (limit = 100, offset = 0) => {
+    const { data } = await apiClient.get<{ success: boolean; logs: AuditLogEntry[] }>("/api/audit", {
+      params: { limit, offset },
+    });
+    return data.logs;
+  },
+};
+
+
+################################################################################
+# FILE: src\services\auth-service.ts
+################################################################################
+
+import { apiClient } from './api-client';
+import { AuthResponse, User, Tenant } from '@/types';
+
+export const authService = {
+  /**
+   * התחברות למערכת - ה-Cookie נשמר אוטומטית בדפדפן
+   */
+  login: async (credentials: Record<string, string>): Promise<AuthResponse> => {
+    const { data } = await apiClient.post<AuthResponse>('/api/auth/login', credentials);
+    return data;
+  },
+
+  /**
+   * התנתקות - מוחק את ה-Session ב-Backend
+   */
+  logout: async (): Promise<{ success: boolean }> => {
+    const { data } = await apiClient.post('/api/auth/logout');
+    return data;
+  },
+
+  /**
+   * שליפת נתוני המשתמש והטננט הנוכחי לפי ה-Session הקיים
+   */
+  getMe: async (): Promise<{ user: User; tenant: Tenant | null }> => {
+    const { data } = await apiClient.get<{ success: boolean; user: User; tenant: Tenant | null }>('/api/auth/me');
+    return { user: data.user, tenant: data.tenant };
+  }
+};
+
+
+################################################################################
+# FILE: src\services\catalog-service.ts
+################################################################################
+
+import { apiClient } from "./api-client";
+import { Product, Supplier } from "@/types";
+
+export interface CreateSupplierInput {
+  name: string;
+  contact_name?: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface UpdateSupplierInput {
+  name?: string;
+  contact_name?: string;
+  email?: string;
+  phone?: string;
+  active?: boolean;
+}
+
+export interface CreateProductInput {
+  supplier_id: number;
+  name: string;
+  sku?: string;
+  description?: string;
+  current_price: number;
+  currency?: string;
+}
+
+export interface UpdateProductInput {
+  name?: string;
+  sku?: string;
+  description?: string;
+  current_price?: number;
+  currency?: string;
+  active?: boolean;
+}
+
+export const catalogService = {
+  // Suppliers
+  listSuppliers: async (activeOnly = false) => {
+    const { data } = await apiClient.get<{ success: boolean; suppliers: Supplier[] }>(
+      "/api/catalog/suppliers",
+      { params: { active: activeOnly ? "true" : undefined } }
+    );
+    return data.suppliers;
+  },
+  getSupplierById: async (id: number) => {
+    const { data } = await apiClient.get<{ success: boolean; supplier: Supplier }>(
+      `/api/catalog/suppliers/${id}`
+    );
+    return data.supplier;
+  },
+  createSupplier: async (input: CreateSupplierInput) => {
+    const { data } = await apiClient.post<{ success: boolean; supplier: Supplier }>(
+      "/api/catalog/suppliers",
+      input
+    );
+    return data.supplier;
+  },
+  updateSupplier: async (id: number, input: UpdateSupplierInput) => {
+    const { data } = await apiClient.put<{ success: boolean; supplier: Supplier }>(
+      `/api/catalog/suppliers/${id}`,
+      input
+    );
+    return data.supplier;
+  },
+
+  // Products
+  listProducts: async (supplierId?: number, activeOnly = false) => {
+    const { data } = await apiClient.get<{ success: boolean; products: Product[] }>(
+      "/api/catalog/products",
+      { params: { supplier_id: supplierId, active: activeOnly ? "true" : undefined } }
+    );
+    return data.products;
+  },
+  getProductById: async (id: number) => {
+    const { data } = await apiClient.get<{ success: boolean; product: Product }>(
+      `/api/catalog/products/${id}`
+    );
+    return data.product;
+  },
+  createProduct: async (input: CreateProductInput) => {
+    const { data } = await apiClient.post<{ success: boolean; product: Product }>(
+      "/api/catalog/products",
+      input
+    );
+    return data.product;
+  },
+  updateProduct: async (id: number, input: UpdateProductInput) => {
+    const { data } = await apiClient.put<{ success: boolean; product: Product }>(
+      `/api/catalog/products/${id}`,
+      input
+    );
+    return data.product;
+  },
+  // "Delete" in the UI is always a soft delete (active:false) to preserve
+  // Snapshot Integrity — orders already keep their own copy of product data
+  // regardless, but we never offer a destructive hard-delete from the UI.
+  deactivateProduct: async (id: number) => {
+    const { data } = await apiClient.put<{ success: boolean; product: Product }>(
+      `/api/catalog/products/${id}`,
+      { active: false }
+    );
+    return data.product;
+  },
+  activateProduct: async (id: number) => {
+    const { data } = await apiClient.put<{ success: boolean; product: Product }>(
+      `/api/catalog/products/${id}`,
+      { active: true }
+    );
+    return data.product;
+  },
+};
+
+
+################################################################################
+# FILE: src\services\order-service.ts
+################################################################################
+
+import { apiClient } from "./api-client";
+import { CreateOrderInput, Order } from "@/types";
+
+export interface UpdateDraftOrderInput {
+  notes?: string;
+  items?: { product_id: number; quantity: number }[];
+}
+
+export const orderService = {
+  getOrders: async (status?: string) => {
+    const { data } = await apiClient.get<{ success: boolean; orders: Order[] }>("/api/orders", {
+      params: { status },
+    });
+    return data.orders;
+  },
+
+  getOrderById: async (id: number) => {
+    const { data } = await apiClient.get<{ success: boolean; order: Order }>(`/api/orders/${id}`);
+    return data.order;
+  },
+
+  createOrder: async (orderData: CreateOrderInput) => {
+    const { data } = await apiClient.post<{ success: boolean; order: Order }>("/api/orders", orderData);
+    return data.order;
+  },
+
+  // Draft-only content edits (notes/items). The backend rejects any `status`
+  // field on this endpoint — lifecycle transitions each have their own
+  // dedicated endpoint below instead of PUT /api/orders/{id}.
+  updateDraftOrder: async (id: number, payload: UpdateDraftOrderInput) => {
+    const { data } = await apiClient.put<{ success: boolean; order: Order }>(`/api/orders/${id}`, payload);
+    return data.order;
+  },
+
+  submitOrder: async (id: number) => {
+    const { data } = await apiClient.post<{ success: boolean; order: Order }>(`/api/orders/${id}/submit`);
+    return data.order;
+  },
+
+  approveOrder: async (id: number) => {
+    const { data } = await apiClient.post<{ success: boolean; order: Order }>(`/api/orders/${id}/approve`);
+    return data.order;
+  },
+
+  rejectOrder: async (id: number, reason?: string) => {
+    const { data } = await apiClient.post<{ success: boolean; order: Order }>(`/api/orders/${id}/reject`, {
+      reason,
+    });
+    return data.order;
+  },
+
+  markSent: async (id: number) => {
+    const { data } = await apiClient.post<{ success: boolean; order: Order }>(`/api/orders/${id}/sent`);
+    return data.order;
+  },
+
+  markCompleted: async (id: number) => {
+    const { data } = await apiClient.post<{ success: boolean; order: Order }>(`/api/orders/${id}/complete`);
+    return data.order;
+  },
+
+  deleteOrder: async (id: number) => {
+    const { data } = await apiClient.delete<{ success: boolean }>(`/api/orders/${id}`);
+    return data;
+  },
+};
+
+
+################################################################################
+# FILE: src\types\index.ts
+################################################################################
+
+// Mirrors app/models/user.py User.to_dict()
+export type UserRole = "admin" | "manager" | "employee";
+
+export interface User {
+  id: number;
+  tenant_id: number;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  active: boolean;
+  created_at: string | null;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  user: User;
+}
+
+// Mirrors app/models/order.py VALID_STATUSES
+export type OrderStatus =
+  | "draft"
+  | "submitted"
+  | "approved"
+  | "sent"
+  | "completed"
+  | "cancelled";
+
+export interface OrderItem {
+  product_id: number;
+  product_name: string;
+  sku: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+}
+
+// Mirrors app/models/order.py Order.to_dict()
+export interface Order {
+  id: number;
+  tenant_id: number;
+  user_id: number;
+  order_number: string;
+  supplier_name: string;
+  supplier_contact: string | null;
+  supplier_email: string | null;
+  status: OrderStatus;
+  subtotal: number;
+  discount_total: number;
+  tax_total: number;
+  final_total: number;
+  currency: string;
+  items: OrderItem[];
+  snapshot: unknown | null;
+  snapshot_taken_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateOrderItemInput {
+  product_id: number;
+  quantity: number;
+}
+
+export interface CreateOrderInput {
+  supplier_id: number;
+  currency?: string;
+  notes?: string;
+  items: CreateOrderItemInput[];
+}
+
+// Mirrors app/models/product.py Product.to_dict()
+export interface Product {
+  id: number;
+  supplier_id: number;
+  sku: string;
+  name: string;
+  description: string | null;
+  current_price: number;
+  currency: string;
+  active: boolean;
+  created_at: string;
+}
+
+// Mirrors app/models/supplier.py Supplier.to_dict()
+export interface Supplier {
+  id: number;
+  tenant_id: number;
+  name: string;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+// Mirrors app/models/audit.py AuditLog.to_dict()
+export interface AuditLogEntry {
+  id: number;
+  tenant_id: number;
+  user_id: number | null;
+  user_email: string | null;
+  user_full_name: string | null;
+  action: string;
+  title: string | null;
+  metadata: Record<string, unknown>;
+  previous_hash: string;
+  hash_chain: string;
+  created_at: string;
+  timestamp_iso: string;
+}
+
+// Mirrors app/models/tenant.py Tenant.to_dict()
+export interface Tenant {
+  id: number;
+  name: string;
+  slug: string;
+  active: boolean;
+  created_at: string | null;
+}
+
+
+################################################################################
+# FILE: tailwind.config.ts
+################################################################################
+
+import type { Config } from "tailwindcss";
+
+const config: Config = {
+  content: [
+    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  theme: {
+    extend: {
+      fontFamily: {
+        // הגדרת משתנה ה-CSS של הפונט כברירת המחדל של המערכת
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+      },
+      colors: {
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+      },
+    },
+  },
+  plugins: [],
+};
+
+export default config;
+
+
+################################################################################
+# FILE: tsconfig.json
+################################################################################
+
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+
+
+================================================================================
+EXPORT SUMMARY
+================================================================================
+Files exported: 52
+Total lines: 3555
