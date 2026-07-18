@@ -8,38 +8,29 @@ import React, {
   ReactNode,
 } from "react";
 
-import {
-  useRouter,
-  usePathname,
-} from "next/navigation";
-
+import { useRouter, usePathname } from "next/navigation";
 import apiClient from "@/services/api-client";
 
-import type {
-  User,
-  Tenant,
-} from "@/types";
-
+import type { User, Tenant } from "@/types";
 
 interface AuthMeResponse {
   user: User;
-  tenant?: Tenant;
+  tenant?: Tenant | null;
 }
-
 
 interface AuthContextType {
   user: User | null;
   tenant: Tenant | null;
 
   isLoading: boolean;
+  isLoggingIn: boolean;
+  loginError: string | null;
   isAuthenticated: boolean;
 
-  login: (
-    credentials: {
-      email: string;
-      password: string;
-    }
-  ) => Promise<void>;
+  login: (credentials: {
+    email: string;
+    password: string;
+  }) => Promise<void>;
 
   logout: () => Promise<void>;
 
@@ -47,10 +38,9 @@ interface AuthContextType {
 }
 
 
-const AuthContext =
-  createContext<AuthContextType | undefined>(
-    undefined
-  );
+const AuthContext = createContext<AuthContextType | undefined>(
+  undefined
+);
 
 
 export function AuthProvider({
@@ -59,9 +49,7 @@ export function AuthProvider({
   children: ReactNode;
 }) {
 
-  const [user, setUser] =
-    useState<User | null>(null);
-
+  const [user, setUser] = useState<User | null>(null);
 
   const [tenant, setTenant] =
     useState<Tenant | null>(null);
@@ -71,69 +59,70 @@ export function AuthProvider({
     useState(true);
 
 
+  const [isLoggingIn, setIsLoggingIn] =
+    useState(false);
+
+
+  const [loginError, setLoginError] =
+    useState<string | null>(null);
+
+
   const [isAuthenticated, setIsAuthenticated] =
     useState(false);
 
 
   const router = useRouter();
-
   const pathname = usePathname();
 
 
 
   /**
-   * בדיקת משתמש מחובר מול Flask-Login
-   * Session Cookie נשלחת אוטומטית
+   * בדיקת Session מול Flask-Login
+   *
+   * Browser שולח HttpOnly Cookie אוטומטית
    */
-  const checkAuthStatus =
-    async () => {
+  const checkAuthStatus = async () => {
 
-      try {
+    try {
 
-        const response =
-          await apiClient.get<AuthMeResponse>(
-            "/auth/me"
-          );
-
-
-        if (response.data?.user) {
-
-          setUser(response.data.user);
-
-          setIsAuthenticated(true);
+      const response =
+        await apiClient.get<AuthMeResponse>(
+          "/auth/me"
+        );
 
 
-          if (response.data.tenant) {
-            setTenant(response.data.tenant);
-          }
+      if (response.data?.user) {
 
-        } else {
+        setUser(response.data.user);
 
-          setUser(null);
+        setTenant(
+          response.data.tenant ?? null
+        );
 
-          setTenant(null);
+        setIsAuthenticated(true);
 
-          setIsAuthenticated(false);
-
-        }
-
-
-      } catch (error) {
+      } else {
 
         setUser(null);
-
         setTenant(null);
-
         setIsAuthenticated(false);
-
-
-      } finally {
-
-        setIsLoading(false);
 
       }
 
-    };
+
+    } catch {
+
+      setUser(null);
+      setTenant(null);
+      setIsAuthenticated(false);
+
+
+    } finally {
+
+      setIsLoading(false);
+
+    }
+  };
 
 
 
@@ -149,7 +138,7 @@ export function AuthProvider({
 
 
   /**
-   * הגנת Routes
+   * הגנת נתיבים
    */
   useEffect(() => {
 
@@ -158,17 +147,16 @@ export function AuthProvider({
     }
 
 
-    const isProtectedRoute =
-      pathname.includes("/dashboard");
-
-
-    const isLoginRoute =
+    const isLoginPage =
       pathname.includes("/login");
 
 
+    const isProtected =
+      pathname.includes("/dashboard");
+
 
     if (
-      isProtectedRoute &&
+      isProtected &&
       !isAuthenticated
     ) {
 
@@ -178,7 +166,7 @@ export function AuthProvider({
 
 
     if (
-      isLoginRoute &&
+      isLoginPage &&
       isAuthenticated
     ) {
 
@@ -196,8 +184,11 @@ export function AuthProvider({
 
 
 
+
   /**
    * Login
+   *
+   * Flask יוצר Session Cookie
    */
   const login = async (
     credentials: {
@@ -206,10 +197,15 @@ export function AuthProvider({
     }
   ) => {
 
-    setIsLoading(true);
+
+    setIsLoggingIn(true);
+
+    setLoginError(null);
+
 
 
     try {
+
 
       await apiClient.post(
         "/auth/login",
@@ -220,21 +216,38 @@ export function AuthProvider({
       await checkAuthStatus();
 
 
-    } catch (error) {
+
+    } catch (error: any) {
+
 
       setUser(null);
-
       setTenant(null);
 
       setIsAuthenticated(false);
 
-      setIsLoading(false);
+
+      const message =
+        error?.friendlyMessage ||
+        "שגיאה בהתחברות";
+
+
+      setLoginError(message);
+
 
       throw error;
+
+
+
+    } finally {
+
+
+      setIsLoggingIn(false);
+
 
     }
 
   };
+
 
 
 
@@ -243,10 +256,9 @@ export function AuthProvider({
    */
   const logout = async () => {
 
-    setIsLoading(true);
-
 
     try {
+
 
       await apiClient.post(
         "/auth/logout"
@@ -255,13 +267,15 @@ export function AuthProvider({
 
     } catch (error) {
 
+
       console.error(
-        "Logout failed:",
+        "Logout failed",
         error
       );
 
 
     } finally {
+
 
       setUser(null);
 
@@ -269,10 +283,11 @@ export function AuthProvider({
 
       setIsAuthenticated(false);
 
-      setIsLoading(false);
+      setLoginError(null);
 
 
       router.push("/login");
+
 
     }
 
@@ -288,6 +303,9 @@ export function AuthProvider({
         tenant,
 
         isLoading,
+        isLoggingIn,
+        loginError,
+
         isAuthenticated,
 
         login,
