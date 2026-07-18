@@ -15,14 +15,22 @@ import {
 
 import apiClient from "@/services/api-client";
 
-import type { User } from "@/types";
+import type {
+  User,
+  Tenant,
+} from "@/types";
+
 
 interface AuthMeResponse {
   user: User;
+  tenant?: Tenant;
 }
+
 
 interface AuthContextType {
   user: User | null;
+  tenant: Tenant | null;
+
   isLoading: boolean;
   isAuthenticated: boolean;
 
@@ -54,20 +62,28 @@ export function AuthProvider({
   const [user, setUser] =
     useState<User | null>(null);
 
+
+  const [tenant, setTenant] =
+    useState<Tenant | null>(null);
+
+
   const [isLoading, setIsLoading] =
     useState(true);
+
 
   const [isAuthenticated, setIsAuthenticated] =
     useState(false);
 
 
   const router = useRouter();
+
   const pathname = usePathname();
 
 
 
   /**
-   * בדיקת Session מול Flask-Login
+   * בדיקת משתמש מחובר מול Flask-Login
+   * Session Cookie נשלחת אוטומטית
    */
   const checkAuthStatus =
     async () => {
@@ -86,18 +102,27 @@ export function AuthProvider({
 
           setIsAuthenticated(true);
 
+
+          if (response.data.tenant) {
+            setTenant(response.data.tenant);
+          }
+
         } else {
 
           setUser(null);
+
+          setTenant(null);
 
           setIsAuthenticated(false);
 
         }
 
 
-      } catch {
+      } catch (error) {
 
         setUser(null);
+
+        setTenant(null);
 
         setIsAuthenticated(false);
 
@@ -107,6 +132,7 @@ export function AuthProvider({
         setIsLoading(false);
 
       }
+
     };
 
 
@@ -198,12 +224,16 @@ export function AuthProvider({
 
       setUser(null);
 
+      setTenant(null);
+
       setIsAuthenticated(false);
 
       setIsLoading(false);
 
       throw error;
+
     }
+
   };
 
 
@@ -223,17 +253,29 @@ export function AuthProvider({
       );
 
 
+    } catch (error) {
+
+      console.error(
+        "Logout failed:",
+        error
+      );
+
+
     } finally {
 
       setUser(null);
+
+      setTenant(null);
 
       setIsAuthenticated(false);
 
       setIsLoading(false);
 
+
       router.push("/login");
 
     }
+
   };
 
 
@@ -243,10 +285,14 @@ export function AuthProvider({
     <AuthContext.Provider
       value={{
         user,
+        tenant,
+
         isLoading,
         isAuthenticated,
+
         login,
         logout,
+
         checkAuthStatus,
       }}
     >
