@@ -1,82 +1,116 @@
 "use client";
 
-import { createContext, useContext, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { authService } from "@/services/auth-service";
-import { resetCsrfToken } from "@/services/api-client";
-import { User, Tenant } from "@/types";
+import apiClient from "@/services/api-client";
 
-interface AuthContextValue {
-  user: User | null;
-  tenant: Tenant | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
-  login: (credentials: { email: string; password: string }) => void;
-  isLoggingIn: boolean;
-  loginError: unknown;
-  logout: () => void;
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+interface AuthContextType {
+  user: User | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  login: (credentials: any) => Promise<void>;
+  logout: () => Promise<void>;
+  checkAuthStatus: () => Promise<void>;
+}
 
-// Dashboard routes require a session; the login page must not redirect.
-const PUBLIC_PATHS = ["/login"];
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const queryClient = useQueryClient();
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  
   const router = useRouter();
   const pathname = usePathname();
 
-  const {
-    data,
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ["auth-user"],
-    queryFn: authService.getMe,
-    retry: false,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-  });
-
-  useEffect(() => {
-    if (!isLoading && isError && !PUBLIC_PATHS.includes(pathname)) {
-      router.push("/login");
+  // משיכת נתוני המשתמש המחובר מתוך עוגיית ה-Session
+  const checkAuthStatus = async () => {
+    try {
+      const response = await apiClient.get("/auth/me");
+      if (response.data && response.data.user) {
+        setUser(response.data.user);
+        setIsAuthenticated(true);
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
+    } catch (error) {
+      setUser(null);
+      setIsAuthenticated(false);
+    } finally {
+      setIsLoading(false);
     }
-  }, [isError, isLoading, pathname, router]);
+  };
 
-  const loginMutation = useMutation({
-    mutationFn: authService.login,
-    onSuccess: (data) => {
-      if (data.success) {
-        // The login response only contains `user`, not `tenant` — invalidate
-        // so the next render fetches the full /me payload instead of caching
-        // a partial one.
-        queryClient.invalidateQueries({ queryKey: ["auth-user"] });
+  // ריצה ראשונית בעת עליית האפליקציה
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  // הגנת נתיבים מבוקרת (Client-side Route Protection) המונעת לולאות הפניה
+  useEffect(() => {
+    if (!isLoading) {
+      const isProtectedRoute = pathname.includes("/dashboard");
+      const isLoginRoute = pathname.includes("/login");
+
+      if (isProtectedRoute && !isAuthenticated) {
+        router.push("/login");
+      } else if (isLoginRoute && isAuthenticated) {
         router.push("/dashboard");
       }
-    },
-  });
+    }
+  }, [pathname, isAuthenticated, isLoading, router]);
 
+  // זרם התחברות (Login)
+  const login = async (credentials: any) => {
+    setIsLoading(true);
+    try {
+      // 1. השרת מקבל את הפרטים ובמידה והם תקינים, מייצר ומחזיר עוגיית סשן HttpOnly
+      await apiClient.post("/auth/login", credentials);
+      
+      // 2. קריאה מיידית לעדכון ה-State של המשתמש בעקבות ההתחברות
+      await checkAuthStatus();
+    } catch (error) {
+      setUser(null);
+      setIsAuthenticated(false);
+      setIsLoading(false);
+      throw error;
+    }
+  };
+
+  // זרם התנתקות (Logout)
   const logout = async () => {
-    await authService.logout();
-    resetCsrfToken();
-    queryClient.setQueryData(["auth-user"], null);
-    queryClient.clear();
-    router.push("/login");
+    setIsLoading(true);
+    try {
+      // השרת מבצע ניקוי של הסשן ומורה לדפדפן למחוק את העוגייה
+      await apiClient.post("/auth/logout");
+    } catch (error) {
+      console.error("Logout request failed:", error);
+    } finally {
+      // ניקוי המצב בצד הלקוח ומעבר לעמוד ההתחברות
+      setUser(null);
+      setIsAuthenticated(false);
+      setIsLoading(false);
+      router.push("/login");
+    }
   };
 
   return (
     <AuthContext.Provider
       value={{
-        user: data?.user ?? null,
-        tenant: data?.tenant ?? null,
+        user,
         isLoading,
-        isAuthenticated: !!data?.user && !isError,
-        login: loginMutation.mutate,
-        isLoggingIn: loginMutation.isPending,
-        loginError: loginMutation.error,
+        isAuthenticated,
+        login,
         logout,
+        checkAuthStatus,
       }}
     >
       {children}
@@ -84,8 +118,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth must be used within AuthProvider");
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
   return context;
-};
+}
