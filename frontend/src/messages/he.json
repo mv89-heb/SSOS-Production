@@ -23,12 +23,7 @@
     "userProfile": "פרופיל משתמש",
     "logout": "התנתק מהמערכת",
     "tenant": "ארגון פעיל",
-    "notifications": "התראות",
-    "roles": {
-      "admin": "מנהל מערכת",
-      "manager": "מנהל",
-      "employee": "עובד"
-    }
+    "notifications": "התראות"
   },
   "dashboard": {
     "title": "לוח בקרה כללי",
