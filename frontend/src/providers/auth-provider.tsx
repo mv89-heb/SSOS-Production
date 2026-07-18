@@ -8,12 +8,14 @@ import React, {
   ReactNode,
 } from "react";
 
-import { useRouter, usePathname } from "next/navigation";
+import {
+  useRouter,
+  usePathname,
+} from "next/navigation";
+
 import apiClient from "@/services/api-client";
 
-// להתאים את הנתיב לפי ה-Type הקיים אצלך בפרויקט
-import { User } from "@/types/user";
-
+import type { User } from "@/types";
 
 interface AuthMeResponse {
   user: User;
@@ -24,10 +26,12 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
 
-  login: (credentials: {
-    email: string;
-    password: string;
-  }) => Promise<void>;
+  login: (
+    credentials: {
+      email: string;
+      password: string;
+    }
+  ) => Promise<void>;
 
   logout: () => Promise<void>;
 
@@ -35,7 +39,10 @@ interface AuthContextType {
 }
 
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext =
+  createContext<AuthContextType | undefined>(
+    undefined
+  );
 
 
 export function AuthProvider({
@@ -43,9 +50,12 @@ export function AuthProvider({
 }: {
   children: ReactNode;
 }) {
-  const [user, setUser] = useState<User | null>(null);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] =
+    useState<User | null>(null);
+
+  const [isLoading, setIsLoading] =
+    useState(true);
 
   const [isAuthenticated, setIsAuthenticated] =
     useState(false);
@@ -55,54 +65,65 @@ export function AuthProvider({
   const pathname = usePathname();
 
 
+
   /**
    * בדיקת Session מול Flask-Login
-   *
-   * אין Token
-   * אין localStorage
-   *
-   * הדפדפן שולח HttpOnly Cookie אוטומטית
    */
-  const checkAuthStatus = async () => {
-    try {
-      const response =
-        await apiClient.get<AuthMeResponse>(
-          "/auth/me"
-        );
+  const checkAuthStatus =
+    async () => {
+
+      try {
+
+        const response =
+          await apiClient.get<AuthMeResponse>(
+            "/auth/me"
+          );
 
 
-      if (response.data?.user) {
-        setUser(response.data.user);
-        setIsAuthenticated(true);
-      } else {
+        if (response.data?.user) {
+
+          setUser(response.data.user);
+
+          setIsAuthenticated(true);
+
+        } else {
+
+          setUser(null);
+
+          setIsAuthenticated(false);
+
+        }
+
+
+      } catch {
+
         setUser(null);
+
         setIsAuthenticated(false);
+
+
+      } finally {
+
+        setIsLoading(false);
+
       }
+    };
 
-    } catch (error) {
-
-      setUser(null);
-      setIsAuthenticated(false);
-
-    } finally {
-
-      setIsLoading(false);
-
-    }
-  };
 
 
   /**
    * טעינה ראשונית
    */
   useEffect(() => {
+
     checkAuthStatus();
+
   }, []);
 
 
 
   /**
-   * ניהול Redirect
+   * הגנת Routes
    */
   useEffect(() => {
 
@@ -111,27 +132,32 @@ export function AuthProvider({
     }
 
 
-    const isLoginPage =
-      pathname.includes("/login");
-
-
-    const isProtectedPage =
+    const isProtectedRoute =
       pathname.includes("/dashboard");
 
 
+    const isLoginRoute =
+      pathname.includes("/login");
+
+
+
     if (
-      isProtectedPage &&
+      isProtectedRoute &&
       !isAuthenticated
     ) {
+
       router.push("/login");
+
     }
 
 
     if (
-      isLoginPage &&
+      isLoginRoute &&
       isAuthenticated
     ) {
+
       router.push("/dashboard");
+
     }
 
 
@@ -171,7 +197,9 @@ export function AuthProvider({
     } catch (error) {
 
       setUser(null);
+
       setIsAuthenticated(false);
+
       setIsLoading(false);
 
       throw error;
@@ -195,27 +223,23 @@ export function AuthProvider({
       );
 
 
-    } catch (error) {
-
-      console.error(
-        "Logout failed:",
-        error
-      );
-
-
     } finally {
 
       setUser(null);
+
       setIsAuthenticated(false);
+
       setIsLoading(false);
 
       router.push("/login");
+
     }
   };
 
 
 
   return (
+
     <AuthContext.Provider
       value={{
         user,
@@ -226,9 +250,13 @@ export function AuthProvider({
         checkAuthStatus,
       }}
     >
+
       {children}
+
     </AuthContext.Provider>
+
   );
+
 }
 
 
@@ -240,11 +268,14 @@ export function useAuth() {
 
 
   if (!context) {
+
     throw new Error(
       "useAuth must be used inside AuthProvider"
     );
+
   }
 
 
   return context;
+
 }
