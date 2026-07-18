@@ -1,38 +1,17 @@
 import axios from "axios";
 
-// קביעת הכתובת הבסיסית. בשרת נשתמש תמיד בכתובת האבסולוטית המלאה.
+// בצד השרת (SSR) נשתמש בכתובת המלאה. בצד הלקוח נפנה ל-Proxy היחסי
 const baseURL = typeof window === "undefined"
   ? "https://ssos-backend.onrender.com/api"
   : "/api";
 
 const apiClient = axios.create({
   baseURL,
+  withCredentials: true, // קריטי: מורה לדפדפן להעביר ולקבל עוגיות סשן HttpOnly
   headers: {
     "Content-Type": "application/json",
   },
 });
-
-// Interceptor לבקשות יוצאות
-apiClient.interceptors.request.use(
-  (config) => {
-    if (typeof window !== "undefined") {
-      // שליפת הטוקן מכל המקורות האפשריים של הפרונט
-      const token = 
-        localStorage.getItem("token") || 
-        localStorage.getItem("auth_token") || 
-        localStorage.getItem("accessToken") ||
-        document.cookie.match(/auth_token=([^;]+)/)?.[1];
-
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
 
 // Interceptor לתגובות נכנסות
 apiClient.interceptors.response.use(
@@ -41,22 +20,11 @@ apiClient.interceptors.response.use(
     const status = error.response?.status;
     const errorMessage = error.response?.data?.message || "אירעה שגיאה בתקשורת עם השרת";
 
-    if (status === 401) {
-      if (typeof window !== "undefined") {
-        // מחיקת טוקנים פגי תוקף
-        localStorage.removeItem("token");
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("accessToken");
-        
-        // מניעת לולאת רענון אינסופית בדף ההתחברות
-        if (window.location.pathname !== "/login" && !window.location.pathname.endsWith("/login")) {
-          window.location.href = "/login";
-        }
-      }
-    }
-
+    // אנו לא מבצעים ניתוב מחדש כאן כדי למנוע לולאות הפניה בעמוד ה-Login.
+    // ה-AuthProvider ינהל את הניתוב בצורה מבוקרת בצד הלקוח.
     return Promise.reject({
       ...error,
+      status,
       friendlyMessage: errorMessage,
     });
   }
