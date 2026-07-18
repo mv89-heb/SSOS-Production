@@ -5,8 +5,6 @@ const withNextIntl = createNextIntlPlugin();
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  
-  // הגדרת פרוקסי מאובטח לעקיפת בעיות CORS ותמיכה בפניות יחסיות
   async rewrites() {
     return [
       {
