@@ -4,11 +4,16 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { useRouter, usePathname } from "next/navigation";
 import apiClient from "@/services/api-client";
 
+// הגדרת ה-Interfaces המותאמים למבנה התגובה האמיתי של ה-Backend
 interface User {
   id: string;
   name: string;
   email: string;
   role: string;
+}
+
+interface AuthMeResponse {
+  user: User;
 }
 
 interface AuthContextType {
@@ -30,10 +35,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  // משיכת נתוני המשתמש המחובר מתוך עוגיית ה-Session
+  // משיכת נתוני המשתמש המחובר התואמת למבנה response.data.user
   const checkAuthStatus = async () => {
     try {
-      const response = await apiClient.get("/auth/me");
+      const response = await apiClient.get<AuthMeResponse>("/auth/me");
       if (response.data && response.data.user) {
         setUser(response.data.user);
         setIsAuthenticated(true);
@@ -49,12 +54,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ריצה ראשונית בעת עליית האפליקציה
+  // בדיקה ראשונית בעת עליית האפליקציה בצד הלקוח
   useEffect(() => {
     checkAuthStatus();
   }, []);
 
-  // הגנת נתיבים מבוקרת (Client-side Route Protection) המונעת לולאות הפניה
+  // ניהול הגנת נתיבים בצד הלקוח
   useEffect(() => {
     if (!isLoading) {
       const isProtectedRoute = pathname.includes("/dashboard");
@@ -72,10 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (credentials: any) => {
     setIsLoading(true);
     try {
-      // 1. השרת מקבל את הפרטים ובמידה והם תקינים, מייצר ומחזיר עוגיית סשן HttpOnly
       await apiClient.post("/auth/login", credentials);
-      
-      // 2. קריאה מיידית לעדכון ה-State של המשתמש בעקבות ההתחברות
       await checkAuthStatus();
     } catch (error) {
       setUser(null);
@@ -89,12 +91,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     setIsLoading(true);
     try {
-      // השרת מבצע ניקוי של הסשן ומורה לדפדפן למחוק את העוגייה
       await apiClient.post("/auth/logout");
     } catch (error) {
       console.error("Logout request failed:", error);
     } finally {
-      // ניקוי המצב בצד הלקוח ומעבר לעמוד ההתחברות
       setUser(null);
       setIsAuthenticated(false);
       setIsLoading(false);
