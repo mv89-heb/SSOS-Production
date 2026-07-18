@@ -1,0 +1,47 @@
+# =========================
+# Python
+# =========================
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# =========================
+# Flask / Instance
+# =========================
+instance/
+.env
+
+# =========================
+# Uploads (local files only)
+# =========================
+app/static/uploads/*
+
+# Keep uploads directory structure
+!app/static/uploads/.gitkeep
+
+# =========================
+# Testing / Coverage
+# =========================
+.pytest_cache/
+.coverage
+htmlcov/
+
+# =========================
+# Next.js
+# =========================
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# =========================
+# Local audit / generated files
+# =========================
+project_structure.txt
+*.log
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
