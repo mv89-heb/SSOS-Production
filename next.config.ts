@@ -1,4 +1,3 @@
-// next.config.ts
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 
@@ -7,7 +6,7 @@ const withNextIntl = createNextIntlPlugin();
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   
-  // הזרקת חוק ה-Rewrites עבור ה-Proxy
+  // הגדרת Rewrite Proxy המאפשרת פיתוח וריצה חלקים מול שרת ה-Render ללא בעיות CORS
   async rewrites() {
     return [
       {
