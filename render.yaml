@@ -1,0 +1,61 @@
+services:
+  # -------------------------------------------------------------------
+  # Backend — Flask API (app/, wsgi.py)
+  # -------------------------------------------------------------------
+  - type: web
+    name: ssos-platform
+    env: python
+    plan: starter
+    pythonVersion: "3.11.9"
+    healthCheckPath: /health
+    buildCommand: "pip install -r requirements.txt"
+    preDeployCommand: "flask db upgrade"
+    startCommand: "gunicorn -w 4 -b 0.0.0.0:$PORT wsgi:app --timeout 120"
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: FLASK_APP
+        value: wsgi.py
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_COOKIE_SECURE
+        value: "True"
+      - key: MAX_UPLOAD_SIZE
+        value: "5242880"
+      - key: WTF_CSRF_ENABLED
+        value: "True"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # The browser sends the Flask-Login session cookie cross-origin
+      # (see CORS_ORIGINS comment in app/config.py) — without the
+      # frontend's real deployed origin here, every authenticated
+      # request from the frontend is blocked at the CORS layer.
+      - key: CORS_ORIGINS
+        fromService:
+          name: ssos-frontend
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+
+  # -------------------------------------------------------------------
+  # Frontend — Next.js 15 App Router (frontend/)
+  # -------------------------------------------------------------------
+  - type: web
+    name: ssos-frontend
+    env: node
+    plan: starter
+    rootDir: frontend
+    healthCheckPath: /login
+    buildCommand: "npm ci && npm run build"
+    startCommand: "npm start -- -p $PORT"
+    envVars:
+      - key: NODE_VERSION
+        value: "22.22.2"
+      # Browser-visible base URL for every apiClient call
+      # (see frontend/src/services/api-client.ts).
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          name: ssos-platform
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
