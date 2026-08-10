@@ -17,7 +17,6 @@ const supplierKey = (id: number) => ["supplier", id] as const;
 const productKey = (id: number) => ["product", id] as const;
 const offersKey = (productId: number) => ["offers", productId] as const;
 
-// Suppliers
 export function useSuppliers(activeOnly = false) {
   return useQuery({
     queryKey: [...SUPPLIERS_KEY, activeOnly],
@@ -52,7 +51,6 @@ export function useUpdateSupplier(id: number) {
   });
 }
 
-// Products
 export function useProducts(supplierId?: number, activeOnly = false) {
   return useQuery({
     queryKey: [...PRODUCTS_KEY, supplierId ?? "all", activeOnly],
@@ -87,19 +85,25 @@ export function useUpdateProduct(id: number) {
   });
 }
 
-export function useToggleProductActive(id: number) {
+/**
+ * Toggle a specific product by id.
+ *
+ * The product id is intentionally part of the mutation input instead of hook
+ * state. This prevents a stale-id race when a row action calls setState() and
+ * mutate() in the same event handler.
+ */
+export function useToggleProductActive() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (active: boolean) =>
+    mutationFn: ({ id, active }: { id: number; active: boolean }) =>
       active ? catalogService.activateProduct(id) : catalogService.deactivateProduct(id),
     onSuccess: (product) => {
-      queryClient.setQueryData(productKey(id), product);
+      queryClient.setQueryData(productKey(product.id), product);
       queryClient.invalidateQueries({ queryKey: PRODUCTS_KEY });
     },
   });
 }
 
-// Phase 2: alternate-supplier price offers
 export function useOffers(productId: number) {
   return useQuery({
     queryKey: offersKey(productId),
