@@ -55,18 +55,18 @@
   html {
     font-family: "Assistant", system-ui, sans-serif;
     scroll-behavior: smooth;
+    text-rendering: optimizeLegibility;
   }
 
   body {
     @apply bg-background text-foreground antialiased;
     font-family: "Assistant", system-ui, sans-serif;
+    min-height: 100vh;
   }
 
   button, input, textarea, select { font: inherit; }
 
-  ::selection {
-    background: rgb(99 102 241 / 0.18);
-  }
+  ::selection { background: rgb(99 102 241 / 0.18); }
 
   :focus-visible {
     outline: 2px solid rgb(99 102 241 / 0.65);
@@ -103,6 +103,35 @@
   .interactive-card {
     @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg;
   }
+
+  .dashboard-section {
+    @apply rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/90;
+  }
+
+  .table-shell {
+    @apply overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+  }
+
+  .table-shell tbody tr {
+    @apply transition-colors duration-150 hover:bg-slate-50/80 dark:hover:bg-slate-800/40;
+  }
+
+  .action-link {
+    @apply inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-sm font-bold text-indigo-600 transition-colors hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40;
+  }
+
+  .metric-value {
+    @apply text-2xl font-extrabold tracking-tight text-slate-950 dark:text-white;
+  }
+
+  .soft-divider {
+    @apply border-slate-100 dark:border-slate-800;
+  }
+}
+
+@media (max-width: 767px) {
+  .page-title { @apply text-2xl; }
+  .dashboard-section, .table-shell { @apply rounded-xl; }
 }
 
 @media (prefers-reduced-motion: reduce) {
