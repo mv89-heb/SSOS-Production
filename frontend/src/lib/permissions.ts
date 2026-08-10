@@ -15,16 +15,12 @@ function atLeast(user: User | null | undefined, minimum: UserRole): boolean {
 }
 
 export const permissions = {
-  // orders.py: create_order / update_order / submit_order require "employee"
   canCreateOrders: (user: User | null | undefined) => atLeast(user, "employee"),
-  // orders.py: approve_order / reject_order / mark_sent / mark_completed / delete_order require "manager"
   canApproveOrders: (user: User | null | undefined) => atLeast(user, "manager"),
-  // catalog.py: create/update supplier & product require "manager"
   canManageCatalog: (user: User | null | undefined) => atLeast(user, "manager"),
-  // audit.py: list_audit_logs / verify_audit_chain require "manager"
   canViewAudit: (user: User | null | undefined) => atLeast(user, "manager"),
-  // imports.py: every import route (upload/analyze/mapping/validate/commit) requires "manager"
   canManageImports: (user: User | null | undefined) => atLeast(user, "manager"),
+  canManageUsers: (user: User | null | undefined) => atLeast(user, "admin"),
 };
 
 export function hasPermission(user: User | null | undefined, minimumRole: UserRole): boolean {
