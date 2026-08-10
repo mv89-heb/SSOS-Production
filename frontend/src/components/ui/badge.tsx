@@ -1,4 +1,11 @@
-import { CheckCircle2, Clock3, FileText, PackageCheck, Send, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock3,
+  FileText,
+  PackageCheck,
+  Send,
+  XCircle,
+} from "lucide-react";
 import { OrderStatus } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +42,7 @@ export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold leading-none",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold leading-none shadow-sm",
         STATUS_STYLES[status]
       )}
     >
@@ -77,5 +84,16 @@ export function Badge({
 }
 
 export function ActiveBadge({ active }: { active: boolean }) {
-  return <Badge variant={active ? "success" : "default"}>{active ? "פעיל" : "לא פעיל"}</Badge>;
+  return (
+    <Badge variant={active ? "success" : "default"}>
+      <span
+        className={cn(
+          "me-1.5 h-1.5 w-1.5 rounded-full",
+          active ? "bg-emerald-500" : "bg-slate-400"
+        )}
+        aria-hidden="true"
+      />
+      {active ? "פעיל" : "לא פעיל"}
+    </Badge>
+  );
 }
