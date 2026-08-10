@@ -19,6 +19,16 @@ import {
   TrendingUp,
 } from "lucide-react";
 
+type StatTone = "violet" | "indigo" | "sky" | "amber" | "emerald";
+
+type DashboardStat = {
+  label: string;
+  value: number;
+  icon: typeof Users;
+  tone: StatTone;
+  href: string;
+};
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("he-IL", {
     day: "2-digit",
@@ -66,7 +76,7 @@ export default function DashboardPage() {
   const activeProducts = allProducts.filter((product) => product.active);
   const catalogValue = activeProducts.reduce((sum, product) => sum + product.current_price, 0);
 
-  const stats = [
+  const stats: DashboardStat[] = [
     {
       label: "ספקים פעילים",
       value: allSuppliers.length,
@@ -312,14 +322,8 @@ function StatCard({
   icon: Icon,
   tone,
   href,
-}: {
-  label: string;
-  value: number;
-  icon: typeof Users;
-  tone: "violet" | "indigo" | "sky" | "amber" | "emerald";
-  href: string;
-}) {
-  const toneClasses = {
+}: DashboardStat) {
+  const toneClasses: Record<StatTone, string> = {
     violet: "bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300",
     indigo: "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300",
     sky: "bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300",
