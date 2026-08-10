@@ -1,10 +1,36 @@
 import re
+import unicodedata
+
+from email_validator import EmailNotValidError, validate_email
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
+def normalize_email(email: str) -> str:
+    """Normalize user-entered email without performing DNS deliverability checks."""
+    if not isinstance(email, str):
+        return ""
+    return unicodedata.normalize("NFKC", email).strip().lower()
+
+
 def is_valid_email(email: str) -> bool:
-    return bool(email) and bool(EMAIL_RE.match(email.strip()))
+    """Validate a normal internet email address.
+
+    We deliberately disable deliverability/DNS checks so legitimate addresses
+    on private, newly-created, or temporarily unreachable domains are not
+    rejected merely because the server cannot be queried at signup time.
+    """
+    normalized = normalize_email(email)
+    if not normalized or not EMAIL_RE.match(normalized):
+        return False
+
+    try:
+        validate_email(normalized, check_deliverability=False)
+        return True
+    except EmailNotValidError:
+        return False
+    except (TypeError, ValueError):
+        return False
 
 
 def is_strong_password(password: str) -> bool:
