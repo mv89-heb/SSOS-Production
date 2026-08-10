@@ -96,14 +96,26 @@ def test_submit_twice_rejected(logged_in_client_a, make_order):
     assert second.status_code == 409
 
 
-def test_full_lifecycle_draft_to_completed(logged_in_client_a, make_order):
+def test_full_lifecycle_requires_second_user_for_approval(logged_in_client_a, client_b, make_order, db, tenant_a_admin):
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
 
     assert logged_in_client_a.post(f"/api/orders/{order_id}/submit").status_code == 200
-    assert logged_in_client_a.post(f"/api/orders/{order_id}/approve").status_code == 200
-    assert logged_in_client_a.post(f"/api/orders/{order_id}/sent").status_code == 200
-    completed = logged_in_client_a.post(f"/api/orders/{order_id}/complete")
+    self_approval = logged_in_client_a.post(f"/api/orders/{order_id}/approve")
+    assert self_approval.status_code == 409
+
+    from app.models.user import User, ROLE_MANAGER
+    manager = User(tenant_id=tenant_id, email="manager@acme.test", full_name="Second Manager", role=ROLE_MANAGER, active=True)
+    manager.set_password("Passw0rd1")
+    db.session.add(manager)
+    db.session.commit()
+
+    login = client_b.post("/api/auth/login", json={"email": "manager@acme.test", "password": "Passw0rd1"})
+    assert login.status_code == 200
+    assert client_b.post(f"/api/orders/{order_id}/approve").status_code == 200
+    assert client_b.post(f"/api/orders/{order_id}/sent").status_code == 200
+    completed = client_b.post(f"/api/orders/{order_id}/complete")
     assert completed.status_code == 200
     assert completed.get_json()["order"]["status"] == "completed"
 
@@ -126,13 +138,23 @@ def test_reject_stores_reason_and_cancels(logged_in_client_a, make_order):
     assert "price too high" in order["notes"]
 
 
-def test_completed_order_cannot_be_edited(logged_in_client_a, make_order):
+def test_completed_order_cannot_be_edited(logged_in_client_a, client_b, make_order, db):
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
     logged_in_client_a.post(f"/api/orders/{order_id}/submit")
-    logged_in_client_a.post(f"/api/orders/{order_id}/approve")
-    logged_in_client_a.post(f"/api/orders/{order_id}/sent")
-    logged_in_client_a.post(f"/api/orders/{order_id}/complete")
+
+    from app.models.user import User, ROLE_MANAGER
+    tenant_id = logged_in_client_a.get("/api/auth/me").get_json()["user"]["tenant_id"]
+    manager = User(tenant_id=tenant_id, email="manager2@acme.test", full_name="Manager 2", role=ROLE_MANAGER, active=True)
+    manager.set_password("Passw0rd1")
+    db.session.add(manager)
+    db.session.commit()
+
+    login = client_b.post("/api/auth/login", json={"email": "manager2@acme.test", "password": "Passw0rd1"})
+    assert login.status_code == 200
+    assert client_b.post(f"/api/orders/{order_id}/approve").status_code == 200
+    assert client_b.post(f"/api/orders/{order_id}/sent").status_code == 200
+    assert client_b.post(f"/api/orders/{order_id}/complete").status_code == 200
 
     blocked = logged_in_client_a.put(f"/api/orders/{order_id}", json={"notes": "too late"})
     assert blocked.status_code == 409
@@ -157,10 +179,7 @@ def test_delete_submitted_order_blocked(logged_in_client_a, make_order):
 def test_order_with_unknown_product_404(logged_in_client_a):
     s = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "Sup"})
     supplier_id = s.get_json()["supplier"]["id"]
-    resp = logged_in_client_a.post("/api/orders", json={
-        "supplier_id": supplier_id,
-        "items": [{"product_id": 999999, "quantity": 1}],
-    })
+    resp = logged_in_client_a.post("/api/orders", json={"supplier_id": supplier_id, "items": [{"product_id": 999999, "quantity": 1}]})
     assert resp.status_code == 404
 
 

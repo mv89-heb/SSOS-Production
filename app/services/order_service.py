@@ -18,14 +18,7 @@ from app.services.snapshot_service import SnapshotService
 
 
 class OrderService:
-    """
-    Order lifecycle: draft -> submitted -> approved -> sent -> completed,
-    with `cancelled` reachable from draft/submitted/approved.
-
-    Editing (update_order) is only permitted in `draft` — from `submitted`
-    onward the order carries a frozen Snapshot that must never be rewritten by
-    a later edit, price change, or product deletion.
-    """
+    """Order lifecycle and immutable purchase-order snapshot rules."""
 
     MAX_LINE_QUANTITY = 100_000
 
@@ -37,6 +30,8 @@ class OrderService:
 
     def create_order(self, user, payload: dict) -> Order:
         supplier_id = payload.get("supplier_id")
+        if supplier_id is None:
+            raise NotFound("Supplier not found")
         if not isinstance(supplier_id, int) or isinstance(supplier_id, bool) or supplier_id <= 0:
             raise BadRequest("A valid supplier_id is required")
 
@@ -144,7 +139,6 @@ class OrderService:
             raise Conflict(
                 f"Only '{STATUS_DRAFT}' orders can be submitted (current: '{order.status}')"
             )
-
         if not order.items:
             raise Conflict("An order must contain at least one item before submission")
 
@@ -166,8 +160,6 @@ class OrderService:
             raise Conflict(
                 f"Only '{STATUS_SUBMITTED}' orders can be approved (current: '{order.status}')"
             )
-
-        # Four-eyes control: the creator cannot approve their own order.
         if order.user_id == user.id:
             raise Conflict("The order creator cannot approve their own order")
 
