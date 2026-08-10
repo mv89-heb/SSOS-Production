@@ -7,7 +7,7 @@ from app.extensions import db
 from app.models.user import ROLE_ADMIN, ROLE_EMPLOYEE, VALID_ROLES, User
 from app.services.audit_service import AuditService
 from app.services.permission_service import PermissionService
-from app.utils.validators import is_strong_password, is_valid_email
+from app.utils.validators import is_strong_password, is_valid_email, normalize_email
 
 users_bp = Blueprint("users", __name__, url_prefix="/api/users")
 
@@ -79,22 +79,26 @@ def create_user():
         return _handle(exc)
 
     data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip().lower()
+    email = normalize_email(data.get("email") or "")
     full_name = (data.get("full_name") or "").strip()
     password = data.get("password") or ""
     role = (data.get("role") or ROLE_EMPLOYEE).strip().lower()
 
     if not is_valid_email(email):
-        return jsonify({"success": False, "error": "invalid_email"}), 400
+        return jsonify({
+            "success": False,
+            "error": "invalid_email",
+            "message": "כתובת האימייל אינה תקינה. לדוגמה: elia@reshit.co.il",
+        }), 400
     if not full_name:
-        return jsonify({"success": False, "error": "full_name_required"}), 400
+        return jsonify({"success": False, "error": "full_name_required", "message": "יש להזין שם מלא."}), 400
     if role not in VALID_ROLES:
-        return jsonify({"success": False, "error": "invalid_role"}), 400
+        return jsonify({"success": False, "error": "invalid_role", "message": "התפקיד שנבחר אינו תקין."}), 400
     if not is_strong_password(password):
         return jsonify({
             "success": False,
             "error": "weak_password",
-            "message": "Password must be at least 8 characters and include a letter and a digit",
+            "message": "הסיסמה חייבת להכיל לפחות 8 תווים, אות אחת וספרה אחת.",
         }), 400
 
     existing = db.session.execute(
@@ -104,7 +108,7 @@ def create_user():
         )
     ).scalar_one_or_none()
     if existing:
-        return jsonify({"success": False, "error": "email_already_registered"}), 409
+        return jsonify({"success": False, "error": "email_already_registered", "message": "כתובת האימייל כבר רשומה בארגון."}), 409
 
     user = User(
         tenant_id=current_user.tenant_id,
@@ -149,9 +153,13 @@ def update_user(user_id: int):
     new_password = data.get("password")
 
     if new_email is not None:
-        email = str(new_email).strip().lower()
+        email = normalize_email(str(new_email))
         if not is_valid_email(email):
-            return jsonify({"success": False, "error": "invalid_email"}), 400
+            return jsonify({
+                "success": False,
+                "error": "invalid_email",
+                "message": "כתובת האימייל אינה תקינה. לדוגמה: elia@reshit.co.il",
+            }), 400
         duplicate = db.session.execute(
             select(User).where(
                 User.tenant_id == current_user.tenant_id,
@@ -160,7 +168,7 @@ def update_user(user_id: int):
             )
         ).scalar_one_or_none()
         if duplicate:
-            return jsonify({"success": False, "error": "email_already_registered"}), 409
+            return jsonify({"success": False, "error": "email_already_registered", "message": "כתובת האימייל כבר רשומה בארגון."}), 409
         user.email = email
 
     if new_name is not None:
@@ -195,7 +203,7 @@ def update_user(user_id: int):
             return jsonify({
                 "success": False,
                 "error": "weak_password",
-                "message": "Password must be at least 8 characters and include a letter and a digit",
+                "message": "הסיסמה חייבת להכיל לפחות 8 תווים, אות אחת וספרה אחת.",
             }), 400
         user.set_password(password)
         user.failed_login_attempts = 0
