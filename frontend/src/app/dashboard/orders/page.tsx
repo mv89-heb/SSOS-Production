@@ -20,13 +20,22 @@ const STATUS_FILTERS = [
 ] as const;
 
 type StatusFilter = (typeof STATUS_FILTERS)[number]["value"];
+type StatusTone = "amber" | "emerald" | "sky" | "violet" | "red";
 type StatusSummaryProps = {
   label: string;
   value: number;
   icon: typeof Clock3;
-  tone: string;
+  tone: StatusTone;
   active: boolean;
   onClick: () => void;
+};
+
+const TONE_CLASSES: Record<StatusTone, string> = {
+  amber: "bg-amber-50 text-amber-600 dark:bg-amber-950/40",
+  emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40",
+  sky: "bg-sky-50 text-sky-600 dark:bg-sky-950/40",
+  violet: "bg-violet-50 text-violet-600 dark:bg-violet-950/40",
+  red: "bg-red-50 text-red-600 dark:bg-red-950/40",
 };
 
 function formatDate(value: string) {
@@ -40,7 +49,7 @@ function StatusSummary({ label, value, icon: Icon, tone, active, onClick }: Stat
     <button type="button" onClick={onClick} className={`text-right rounded-2xl border p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${active ? "border-indigo-300 ring-2 ring-indigo-100 dark:border-indigo-700 dark:ring-indigo-950" : "border-slate-200/80 dark:border-slate-800"} bg-white dark:bg-slate-900`}>
       <div className="flex items-center justify-between gap-3">
         <div><p className="text-xs font-bold text-slate-400">{label}</p><p className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">{value}</p></div>
-        <div className={`rounded-xl p-2.5 ${tone}`}><Icon size={18} /></div>
+        <div className={`rounded-xl p-2.5 ${TONE_CLASSES[tone]}`}><Icon size={18} /></div>
       </div>
     </button>
   );
@@ -78,11 +87,11 @@ export default function OrdersPage() {
       </header>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-        <StatusSummary label="ממתינות לאישור" value={count("submitted")} icon={Clock3} tone="bg-amber-50 text-amber-600 dark:bg-amber-950/40" active={status === "submitted"} onClick={() => setStatus("submitted")} />
-        <StatusSummary label="אושרו" value={count("approved")} icon={CheckCircle2} tone="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40" active={status === "approved"} onClick={() => setStatus("approved")} />
-        <StatusSummary label="אצל הספק" value={count("sent")} icon={Send} tone="bg-sky-50 text-sky-600 dark:bg-sky-950/40" active={status === "sent"} onClick={() => setStatus("sent")} />
-        <StatusSummary label="הושלמו" value={count("completed")} icon={PackageCheck} tone="bg-violet-50 text-violet-600 dark:bg-violet-950/40" active={status === "completed"} onClick={() => setStatus("completed")} />
-        <StatusSummary label="בוטלו" value={count("cancelled")} icon={XCircle} tone="bg-red-50 text-red-600 dark:bg-red-950/40" active={status === "cancelled"} onClick={() => setStatus("cancelled")} />
+        <StatusSummary label="ממתינות לאישור" value={count("submitted")} icon={Clock3} tone="amber" active={status === "submitted"} onClick={() => setStatus("submitted")} />
+        <StatusSummary label="אושרו" value={count("approved")} icon={CheckCircle2} tone="emerald" active={status === "approved"} onClick={() => setStatus("approved")} />
+        <StatusSummary label="אצל הספק" value={count("sent")} icon={Send} tone="sky" active={status === "sent"} onClick={() => setStatus("sent")} />
+        <StatusSummary label="הושלמו" value={count("completed")} icon={PackageCheck} tone="violet" active={status === "completed"} onClick={() => setStatus("completed")} />
+        <StatusSummary label="בוטלו" value={count("cancelled")} icon={XCircle} tone="red" active={status === "cancelled"} onClick={() => setStatus("cancelled")} />
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
