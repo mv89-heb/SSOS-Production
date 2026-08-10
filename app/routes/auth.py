@@ -1,10 +1,11 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from flask_wtf.csrf import generate_csrf
+from sqlalchemy import select
 
 from app.extensions import db, limiter
 from app.models.tenant import Tenant
-from app.models.user import User, VALID_ROLES, ROLE_EMPLOYEE
+from app.models.user import User, ROLE_ADMIN, ROLE_EMPLOYEE
 from app.repositories.user_repository import UserRepository
 from app.services.audit_service import AuditService
 from app.utils.validators import is_valid_email, is_strong_password
@@ -14,20 +15,7 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 @auth_bp.route("/csrf-token", methods=["GET"])
 def csrf_token():
-    """
-    Issue a CSRF token for the SPA to echo back in the X-CSRFToken header on
-    every state-changing request (POST/PUT/PATCH/DELETE). GET requests are
-    never CSRF-checked by Flask-WTF, so this endpoint itself needs no
-    exemption. generate_csrf() ties the token to the session, so this also
-    establishes the session cookie on a client's very first request — call
-    it once on app load, before login.
-    ---
-    tags:
-      - Auth
-    responses:
-      200:
-        description: A CSRF token tied to the current session
-    """
+    """Issue a CSRF token tied to the current browser session."""
     return jsonify({"success": True, "csrf_token": generate_csrf()})
 
 
@@ -40,56 +28,77 @@ def register():
     full_name = (data.get("full_name") or "").strip()
     tenant_name = (data.get("tenant_name") or "").strip()
     tenant_slug = (data.get("tenant_slug") or "").strip().lower()
-    role = data.get("role", ROLE_EMPLOYEE)
 
     if not is_valid_email(email):
         return jsonify({"success": False, "error": "invalid_email"}), 400
     if not is_strong_password(password):
-        return jsonify({"success": False, "error": "weak_password",
-                         "message": "Password must be at least 8 characters and include a letter and a digit"}), 400
+        return jsonify({
+            "success": False,
+            "error": "weak_password",
+            "message": "Password must be at least 8 characters and include a letter and a digit",
+        }), 400
     if not full_name:
         return jsonify({"success": False, "error": "full_name_required"}), 400
-    if role not in VALID_ROLES:
-        return jsonify({"success": False, "error": "invalid_role"}), 400
 
-    # Tenant resolution: join an existing tenant by slug, or create a new one.
     tenant = None
+    is_new_tenant = False
+
     if tenant_slug:
         tenant = db.session.execute(
-            db.select(Tenant).where(Tenant.slug == tenant_slug)
+            select(Tenant).where(Tenant.slug == tenant_slug)
         ).scalar_one_or_none()
         if tenant is None:
             return jsonify({"success": False, "error": "tenant_not_found"}), 404
+        if not tenant.active:
+            return jsonify({"success": False, "error": "tenant_inactive"}), 403
     else:
         if not tenant_name:
             return jsonify({"success": False, "error": "tenant_name_or_slug_required"}), 400
-        generated_slug = tenant_name.lower().replace(" ", "-")
+
+        generated_slug = "-".join(tenant_name.lower().split())
         existing = db.session.execute(
-            db.select(Tenant).where(Tenant.slug == generated_slug)
+            select(Tenant).where(Tenant.slug == generated_slug)
         ).scalar_one_or_none()
         if existing:
             return jsonify({"success": False, "error": "tenant_already_exists"}), 409
+
         tenant = Tenant(name=tenant_name, slug=generated_slug, active=True)
         db.session.add(tenant)
         db.session.flush()
-        # First user of a brand-new tenant is always its admin.
-        role = "admin"
+        is_new_tenant = True
 
     if UserRepository(tenant_id=tenant.id).get_by_email(email):
         return jsonify({"success": False, "error": "email_already_registered"}), 409
 
-    user = User(tenant_id=tenant.id, email=email, full_name=full_name, role=role, active=True)
+    # Existing-tenant registration is never allowed to self-assign a role.
+    # The first account created with a new tenant is its administrator.
+    role = ROLE_ADMIN if is_new_tenant else ROLE_EMPLOYEE
+
+    user = User(
+        tenant_id=tenant.id,
+        email=email,
+        full_name=full_name,
+        role=role,
+        active=True,
+    )
     user.set_password(password)
     db.session.add(user)
     db.session.flush()
 
     AuditService.log_event(
-        tenant_id=tenant.id, user_id=user.id, action="auth.register",
-        title=f"User {user.email} registered", metadata={"role": user.role},
+        tenant_id=tenant.id,
+        user_id=user.id,
+        action="auth.register",
+        title=f"User {user.email} registered",
+        metadata={"role": user.role, "new_tenant": is_new_tenant},
     )
     db.session.commit()
 
-    return jsonify({"success": True, "user": user.to_dict(), "tenant": tenant.to_dict()}), 201
+    return jsonify({
+        "success": True,
+        "user": user.to_dict(),
+        "tenant": tenant.to_dict(),
+    }), 201
 
 
 @auth_bp.route("/login", methods=["POST"])
@@ -98,34 +107,83 @@ def login():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
+    tenant_slug = (data.get("tenant_slug") or "").strip().lower()
 
     if not email or not password:
         return jsonify({"success": False, "error": "missing_credentials"}), 400
 
-    user = UserRepository.get_by_email_any_tenant(email)
+    users = db.session.execute(
+        select(User).where(User.email == email)
+    ).scalars().all()
 
-    # Constant-shaped response regardless of which check failed, to avoid
-    # leaking whether an email exists.
-    if not user or not user.active or not user.check_password(password):
+    if tenant_slug:
+        user = next(
+            (
+                candidate
+                for candidate in users
+                if candidate.tenant and candidate.tenant.slug == tenant_slug
+            ),
+            None,
+        )
+    elif len(users) == 1:
+        user = users[0]
+    elif len(users) > 1:
+        return jsonify({
+            "success": False,
+            "error": "tenant_required",
+            "message": "Multiple organizations use this email. Select your organization and try again.",
+        }), 409
+    else:
+        user = None
+
+    if not user or not user.check_password(password):
         if user:
             AuditService.log_event(
-                tenant_id=user.tenant_id, user_id=user.id, action="auth.login_failed",
+                tenant_id=user.tenant_id,
+                user_id=user.id,
+                action="auth.login_failed",
                 title=f"Failed login for {email}",
             )
             db.session.commit()
         return jsonify({"success": False, "error": "invalid_credentials"}), 401
+
+    if not user.active:
+        AuditService.log_event(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="auth.login_blocked",
+            title=f"Login blocked for inactive user {email}",
+        )
+        db.session.commit()
+        return jsonify({"success": False, "error": "account_inactive"}), 403
+
+    if not user.tenant or not user.tenant.active:
+        AuditService.log_event(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="auth.login_blocked",
+            title=f"Login blocked for inactive tenant user {email}",
+        )
+        db.session.commit()
+        return jsonify({"success": False, "error": "tenant_inactive"}), 403
 
     login_user(user)
     from datetime import datetime, timezone
     user.last_login_at = datetime.now(timezone.utc)
 
     AuditService.log_event(
-        tenant_id=user.tenant_id, user_id=user.id, action="auth.login",
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        action="auth.login",
         title=f"User {user.email} logged in",
     )
     db.session.commit()
 
-    return jsonify({"success": True, "user": user.to_dict()})
+    return jsonify({
+        "success": True,
+        "user": user.to_dict(),
+        "tenant": user.tenant.to_dict(),
+    })
 
 
 @auth_bp.route("/logout", methods=["POST"])
@@ -137,7 +195,9 @@ def logout():
     logout_user()
 
     AuditService.log_event(
-        tenant_id=tenant_id, user_id=user_id, action="auth.logout",
+        tenant_id=tenant_id,
+        user_id=user_id,
+        action="auth.logout",
         title=f"User {email} logged out",
     )
     db.session.commit()
