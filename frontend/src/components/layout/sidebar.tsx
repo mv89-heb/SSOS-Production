@@ -9,7 +9,8 @@ import {
   Package,
   ShoppingCart,
   Settings,
-  History
+  History,
+  ChevronLeft,
 } from "lucide-react";
 
 const navigation = [
@@ -25,33 +26,63 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden md:flex w-64 flex-col bg-white dark:bg-slate-950 border-e border-slate-200 dark:border-slate-800 h-screen sticky top-0">
-      <div className="h-16 flex items-center px-6 border-b border-slate-200 dark:border-slate-800">
-        <span className="text-lg font-bold text-slate-900 dark:text-white">SSOS Platform</span>
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-e border-slate-200/80 bg-white/95 backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/95 md:flex">
+      <div className="flex h-20 items-center gap-3 border-b border-slate-100 px-6 dark:border-slate-800">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-sm font-black text-white shadow-lg shadow-indigo-600/20">
+          S
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-lg font-extrabold tracking-tight text-slate-950 dark:text-white">SSOS</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Smart Supply</div>
+        </div>
       </div>
 
-      <nav className="flex-1 space-y-1 px-4 py-4 overflow-y-auto">
+      <div className="px-5 pt-6">
+        <p className="px-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">ניהול מערכת</p>
+      </div>
+
+      <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-3" aria-label="ניווט ראשי">
         {navigation.map((item) => {
-          const isActive = pathname.endsWith(item.href) || pathname.includes(`${item.href}/`);
+          const isActive =
+            pathname === item.href ||
+            (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
           const Icon = item.icon;
 
           return (
             <Link
               key={item.href}
               href={item.href}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
-                "group flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-md transition-colors",
+                "group flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-semibold transition-all duration-200",
                 isActive
-                  ? "bg-slate-950 text-white dark:bg-slate-800"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-white"
+                  ? "bg-indigo-50 text-indigo-700 shadow-sm dark:bg-indigo-950/60 dark:text-indigo-300"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white"
               )}
             >
-              <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-              <span>{item.name}</span>
+              <span
+                className={cn(
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors",
+                  isActive
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+                    : "bg-slate-100 text-slate-500 group-hover:bg-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:group-hover:bg-slate-800"
+                )}
+              >
+                <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+              </span>
+              <span className="flex-1">{item.name}</span>
+              {isActive && <ChevronLeft className="h-4 w-4 opacity-70" aria-hidden="true" />}
             </Link>
           );
         })}
       </nav>
+
+      <div className="border-t border-slate-100 p-4 dark:border-slate-800">
+        <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900">
+          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">מרכז שליטה</p>
+          <p className="mt-0.5 text-[11px] leading-4 text-slate-400">ניהול רכש חכם ומהיר</p>
+        </div>
+      </div>
     </aside>
   );
 }
