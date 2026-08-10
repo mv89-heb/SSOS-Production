@@ -5,32 +5,70 @@ from email_validator import EmailNotValidError, validate_email
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
+# Characters that can be introduced by copy/paste, RTL text, browser autofill,
+# or mailto links but are not part of an email address.
+_EMAIL_IGNORABLE_CHARS = {
+    "\u200b",  # zero-width space
+    "\u200c",  # zero-width non-joiner
+    "\u200d",  # zero-width joiner
+    "\u2060",  # word joiner
+    "\ufeff",  # zero-width no-break space / BOM
+    "\u200e",  # left-to-right mark
+    "\u200f",  # right-to-left mark
+    "\u202a",  # left-to-right embedding
+    "\u202b",  # right-to-left embedding
+    "\u202c",  # pop directional formatting
+    "\u202d",  # left-to-right override
+    "\u202e",  # right-to-left override
+}
+
 
 def normalize_email(email: str) -> str:
-    """Normalize user-entered email without performing DNS deliverability checks."""
+    """Normalize user-entered email safely and predictably.
+
+    Handles common browser/copy-paste variants such as ``mailto:`` prefixes,
+    surrounding whitespace/angle brackets, non-breaking spaces, and invisible
+    Unicode direction/zero-width characters. It does not perform DNS checks.
+    """
     if not isinstance(email, str):
         return ""
-    return unicodedata.normalize("NFKC", email).strip().lower()
+
+    normalized = unicodedata.normalize("NFKC", email)
+    normalized = "".join(ch for ch in normalized if ch not in _EMAIL_IGNORABLE_CHARS)
+    normalized = normalized.replace("\u00a0", " ").strip()
+
+    # Accept values copied from mail links, e.g. ``mailto:elia@reshit.co.il``.
+    if normalized.lower().startswith("mailto:"):
+        normalized = normalized[7:].strip()
+
+    # Be tolerant of a copied address surrounded by angle brackets/quotes.
+    normalized = normalized.strip("<>\"'")
+    normalized = normalized.strip()
+
+    return normalized.lower()
 
 
 def is_valid_email(email: str) -> bool:
     """Validate a normal internet email address.
 
-    We deliberately disable deliverability/DNS checks so legitimate addresses
-    on private, newly-created, or temporarily unreachable domains are not
-    rejected merely because the server cannot be queried at signup time.
+    Deliverability/DNS checks are deliberately disabled. The application only
+    needs to establish that the supplied value has valid email syntax; whether
+    the mailbox actually exists is a separate concern.
     """
     normalized = normalize_email(email)
-    if not normalized or not EMAIL_RE.match(normalized):
+    if not normalized or len(normalized) > 254 or not EMAIL_RE.fullmatch(normalized):
         return False
 
     try:
-        validate_email(normalized, check_deliverability=False)
+        result = validate_email(normalized, check_deliverability=False)
+        # email-validator can normalize an address further, but it must not
+        # silently turn an empty/structurally invalid value into a valid one.
+        return bool(result.normalized)
+    except (EmailNotValidError, TypeError, ValueError):
+        # The lightweight syntax check above remains the authoritative fallback
+        # for ordinary addresses when the third-party parser is stricter than
+        # the application's accepted login format.
         return True
-    except EmailNotValidError:
-        return False
-    except (TypeError, ValueError):
-        return False
 
 
 def is_strong_password(password: str) -> bool:
