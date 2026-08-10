@@ -28,7 +28,7 @@ export function useSupplier(id: number) {
   return useQuery({
     queryKey: supplierKey(id),
     queryFn: () => catalogService.getSupplierById(id),
-    enabled: Number.isFinite(id) && id > 0,
+    enabled: Number.isFinite(id),
   });
 }
 
@@ -62,7 +62,7 @@ export function useProduct(id: number) {
   return useQuery({
     queryKey: productKey(id),
     queryFn: () => catalogService.getProductById(id),
-    enabled: Number.isFinite(id) && id > 0,
+    enabled: Number.isFinite(id),
   });
 }
 
@@ -70,27 +70,31 @@ export function useCreateProduct() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateProductInput) => catalogService.createProduct(input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: PRODUCTS_KEY }),
+  });
+}
+
+export function useUpdateProduct(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateProductInput) => catalogService.updateProduct(id, input),
     onSuccess: (product) => {
-      queryClient.setQueryData(productKey(product.id), product);
+      queryClient.setQueryData(productKey(id), product);
       queryClient.invalidateQueries({ queryKey: PRODUCTS_KEY });
     },
   });
 }
 
 /**
- * Update a specific product by id.
- *
- * The id is supplied with each mutation rather than captured in hook state.
- * This prevents stale-id races when inline editing and the full edit modal
- * are used close together.
+ * Explicit-id product update mutation.
+ * Prefer this for row actions or flows where the target product can change
+ * between render cycles. The id travels with the mutation itself.
  */
-export function useUpdateProduct() {
+export function useUpdateProductById() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, input }: { id: number; input: UpdateProductInput }) => {
-      if (!Number.isFinite(id) || id <= 0) {
-        throw new Error("Invalid product id");
-      }
+      if (!Number.isFinite(id) || id <= 0) throw new Error("Invalid product id");
       return catalogService.updateProduct(id, input);
     },
     onSuccess: (product) => {
@@ -110,12 +114,8 @@ export function useUpdateProduct() {
 export function useToggleProductActive() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, active }: { id: number; active: boolean }) => {
-      if (!Number.isFinite(id) || id <= 0) {
-        throw new Error("Invalid product id");
-      }
-      return active ? catalogService.activateProduct(id) : catalogService.deactivateProduct(id);
-    },
+    mutationFn: ({ id, active }: { id: number; active: boolean }) =>
+      active ? catalogService.activateProduct(id) : catalogService.deactivateProduct(id),
     onSuccess: (product) => {
       queryClient.setQueryData(productKey(product.id), product);
       queryClient.invalidateQueries({ queryKey: PRODUCTS_KEY });
