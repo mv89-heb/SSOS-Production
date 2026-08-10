@@ -1,16 +1,10 @@
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import func, select
-from werkzeug.exceptions import Forbidden, HTTPException
+from werkzeug.exceptions import HTTPException, NotFound
 
 from app.extensions import db
-from app.models.user import (
-    ROLE_ADMIN,
-    ROLE_EMPLOYEE,
-    ROLE_MANAGER,
-    VALID_ROLES,
-    User,
-)
+from app.models.user import ROLE_ADMIN, ROLE_EMPLOYEE, VALID_ROLES, User
 from app.services.audit_service import AuditService
 from app.services.permission_service import PermissionService
 from app.utils.validators import is_strong_password, is_valid_email
@@ -19,11 +13,7 @@ users_bp = Blueprint("users", __name__, url_prefix="/api/users")
 
 
 def _handle(exc: HTTPException):
-    return jsonify({
-        "success": False,
-        "error": exc.name.lower().replace(" ", "_"),
-        "message": exc.description,
-    }), exc.code
+    return jsonify({"success": False, "error": exc.name.lower().replace(" ", "_"), "message": exc.description}), exc.code
 
 
 def _require_admin():
@@ -31,23 +21,14 @@ def _require_admin():
 
 
 def _get_tenant_user(user_id: int) -> User:
-    user = db.session.execute(
-        select(User).where(
-            User.id == user_id,
-            User.tenant_id == current_user.tenant_id,
-        )
-    ).scalar_one_or_none()
+    user = db.session.execute(select(User).where(User.id == user_id, User.tenant_id == current_user.tenant_id)).scalar_one_or_none()
     if user is None:
-        raise HTTPException(description="User not found", response=None)
+        raise NotFound("User not found")
     return user
 
 
 def _active_admin_count(exclude_user_id: int | None = None) -> int:
-    stmt = select(func.count(User.id)).where(
-        User.tenant_id == current_user.tenant_id,
-        User.role == ROLE_ADMIN,
-        User.active.is_(True),
-    )
+    stmt = select(func.count(User.id)).where(User.tenant_id == current_user.tenant_id, User.role == ROLE_ADMIN, User.active.is_(True))
     if exclude_user_id is not None:
         stmt = stmt.where(User.id != exclude_user_id)
     return int(db.session.scalar(stmt) or 0)
@@ -60,12 +41,7 @@ def list_users():
         _require_admin()
     except HTTPException as exc:
         return _handle(exc)
-
-    users = db.session.execute(
-        select(User)
-        .where(User.tenant_id == current_user.tenant_id)
-        .order_by(User.active.desc(), User.full_name.asc(), User.email.asc())
-    ).scalars().all()
+    users = db.session.execute(select(User).where(User.tenant_id == current_user.tenant_id).order_by(User.active.desc(), User.full_name.asc(), User.email.asc())).scalars().all()
     return jsonify({"success": True, "users": [u.to_dict() for u in users]})
 
 
@@ -90,39 +66,17 @@ def create_user():
     if role not in VALID_ROLES:
         return jsonify({"success": False, "error": "invalid_role"}), 400
     if not is_strong_password(password):
-        return jsonify({
-            "success": False,
-            "error": "weak_password",
-            "message": "Password must be at least 8 characters and include a letter and a digit",
-        }), 400
+        return jsonify({"success": False, "error": "weak_password", "message": "Password must be at least 8 characters and include a letter and a digit"}), 400
 
-    existing = db.session.execute(
-        select(User).where(
-            User.tenant_id == current_user.tenant_id,
-            func.lower(User.email) == email,
-        )
-    ).scalar_one_or_none()
+    existing = db.session.execute(select(User).where(User.tenant_id == current_user.tenant_id, func.lower(User.email) == email)).scalar_one_or_none()
     if existing:
         return jsonify({"success": False, "error": "email_already_registered"}), 409
 
-    user = User(
-        tenant_id=current_user.tenant_id,
-        email=email,
-        full_name=full_name,
-        role=role,
-        active=True,
-    )
+    user = User(tenant_id=current_user.tenant_id, email=email, full_name=full_name, role=role, active=True)
     user.set_password(password)
     db.session.add(user)
     db.session.flush()
-
-    AuditService.log_event(
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
-        action="users.create",
-        title=f"Created user {user.email}",
-        metadata={"target_user_id": user.id, "role": user.role},
-    )
+    AuditService.log_event(tenant_id=current_user.tenant_id, user_id=current_user.id, action="users.create", title=f"Created user {user.email}", metadata={"target_user_id": user.id, "role": user.role})
     db.session.commit()
     return jsonify({"success": True, "user": user.to_dict()}), 201
 
@@ -141,23 +95,13 @@ def update_user(user_id: int):
         return _handle(exc)
 
     data = request.get_json(silent=True) or {}
-    new_email = data.get("email")
-    new_name = data.get("full_name")
-    new_role = data.get("role")
-    new_active = data.get("active")
-    new_password = data.get("password")
+    new_email, new_name, new_role, new_active, new_password = data.get("email"), data.get("full_name"), data.get("role"), data.get("active"), data.get("password")
 
     if new_email is not None:
         email = str(new_email).strip().lower()
         if not is_valid_email(email):
             return jsonify({"success": False, "error": "invalid_email"}), 400
-        duplicate = db.session.execute(
-            select(User).where(
-                User.tenant_id == current_user.tenant_id,
-                func.lower(User.email) == email,
-                User.id != user.id,
-            )
-        ).scalar_one_or_none()
+        duplicate = db.session.execute(select(User).where(User.tenant_id == current_user.tenant_id, func.lower(User.email) == email, User.id != user.id)).scalar_one_or_none()
         if duplicate:
             return jsonify({"success": False, "error": "email_already_registered"}), 409
         user.email = email
@@ -189,19 +133,9 @@ def update_user(user_id: int):
     if new_password is not None:
         password = str(new_password)
         if not is_strong_password(password):
-            return jsonify({
-                "success": False,
-                "error": "weak_password",
-                "message": "Password must be at least 8 characters and include a letter and a digit",
-            }), 400
+            return jsonify({"success": False, "error": "weak_password", "message": "Password must be at least 8 characters and include a letter and a digit"}), 400
         user.set_password(password)
 
-    AuditService.log_event(
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
-        action="users.update",
-        title=f"Updated user {user.email}",
-        metadata={"target_user_id": user.id},
-    )
+    AuditService.log_event(tenant_id=current_user.tenant_id, user_id=current_user.id, action="users.update", title=f"Updated user {user.email}", metadata={"target_user_id": user.id})
     db.session.commit()
     return jsonify({"success": True, "user": user.to_dict()})
