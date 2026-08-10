@@ -20,7 +20,14 @@ const STATUS_FILTERS = [
 ] as const;
 
 type StatusFilter = (typeof STATUS_FILTERS)[number]["value"];
-type StatusSummaryProps = { label: string; value: number; icon: typeof Clock3; tone: string; active: boolean; onClick: () => void };
+type StatusSummaryProps = {
+  label: string;
+  value: number;
+  icon: typeof Clock3;
+  tone: string;
+  active: boolean;
+  onClick: () => void;
+};
 
 function formatDate(value: string) {
   const date = new Date(value);
