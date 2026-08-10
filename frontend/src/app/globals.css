@@ -11,7 +11,6 @@
     --border: 214 32% 91%;
     --input: 214 32% 91%;
     --ring: 239 84% 67%;
-
     --primary: 239 84% 67%;
     --primary-foreground: 0 0% 100%;
     --secondary: 210 40% 96%;
@@ -35,7 +34,6 @@
     --border: 217 33% 20%;
     --input: 217 33% 20%;
     --ring: 239 84% 72%;
-
     --primary: 239 84% 72%;
     --primary-foreground: 222 47% 8%;
     --secondary: 217 33% 15%;
@@ -52,12 +50,11 @@
     --card-foreground: 210 40% 98%;
   }
 
-  * {
-    @apply border-border;
-  }
+  * { @apply border-border; }
 
   html {
     font-family: "Assistant", system-ui, sans-serif;
+    scroll-behavior: smooth;
   }
 
   body {
@@ -65,12 +62,21 @@
     font-family: "Assistant", system-ui, sans-serif;
   }
 
-  button,
-  input,
-  textarea,
-  select {
-    font: inherit;
+  button, input, textarea, select { font: inherit; }
+
+  ::selection {
+    background: rgb(99 102 241 / 0.18);
   }
+
+  :focus-visible {
+    outline: 2px solid rgb(99 102 241 / 0.65);
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgb(148 163 184 / 0.45); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(100 116 139 / 0.65); }
 }
 
 @layer components {
@@ -91,20 +97,16 @@
   }
 
   .status-timeline-line {
-    background: repeating-linear-gradient(
-      to bottom,
-      rgb(203 213 225) 0,
-      rgb(203 213 225) 5px,
-      transparent 5px,
-      transparent 10px
-    );
+    background: repeating-linear-gradient(to bottom, rgb(203 213 225) 0, rgb(203 213 225) 5px, transparent 5px, transparent 10px);
+  }
+
+  .interactive-card {
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
