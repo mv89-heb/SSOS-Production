@@ -9,8 +9,7 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        // הגדרת משתנה ה-CSS של הפונט כברירת המחדל של המערכת
-        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "Assistant", "system-ui", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -47,9 +46,22 @@ const config: Config = {
           foreground: "hsl(var(--card-foreground))",
         },
       },
+      boxShadow: {
+        soft: "0 10px 30px -18px rgb(15 23 42 / 0.28)",
+        card: "0 1px 2px rgb(15 23 42 / 0.04), 0 10px 30px -20px rgb(15 23 42 / 0.20)",
+        floating: "0 24px 60px -30px rgb(15 23 42 / 0.32)",
+      },
+      borderRadius: {
+        xl: "0.875rem",
+        "2xl": "1.125rem",
+        "3xl": "1.5rem",
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+      },
     },
   },
-  plugins: [],
+  plugins: [require("tailwindcss-animate")],
 };
 
 export default config;

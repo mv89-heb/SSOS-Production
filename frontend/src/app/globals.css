@@ -1,22 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 210 40% 98%;
     --foreground: 222 47% 11%;
     --border: 214 32% 91%;
     --input: 214 32% 91%;
-    --ring: 221 83% 53%;
+    --ring: 239 84% 67%;
 
-    /* These were referenced by tailwind.config.ts (bg-primary, text-primary,
-       ring-primary, etc. — used across login/catalog/orders and the shared
-       ui/ components) but never defined here, so every class built on them
-       resolved to an invalid CSS value and rendered with no visible color
-       (e.g. the login page's "Sign In" button: white text on a background
-       that silently failed to apply). */
-    --primary: 221 83% 53%;
+    --primary: 239 84% 67%;
     --primary-foreground: 0 0% 100%;
     --secondary: 210 40% 96%;
     --secondary-foreground: 222 47% 11%;
@@ -24,44 +20,94 @@
     --destructive-foreground: 0 0% 100%;
     --muted: 210 40% 96%;
     --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 234 89% 96%;
+    --accent-foreground: 239 50% 28%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
+    --radius: 0.875rem;
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --background: 222 47% 5%;
-      --foreground: 210 40% 98%;
-      --border: 217 33% 20%;
-      --input: 217 33% 20%;
-      --ring: 221 83% 60%;
+  .dark {
+    --background: 222 47% 7%;
+    --foreground: 210 40% 98%;
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 239 84% 72%;
 
-      --primary: 221 83% 60%;
-      --primary-foreground: 222 47% 5%;
-      --secondary: 217 33% 17%;
-      --secondary-foreground: 210 40% 98%;
-      --destructive: 0 63% 45%;
-      --destructive-foreground: 0 0% 100%;
-      --muted: 217 33% 17%;
-      --muted-foreground: 215 20% 65%;
-      --accent: 217 33% 17%;
-      --accent-foreground: 210 40% 98%;
-      --popover: 222 47% 8%;
-      --popover-foreground: 210 40% 98%;
-      --card: 222 47% 8%;
-      --card-foreground: 210 40% 98%;
-    }
+    --primary: 239 84% 72%;
+    --primary-foreground: 222 47% 8%;
+    --secondary: 217 33% 15%;
+    --secondary-foreground: 210 40% 98%;
+    --destructive: 0 63% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --muted: 217 33% 15%;
+    --muted-foreground: 215 20% 68%;
+    --accent: 236 34% 19%;
+    --accent-foreground: 234 89% 92%;
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 40% 98%;
+    --card: 222 40% 10%;
+    --card-foreground: 210 40% 98%;
   }
 
   * {
     @apply border-border;
   }
 
+  html {
+    font-family: "Assistant", system-ui, sans-serif;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: "Assistant", system-ui, sans-serif;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply rounded-2xl border border-slate-200/80 bg-white/90 shadow-card backdrop-blur-sm transition-all duration-200 dark:border-slate-800 dark:bg-slate-900/90;
+  }
+
+  .glass-card-hover {
+    @apply hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-soft dark:hover:border-indigo-900;
+  }
+
+  .page-title {
+    @apply text-2xl font-extrabold tracking-tight text-slate-950 dark:text-white md:text-3xl;
+  }
+
+  .page-subtitle {
+    @apply mt-1 text-sm font-medium text-slate-500 dark:text-slate-400;
+  }
+
+  .status-timeline-line {
+    background: repeating-linear-gradient(
+      to bottom,
+      rgb(203 213 225) 0,
+      rgb(203 213 225) 5px,
+      transparent 5px,
+      transparent 10px
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
