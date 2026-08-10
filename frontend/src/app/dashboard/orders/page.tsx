@@ -21,11 +21,18 @@ const STATUS_FILTERS = [
 
 type StatusFilter = (typeof STATUS_FILTERS)[number]["value"];
 
+type StatusSummaryProps = {
+  label: string;
+  value: number;
+  icon: typeof Clock3;
+  tone: string;
+};
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value));
 }
 
-function StatusSummary({ label, value, icon: Icon, tone }: { label: string; value: number; icon: typeof Clock3; tone: string }) {
+function StatusSummary({ label, value, icon: Icon, tone }: StatusSummaryProps) {
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center justify-between gap-3">
@@ -109,7 +116,7 @@ export default function OrdersPage() {
           <div className="flex flex-col items-center justify-center gap-3 p-12 text-center">
             <AlertCircle className="text-red-500" size={30} />
             <p className="font-bold text-slate-800 dark:text-white">לא הצלחנו לטעון את ההזמנות</p>
-            <Button variant="outline" onClick={() => refetch()}>נסה שוב</Button>
+            <Button variant="secondary" onClick={() => refetch()}>נסה שוב</Button>
           </div>
         ) : isLoading ? (
           <div className="space-y-3 p-4">
