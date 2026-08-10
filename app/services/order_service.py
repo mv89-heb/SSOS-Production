@@ -87,7 +87,9 @@ class OrderService:
         return self.repo.get_by_id_or_404(order_id)
 
     def update_order(self, user, order_id: int, payload: dict) -> Order:
-        order = self.repo.get_by_id_or_404(order_id)
+        order = self.repo.get_by_id_for_update(order_id)
+        if order is None:
+            raise NotFound("Order not found")
         if order.status != STATUS_DRAFT:
             raise Conflict(
                 f"Order can only be edited while in '{STATUS_DRAFT}' status (current: '{order.status}')"
@@ -118,7 +120,9 @@ class OrderService:
         return order
 
     def delete_order(self, user, order_id: int) -> None:
-        order = self.repo.get_by_id_or_404(order_id)
+        order = self.repo.get_by_id_for_update(order_id)
+        if order is None:
+            raise NotFound("Order not found")
         if order.status != STATUS_DRAFT:
             raise Conflict(
                 f"Only '{STATUS_DRAFT}' orders can be deleted (current: '{order.status}')"
@@ -134,7 +138,9 @@ class OrderService:
         self.repo.delete(order)
 
     def submit_order(self, user, order_id: int) -> Order:
-        order = self.repo.get_by_id_or_404(order_id)
+        order = self.repo.get_by_id_for_update(order_id)
+        if order is None:
+            raise NotFound("Order not found")
         if order.status != STATUS_DRAFT:
             raise Conflict(
                 f"Only '{STATUS_DRAFT}' orders can be submitted (current: '{order.status}')"
@@ -155,7 +161,9 @@ class OrderService:
         return order
 
     def approve_order(self, user, order_id: int) -> Order:
-        order = self.repo.get_by_id_or_404(order_id)
+        order = self.repo.get_by_id_for_update(order_id)
+        if order is None:
+            raise NotFound("Order not found")
         if order.status != STATUS_SUBMITTED:
             raise Conflict(
                 f"Only '{STATUS_SUBMITTED}' orders can be approved (current: '{order.status}')"
@@ -175,7 +183,9 @@ class OrderService:
         return order
 
     def reject_order(self, user, order_id: int, reason: str = "") -> Order:
-        order = self.repo.get_by_id_or_404(order_id)
+        order = self.repo.get_by_id_for_update(order_id)
+        if order is None:
+            raise NotFound("Order not found")
         if order.status != STATUS_SUBMITTED:
             raise Conflict(
                 f"Only '{STATUS_SUBMITTED}' orders can be rejected (current: '{order.status}')"
@@ -199,7 +209,9 @@ class OrderService:
         return order
 
     def mark_sent(self, user, order_id: int) -> Order:
-        order = self.repo.get_by_id_or_404(order_id)
+        order = self.repo.get_by_id_for_update(order_id)
+        if order is None:
+            raise NotFound("Order not found")
         if order.status != STATUS_APPROVED:
             raise Conflict(
                 f"Only '{STATUS_APPROVED}' orders can be marked sent (current: '{order.status}')"
@@ -215,7 +227,9 @@ class OrderService:
         return order
 
     def mark_completed(self, user, order_id: int) -> Order:
-        order = self.repo.get_by_id_or_404(order_id)
+        order = self.repo.get_by_id_for_update(order_id)
+        if order is None:
+            raise NotFound("Order not found")
         if order.status != STATUS_SENT:
             raise Conflict(
                 f"Only '{STATUS_SENT}' orders can be completed (current: '{order.status}')"
