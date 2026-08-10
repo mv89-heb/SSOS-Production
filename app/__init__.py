@@ -76,6 +76,7 @@ def _register_blueprints(app):
     from app.routes.notifications import notifications_bp
     from app.routes.health import health_bp
     from app.routes.imports import imports_bp
+    from app.routes.users import users_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
@@ -84,6 +85,7 @@ def _register_blueprints(app):
     app.register_blueprint(notifications_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(imports_bp)
+    app.register_blueprint(users_bp)
 
     csrf.exempt(health_bp)
 
