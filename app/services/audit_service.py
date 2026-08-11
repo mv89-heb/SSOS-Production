@@ -1,11 +1,25 @@
 from datetime import datetime, timezone
+
+from sqlalchemy import select
+
 from app.extensions import db
 from app.models.audit import AuditLog, GENESIS_HASH, compute_hash
+from app.models.tenant import Tenant
 from app.repositories.audit_repository import AuditRepository
+
 
 class AuditService:
     @staticmethod
     def log_event(tenant_id: int, user_id, action: str, title: str = "", metadata: dict = None) -> AuditLog:
+        # Serialize audit writers per tenant. PostgreSQL row-level locking makes
+        # concurrent requests wait for the previous writer, so two events can
+        # never both derive their previous_hash from the same last row.
+        db.session.execute(
+            select(Tenant.id)
+            .where(Tenant.id == tenant_id)
+            .with_for_update()
+        ).scalar_one()
+
         repo = AuditRepository(tenant_id=tenant_id)
         last = repo.latest()
         previous_hash = last.hash_chain if last else GENESIS_HASH
@@ -37,17 +51,14 @@ class AuditService:
         )
         db.session.add(log)
         db.session.flush()
-        # NO COMMIT HERE - Handled by route
+        # NO COMMIT HERE - Handled by route/service transaction.
         return log
 
     @staticmethod
     def verify_chain(tenant_id: int):
         """
-        Walks this tenant's audit log in creation order and recomputes each
-        entry's hash from its stored fields, confirming it both matches the
-        stored hash_chain value and links to the previous entry's hash.
-        Returns (True, None) if the whole chain is intact, or
-        (False, <id of first tampered/broken entry>) otherwise.
+        Walk this tenant's audit log in creation order and recompute every
+        hash, confirming both the stored digest and the previous-link.
         """
         repo = AuditRepository(tenant_id=tenant_id)
         logs = repo.all_ordered()
