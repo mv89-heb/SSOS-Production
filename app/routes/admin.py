@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import func, select
 from werkzeug.exceptions import Conflict, HTTPException, NotFound
@@ -29,6 +29,12 @@ def _require_admin():
 
 @admin_bp.before_request
 def _admin_guard():
+    # CORS preflight requests are anonymous OPTIONS requests. Let Flask-CORS
+    # answer them before the admin authentication/authorization guard runs.
+    # The real request is still fully protected by _require_admin().
+    if request.method == "OPTIONS":
+        return None
+
     try:
         _require_admin()
     except HTTPException as exc:
@@ -38,7 +44,8 @@ def _admin_guard():
 
 def _tenant_product(product_id: int) -> Product:
     product = db.session.execute(select(Product).where(Product.id == product_id, Product.tenant_id == current_user.tenant_id)).scalar_one_or_none()
-    if product is None: raise NotFound("Product not found")
+    if product is None:
+        raise NotFound("Product not found")
     return product
 
 
@@ -117,11 +124,9 @@ def delete_supplier(supplier_id: int):
 @login_required
 def delete_product(product_id: int):
     product = _tenant_product(product_id)
-    # Admin is explicitly allowed to permanently remove the catalog record.
-    # Supplier offers are owned by the product relationship and are cascaded.
-    name = product.name; target_id = product.id
+    name = product.name; target_id = product.id; previous_active = product.active
     db.session.delete(product)
-    AuditService.log_event(current_user.tenant_id, current_user.id, "admin.product_deleted", f"Permanently deleted product {name}", {"product_id": target_id, "previous_active": product.active})
+    AuditService.log_event(current_user.tenant_id, current_user.id, "admin.product_deleted", f"Permanently deleted product {name}", {"product_id": target_id, "previous_active": previous_active})
     db.session.commit()
     return jsonify({"success": True})
 
