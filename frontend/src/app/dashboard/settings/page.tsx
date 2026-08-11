@@ -39,8 +39,24 @@ export default function SettingsPage() {
 
   const createUser = () => {
     setFormError(null);
-    if (!form.email.trim() || !form.full_name.trim() || !form.password) return setFormError("יש למלא אימייל, שם מלא וסיסמה.");
-    createMutation.mutate({ ...form, email: form.email.trim().toLowerCase(), full_name: form.full_name.trim() });
+    const first = form.email.trim();
+    const second = form.full_name.trim();
+    const password = form.password;
+
+    // Be tolerant of users who enter the name first and email second.
+    // This also protects against the exact input order captured in production HARs.
+    const emailLooksValid = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    const email = emailLooksValid(first) ? first : emailLooksValid(second) ? second : first;
+    const full_name = email === first ? second : first;
+
+    if (!email || !full_name || !password) return setFormError("יש למלא אימייל, שם מלא וסיסמה.");
+    if (!emailLooksValid(email)) return setFormError("כתובת האימייל אינה תקינה. לדוגמה: elia@reshit.co.il");
+
+    createMutation.mutate({
+      ...form,
+      email: email.toLowerCase(),
+      full_name,
+    });
   };
 
   return (
@@ -49,7 +65,7 @@ export default function SettingsPage() {
       <Card><CardHeader><CardTitle className="text-base text-slate-900">פרופיל משתמש</CardTitle></CardHeader><CardContent className="pt-0"><dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3"><div><dt className="text-slate-500">שם</dt><dd className="font-medium text-slate-900">{user?.full_name ?? "—"}</dd></div><div><dt className="text-slate-500">אימייל / שם משתמש</dt><dd className="font-medium text-slate-900">{user?.email ?? "—"}</dd></div><div><dt className="text-slate-500">תפקיד</dt><dd>{user ? <Badge variant="default">{ROLE_LABELS[user.role]}</Badge> : "—"}</dd></div></dl></CardContent></Card>
       <Card><CardHeader><CardTitle className="text-base text-slate-900">ארגון</CardTitle></CardHeader><CardContent className="pt-0"><dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2"><div><dt className="text-slate-500">שם הארגון</dt><dd className="text-slate-900">{tenant?.name ?? "—"}</dd></div><div><dt className="text-slate-500">מזהה הארגון</dt><dd className="text-slate-900">{tenant?.slug ?? "—"}</dd></div></dl></CardContent></Card>
       {canManageUsers && <Card className="border-indigo-100 shadow-sm"><CardHeader><div className="flex items-center justify-between gap-4"><div><CardTitle className="flex items-center gap-2 text-base text-slate-900"><ShieldCheck size={19} className="text-indigo-600" /> משתמשים והרשאות</CardTitle><p className="mt-1 text-xs text-slate-500">רק מנהל מערכת יכול ליצור משתמשים, לשנות תפקידים או להשבית חשבונות.</p></div><span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">{activeAdmins} מנהלי מערכת פעילים</span></div></CardHeader><CardContent className="space-y-6 pt-0">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"><h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-800"><Plus size={17} /> הוספת משתמש</h3><div className="grid grid-cols-1 gap-3 md:grid-cols-4"><Input placeholder="אימייל / שם משתמש" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} /><Input placeholder="שם מלא" value={form.full_name} onChange={(e) => setForm((v) => ({ ...v, full_name: e.target.value }))} /><Input type="password" placeholder="סיסמה זמנית" value={form.password} onChange={(e) => setForm((v) => ({ ...v, password: e.target.value }))} /><div className="flex gap-2"><Select value={form.role} onChange={(e) => setForm((v) => ({ ...v, role: e.target.value as UserRole }))} className="min-w-0 flex-1"><option value="manager">מנהל רכש</option><option value="employee">עובד רכש</option><option value="admin">מנהל מערכת</option></Select><Button onClick={createUser} disabled={createMutation.isPending}>{createMutation.isPending ? "יוצר..." : "הוסף"}</Button></div></div>{formError && <p className="mt-3 text-sm font-medium text-red-600">{formError}</p>}<p className="mt-2 text-xs text-slate-400">הסיסמה נשמרת בשרת כ-hash בלבד.</p></div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"><h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-800"><Plus size={17} /> הוספת משתמש</h3><div className="grid grid-cols-1 gap-3 md:grid-cols-4"><Input placeholder="שם מלא" value={form.full_name} onChange={(e) => setForm((v) => ({ ...v, full_name: e.target.value }))} /><Input type="email" autoComplete="email" placeholder="אימייל / שם משתמש" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} /><Input type="password" autoComplete="new-password" placeholder="סיסמה זמנית" value={form.password} onChange={(e) => setForm((v) => ({ ...v, password: e.target.value }))} /><div className="flex gap-2"><Select value={form.role} onChange={(e) => setForm((v) => ({ ...v, role: e.target.value as UserRole }))} className="min-w-0 flex-1"><option value="manager">מנהל רכש</option><option value="employee">עובד רכש</option><option value="admin">מנהל מערכת</option></Select><Button onClick={createUser} disabled={createMutation.isPending}>{createMutation.isPending ? "יוצר..." : "הוסף"}</Button></div></div>{formError && <p className="mt-3 text-sm font-medium text-red-600">{formError}</p>}<p className="mt-2 text-xs text-slate-400">הסיסמה נשמרת בשרת כ-hash בלבד.</p></div>
         <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-right text-xs font-bold text-slate-500"><tr><th className="px-4 py-3">משתמש</th><th className="px-4 py-3">תפקיד</th><th className="px-4 py-3">סטטוס</th><th className="px-4 py-3">פעולות</th></tr></thead><tbody className="divide-y divide-slate-100 bg-white">
           {usersQuery.isLoading && <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400">טוען משתמשים...</td></tr>}
           {usersQuery.isError && <tr><td colSpan={4} className="px-4 py-8 text-center text-red-500">{errorMessage(usersQuery.error)}</td></tr>}
