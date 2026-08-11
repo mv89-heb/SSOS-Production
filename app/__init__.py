@@ -10,7 +10,9 @@ from app.extensions import db, migrate, login_manager, csrf, limiter, swagger, c
 
 def create_app(config_name=None):
     app = Flask(__name__, instance_relative_config=True)
-    app.config.from_object(get_config(config_name))
+    config_class = get_config(config_name)
+    app.config.from_object(config_class)
+    config_class.init_app(app)
 
     _ensure_directories(app)
     _init_extensions(app)
