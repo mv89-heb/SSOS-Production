@@ -10,6 +10,10 @@ def _normalize_db_url(url: str) -> str:
     return url
 
 
+def _csv_env(name: str, default: str = "") -> list[str]:
+    return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
+
+
 class BaseConfig:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key-change-me")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -18,16 +22,13 @@ class BaseConfig:
     UPLOAD_MIME_TYPES = {
         "image/png", "image/jpeg", "image/bmp", "image/tiff", "application/pdf",
     }
-    # Phase 3: Import Engine — supplier price lists (Excel/CSV), a distinct
-    # upload surface from the OCR one above (different file types, same
-    # validate-then-store pattern).
     IMPORT_UPLOAD_EXTENSIONS = {".xlsx", ".xls", ".csv"}
     IMPORT_UPLOAD_MIME_TYPES = {
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # .xlsx
-        "application/vnd.ms-excel",  # .xls
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
         "text/csv",
         "application/csv",
-        "text/plain",  # some browsers send CSV as text/plain
+        "text/plain",
     }
     SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "False") == "True"
     SESSION_COOKIE_HTTPONLY = True
@@ -35,16 +36,10 @@ class BaseConfig:
     WTF_CSRF_ENABLED = os.environ.get("WTF_CSRF_ENABLED", "True") == "True"
     RATELIMIT_LOGIN = os.environ.get("RATELIMIT_LOGIN", "10 per minute")
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
-    # Comma-separated list of origins allowed to call the API with credentials
-    # (browser session cookies). The Next.js frontend runs on a different
-    # origin than this API (see frontend/.env.local -> NEXT_PUBLIC_API_URL),
-    # so without this the browser blocks every request at the CORS layer
-    # before Flask ever sees it.
-    CORS_ORIGINS = [
-        o.strip() for o in os.environ.get(
-            "CORS_ORIGINS", "http://localhost:3000,http://localhost:3100"
-        ).split(",") if o.strip()
-    ]
+    CORS_ORIGINS = _csv_env(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://localhost:3100",
+    )
 
     @staticmethod
     def init_app(app):
@@ -63,11 +58,6 @@ class ProductionConfig(BaseConfig):
             "pool_recycle": 300,
         }
     SESSION_COOKIE_SECURE = True
-    # The frontend is deployed on a different origin than this API (see
-    # CORS_ORIGINS above), so this is a cross-site request as far as the
-    # browser's cookie policy is concerned. SameSite=Lax (the BaseConfig
-    # default) is silently dropped by the browser on cross-site fetch/XHR —
-    # only None (paired with Secure, already True above) is sent there.
     SESSION_COOKIE_SAMESITE = "None"
 
 
