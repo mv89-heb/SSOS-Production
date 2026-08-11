@@ -4,7 +4,8 @@ BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
 
 def _normalize_db_url(url: str) -> str:
-    """Neon/Heroku-style postgres:// URLs must be rewritten for SQLAlchemy 2.x."""
+    """Normalize provider-style PostgreSQL URLs for SQLAlchemy."""
+    url = (url or "").strip()
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
     return url
@@ -37,6 +38,10 @@ class BaseConfig:
         "application/csv",
         "text/plain",
     }
+    # Uploads are private application data. The app factory resolves this to
+    # instance/uploads, never app/static/uploads, so Flask's static handler
+    # cannot expose uploaded documents directly.
+    PRIVATE_UPLOAD_SUBDIR = "uploads"
     SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "False") == "True"
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
@@ -56,37 +61,49 @@ class BaseConfig:
 class ProductionConfig(BaseConfig):
     DEBUG = False
 
-    # Production must fail closed. Never silently fall back to SQLite or a
-    # development signing key when a required deployment secret is missing.
-    SECRET_KEY = _required_env("SECRET_KEY")
-    DATABASE_URL = _required_env("DATABASE_URL")
-    CORS_ORIGINS = _csv_env("CORS_ORIGINS")
-    if not CORS_ORIGINS:
-        raise RuntimeError("CORS_ORIGINS must contain at least one allowed origin in production")
+    @staticmethod
+    def init_app(app):
+        """Load and validate production-only secrets at app creation time."""
+        secret_key = _required_env("SECRET_KEY")
+        database_url = _normalize_db_url(_required_env("DATABASE_URL"))
+        cors_origins = _csv_env("CORS_ORIGINS")
 
-    db_url = _normalize_db_url(DATABASE_URL)
-    if not db_url.startswith("postgresql"):
-        raise RuntimeError("Production DATABASE_URL must use PostgreSQL/Neon")
-    SQLALCHEMY_DATABASE_URI = db_url
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        "connect_args": {"sslmode": "require"},
-        "pool_pre_ping": True,
-        "pool_recycle": 300,
-    }
-    SESSION_COOKIE_SECURE = True
-    SESSION_COOKIE_SAMESITE = "None"
+        if not cors_origins:
+            raise RuntimeError(
+                "CORS_ORIGINS must contain at least one allowed origin in production"
+            )
+        if not database_url.startswith("postgresql"):
+            raise RuntimeError("Production DATABASE_URL must use PostgreSQL/Neon")
+
+        app.config["SECRET_KEY"] = secret_key
+        app.config["DATABASE_URL"] = database_url
+        app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+        app.config["CORS_ORIGINS"] = cors_origins
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+            "connect_args": {"sslmode": "require"},
+            "pool_pre_ping": True,
+            "pool_recycle": 300,
+        }
+        app.config["SESSION_COOKIE_SECURE"] = True
+        app.config["SESSION_COOKIE_SAMESITE"] = "None"
 
 
 class DevelopmentConfig(BaseConfig):
     DEBUG = True
-    db_url = os.environ.get("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'instance', 'ssos_dev.db')}")
-    db_url = _normalize_db_url(db_url)
-    SQLALCHEMY_DATABASE_URI = db_url
-    if db_url.startswith("postgresql"):
-        SQLALCHEMY_ENGINE_OPTIONS = {
-            "connect_args": {"sslmode": "require"},
-            "pool_pre_ping": True,
-        }
+
+    @staticmethod
+    def init_app(app):
+        db_url = os.environ.get(
+            "DATABASE_URL",
+            f"sqlite:///{os.path.join(BASE_DIR, 'instance', 'ssos_dev.db')}",
+        )
+        db_url = _normalize_db_url(db_url)
+        app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+        if db_url.startswith("postgresql"):
+            app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+                "connect_args": {"sslmode": "require"},
+                "pool_pre_ping": True,
+            }
 
 
 class TestingConfig(BaseConfig):
