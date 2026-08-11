@@ -287,9 +287,6 @@ class ImportMappingService:
         if mapping.status == MAPPING_STATUS_APPROVED:
             raise Conflict("This mapping is already approved")
 
-        # Four-eyes control: the person who prepared the mapping cannot be
-        # the person who approves it. Import approval is a control boundary,
-        # because an approved mapping becomes eligible for real catalog writes.
         if mapping.created_by == self.user_id:
             raise Conflict("The mapping creator cannot approve their own mapping")
 
@@ -366,6 +363,53 @@ class ImportMappingService:
     def list_templates(self):
         return self.template_repo.list_all()
 
+    def _validate_template_scope(self, mapping, template):
+        """Prevent a reusable template from silently switching suppliers.
+
+        A TALL session has one supplier at the session level. A WIDE session
+        has no single supplier and may legitimately contain supplier IDs per
+        offer column. Both the template-level supplier and any embedded
+        supplier IDs must agree with the target session when a single supplier
+        is known.
+        """
+        session_supplier_id = (
+            mapping.session.supplier_id
+            if mapping.session is not None
+            else None
+        )
+        template_supplier_id = template.supplier_id
+
+        if (
+            session_supplier_id is not None
+            and template_supplier_id is not None
+            and session_supplier_id != template_supplier_id
+        ):
+            raise Conflict(
+                "This template belongs to a different supplier and cannot be applied to this import."
+            )
+
+        embedded_supplier_ids = set()
+        for entry in (template.column_mapping or {}).values():
+            if not isinstance(entry, dict):
+                continue
+            supplier_id = entry.get("supplier_id")
+            if supplier_id is not None:
+                if not _is_positive_int(supplier_id):
+                    raise Conflict("Template contains an invalid supplier_id")
+                embedded_supplier_ids.add(supplier_id)
+
+        if template_supplier_id is not None:
+            if any(supplier_id != template_supplier_id for supplier_id in embedded_supplier_ids):
+                raise Conflict(
+                    "Template contains supplier mappings that do not match its supplier."
+                )
+
+        if session_supplier_id is not None:
+            if any(supplier_id != session_supplier_id for supplier_id in embedded_supplier_ids):
+                raise Conflict(
+                    "Template contains supplier mappings for a different supplier than this import."
+                )
+
     def apply_template(self, mapping_id: int, template_id: int):
         mapping = self.mapping_repo.get_by_id_or_404(mapping_id)
         if mapping.status == MAPPING_STATUS_APPROVED:
@@ -375,6 +419,8 @@ class ImportMappingService:
         template = self.template_repo.get_by_id_or_404(template_id)
         if not isinstance(template.column_mapping, dict):
             raise Conflict("The saved mapping template is invalid")
+
+        self._validate_template_scope(mapping, template)
 
         applied_count = 0
         for col in mapping.columns:
