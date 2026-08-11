@@ -14,25 +14,26 @@ type ShareOrder = {
 };
 
 type TemplateKey = "formal" | "short" | "delivery";
+const ORGANIZATION_NAME = "ישיבת אוהבי ירושלים - ראשית";
 
 const templates: Record<TemplateKey, { label: string; build: (order: ShareOrder) => string }> = {
   formal: {
     label: "הזמנה רשמית",
-    build: order => `שלום ${order.supplier_name},\n\nמצורפת הזמנת רכש ${order.order_number}.\n\nנשמח לאישור קבלת ההזמנה ולתיאום אספקה.${order.notes ? `\n\nהערות:\n${order.notes}` : ""}\n\nתודה רבה.`,
+    build: order => `שלום ${order.supplier_name},\n\nמטעם ${ORGANIZATION_NAME}, מצורפת הזמנת רכש ${order.order_number}.\n\nנשמח לאישור קבלת ההזמנה ולתיאום אספקה.${order.notes ? `\n\nהערות:\n${order.notes}` : ""}\n\nתודה רבה,\n${ORGANIZATION_NAME}`,
   },
   short: {
     label: "הודעה קצרה",
-    build: order => `שלום, הזמנת רכש ${order.order_number} מוכנה לאישור. אשמח לאישור קבלה ותיאום אספקה.${order.notes ? `\nהערה: ${order.notes}` : ""} תודה.`,
+    build: order => `שלום, מטעם ${ORGANIZATION_NAME}: הזמנת רכש ${order.order_number} מוכנה לאישור. אשמח לאישור קבלה ותיאום אספקה.${order.notes ? `\nהערה: ${order.notes}` : ""}\nתודה.`,
   },
   delivery: {
     label: "תיאום אספקה",
-    build: order => `שלום, לגבי הזמנה ${order.order_number} — נשמח לתאם מועד אספקה. אנא אשרו קבלת ההזמנה וציינו מועד אספקה אפשרי.${order.notes ? `\nהערות: ${order.notes}` : ""}\nתודה.`,
+    build: order => `שלום, כאן ${ORGANIZATION_NAME}, לגבי הזמנה ${order.order_number}. נשמח לתאם מועד אספקה. אנא אשרו קבלת ההזמנה וציינו מועד אספקה אפשרי.${order.notes ? `\nהערות: ${order.notes}` : ""}\nתודה.`,
   },
 };
 
 function buildDetailedMessage(order: ShareOrder) {
   const lines = order.items.map((item, index) => `${index + 1}. ${item.product_name} | כמות: ${item.quantity}`);
-  return `שלום ${order.supplier_name},\n\nהזמנת רכש ${order.order_number}\n\n${lines.join("\n")}${order.notes ? `\n\nהערות:\n${order.notes}` : ""}\n\nנשמח לאישור קבלת ההזמנה ולתיאום אספקה. תודה רבה.`;
+  return `שלום ${order.supplier_name},\n\nמטעם ${ORGANIZATION_NAME}, הזמנת רכש ${order.order_number}\n\n${lines.join("\n")}${order.notes ? `\n\nהערות:\n${order.notes}` : ""}\n\nנשמח לאישור קבלת ההזמנה ולתיאום אספקה.\n\nתודה רבה,\n${ORGANIZATION_NAME}`;
 }
 
 export function WhatsAppOrderShare({ order }: { order: ShareOrder }) {
@@ -54,7 +55,7 @@ export function WhatsAppOrderShare({ order }: { order: ShareOrder }) {
     <section className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/20">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white"><MessageCircle size={18} /></span><div><h2 className="font-black text-slate-900 dark:text-white">שליחה ב־WhatsApp</h2><p className="text-xs text-slate-500 dark:text-slate-400">בחר תבנית, בדוק את ההודעה ופתח WhatsApp עם הטקסט מוכן.</p></div></div>
+          <div className="flex items-center gap-2"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white"><MessageCircle size={18} /></span><div><h2 className="font-black text-slate-900 dark:text-white">שליחה ב־WhatsApp</h2><p className="text-xs text-slate-500 dark:text-slate-400">הודעה מטעם {ORGANIZATION_NAME}, ללא סכומי הזמנה.</p></div></div>
         </div>
         <div className="flex flex-wrap gap-2">
           {(Object.keys(templates) as TemplateKey[]).map(key => <button key={key} type="button" onClick={() => setTemplate(key)} className={`rounded-xl px-3 py-2 text-xs font-extrabold transition ${template === key ? "bg-emerald-600 text-white" : "bg-white text-slate-600 hover:bg-emerald-100 dark:bg-slate-900 dark:text-slate-300"}`}>{templates[key].label}</button>)}
