@@ -11,7 +11,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative flex min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div dir="rtl" className="relative flex min-h-screen flex-row overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 overflow-hidden"
@@ -20,6 +20,7 @@ export default function DashboardLayout({
         <div className="absolute -bottom-40 left-1/3 h-96 w-96 rounded-full bg-violet-200/15 blur-3xl dark:bg-violet-900/10" />
       </div>
 
+      {/* RTL layout: the primary navigation is intentionally on the right. */}
       <Sidebar />
 
       <div className="relative flex min-w-0 flex-1 flex-col">
