@@ -1,9 +1,12 @@
+import math
+
 from werkzeug.exceptions import Conflict, BadRequest, NotFound
 
 from app.repositories.supplier_repository import SupplierRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.supplier_offer_repository import SupplierOfferRepository
 from app.services.audit_service import AuditService
+from app.utils.validators import validate_product_payload
 
 
 class CatalogService:
@@ -91,6 +94,9 @@ class CatalogService:
         if not isinstance(supplier_id, int) or isinstance(supplier_id, bool) or supplier_id <= 0:
             raise BadRequest("A valid supplier_id is required")
         self.supplier_repo.get_by_id_or_404(supplier_id)
+        validation_error = validate_product_payload(data)
+        if validation_error:
+            raise BadRequest(validation_error)
         fields = {k: v for k, v in data.items() if k in self.PRODUCT_FIELDS}
         product = self.product_repo.model(tenant_id=self.tenant_id, supplier_id=supplier_id, **fields)
         self.product_repo.add(product)
@@ -109,6 +115,9 @@ class CatalogService:
             if not isinstance(supplier_id, int) or isinstance(supplier_id, bool) or supplier_id <= 0:
                 raise BadRequest("supplier_id must be a positive integer")
             self.supplier_repo.get_by_id_or_404(supplier_id)
+        validation_error = validate_product_payload(data)
+        if validation_error:
+            raise BadRequest(validation_error)
         for field in self.PRODUCT_FIELDS:
             if field in data:
                 setattr(product, field, data[field])
@@ -148,6 +157,8 @@ class CatalogService:
             price = float(data["price"])
         except (KeyError, TypeError, ValueError):
             raise BadRequest("price is required and must be a number")
+        if not math.isfinite(price):
+            raise BadRequest("price must be a finite number")
         if price < 0:
             raise BadRequest("price must not be negative.")
 
@@ -188,6 +199,8 @@ class CatalogService:
                 price = float(data["price"])
             except (TypeError, ValueError):
                 raise BadRequest("price must be a number")
+            if not math.isfinite(price):
+                raise BadRequest("price must be a finite number")
             if price < 0:
                 raise BadRequest("price must not be negative.")
             data = {**data, "price": price}
