@@ -15,11 +15,11 @@ def create_app(config_name=None):
     config_class.init_app(app)
 
     # Production must fail closed instead of silently starting with a known
-    # Flask secret, a local SQLite fallback, or an implicit localhost CORS
-    # policy. Explicit test/development configs remain self-contained.
+    # Flask secret or a local SQLite fallback. CORS remains configurable via
+    # CORS_ORIGINS and keeps the existing working deployment behavior.
     if config_class.__name__ == "ProductionConfig":
         missing = [
-            name for name in ("SECRET_KEY", "DATABASE_URL", "CORS_ORIGINS")
+            name for name in ("SECRET_KEY", "DATABASE_URL")
             if not os.environ.get(name)
         ]
         if missing:
