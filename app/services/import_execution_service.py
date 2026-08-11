@@ -7,6 +7,7 @@ imported transaction behind.
 """
 from datetime import datetime, timezone
 
+from sqlalchemy import select
 from werkzeug.exceptions import BadRequest, Conflict, NotFound
 
 from app.extensions import db
@@ -20,9 +21,14 @@ from app.repositories.import_execution_repository import ImportExecutionReposito
 from app.repositories.product_repository import ProductRepository
 from app.repositories.supplier_repository import SupplierRepository
 from app.repositories.supplier_offer_repository import SupplierOfferRepository
+from app.models.import_session import ImportSession
+from app.models.import_execution import (
+    ImportExecution,
+    EXECUTION_STATUS_COMMITTED,
+    EXECUTION_STATUS_ROLLED_BACK,
+)
 from app.models.import_mapping import MAPPING_STATUS_APPROVED
 from app.models.import_validation import VALIDATION_STATUS_COMPLETED, ACTION_CREATE, ACTION_UPDATE
-from app.models.import_execution import EXECUTION_STATUS_COMMITTED, EXECUTION_STATUS_ROLLED_BACK
 from app.services.catalog_service import CatalogService
 from app.services.audit_service import AuditService
 
@@ -49,18 +55,46 @@ class ImportExecutionService:
         self.session_repo.get_by_id_or_404(session_id)
         return self.execution_repo.get_latest_by_session(session_id)
 
-    def _fail_transaction(self, message: str):
-        """Clear every uncommitted catalog mutation before returning failure.
+    def _lock_session(self, session_id: int):
+        """Serialize commit attempts for one import session."""
+        stmt = (
+            select(ImportSession)
+            .where(
+                ImportSession.id == session_id,
+                ImportSession.tenant_id == self.tenant_id,
+            )
+            .with_for_update()
+        )
+        session = db.session.execute(stmt).scalar_one_or_none()
+        if session is None:
+            raise NotFound("Import session not found")
+        return session
 
-        Routes commit successful executions only. If any unexpected write
-        error happens after one or more successful writes, rolling back here
-        guarantees the request cannot accidentally commit a partial import.
-        """
+    def _lock_execution(self, execution_id: int):
+        """Serialize rollback attempts for one execution."""
+        stmt = (
+            select(ImportExecution)
+            .where(
+                ImportExecution.id == execution_id,
+                ImportExecution.tenant_id == self.tenant_id,
+            )
+            .with_for_update()
+        )
+        execution = db.session.execute(stmt).scalar_one_or_none()
+        if execution is None:
+            raise NotFound("Import execution not found")
+        return execution
+
+    def _fail_transaction(self, message: str):
+        """Clear every uncommitted catalog mutation before returning failure."""
         db.session.rollback()
         raise ImportExecutionError(message)
 
     def commit(self, session_id: int):
-        session = self.session_repo.get_by_id_or_404(session_id)
+        # The row lock is acquired before checking whether an execution already
+        # exists. Concurrent requests for the same session therefore serialize
+        # instead of both passing the preflight check and importing twice.
+        session = self._lock_session(session_id)
 
         if not session.staged_sheet_name:
             raise ImportExecutionError("This import session has no staged sheet.")
@@ -85,9 +119,6 @@ class ImportExecutionService:
         if not rows:
             raise ImportExecutionError("Validation produced no importable rows.")
 
-        # Validation is the safety gate. A row with an error must never be
-        # silently skipped here, because that would turn a validated import
-        # into a different, partial import.
         invalid_rows = [r.row_number for r in rows if r.has_errors]
         if invalid_rows:
             raise ImportExecutionError(
@@ -233,7 +264,6 @@ class ImportExecutionService:
                 created_product_ids=created_product_ids,
                 created_offer_ids=created_offer_ids,
                 price_history=price_history,
-                # A successful execution intentionally has no skipped rows.
                 skipped_rows=[],
                 executed_by=self.user_id,
             )
@@ -265,20 +295,18 @@ class ImportExecutionService:
             description = getattr(exc, "description", None) or str(exc)
             self._fail_transaction(f"Import failed and was rolled back: {description}")
         except Exception as exc:
-            # Never expose an internal exception as a successful/partial import.
             db.session.rollback()
             raise ImportExecutionError(
                 "Import failed unexpectedly and all uncommitted changes were rolled back."
             ) from exc
 
     def rollback(self, execution_id: int):
-        execution = self.execution_repo.get_by_id_or_404(execution_id)
+        # Lock the execution before checking its state. Two concurrent rollback
+        # requests now serialize and the second request sees ROLLED_BACK.
+        execution = self._lock_execution(execution_id)
         if execution.status == EXECUTION_STATUS_ROLLED_BACK:
             raise ImportExecutionError("This execution has already been rolled back.")
 
-        # Preflight all mutable product prices before deleting anything. This
-        # prevents rollback from silently overwriting a price changed after
-        # the import was committed.
         for entry in execution.price_history or []:
             product = self.product_repo.get_by_id(entry["product_id"])
             if product is None:
