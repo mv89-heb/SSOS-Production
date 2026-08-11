@@ -7,12 +7,13 @@ from werkzeug.exceptions import Conflict, HTTPException, NotFound
 
 from app.extensions import db
 from app.models.import_session import ImportSession, STATUS_FAILED
-from app.models.order import Order, STATUS_DRAFT
+from app.models.order import Order
 from app.models.product import Product
 from app.models.supplier import Supplier
 from app.models.user import ROLE_ADMIN, User
 from app.services.admin_service import AdminService
 from app.services.audit_service import AuditService
+from app.services.order_service import OrderService
 from app.services.permission_service import PermissionService
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
@@ -37,8 +38,7 @@ def _admin_guard():
 
 def _tenant_product(product_id: int) -> Product:
     product = db.session.execute(select(Product).where(Product.id == product_id, Product.tenant_id == current_user.tenant_id)).scalar_one_or_none()
-    if product is None:
-        raise NotFound("Product not found")
+    if product is None: raise NotFound("Product not found")
     return product
 
 
@@ -63,81 +63,65 @@ def overview():
 @login_required
 def deactivate_user(user_id: int):
     try:
-        user = AdminService(current_user.tenant_id, current_user.id).deactivate_user(user_id)
-        db.session.commit()
+        user = AdminService(current_user.tenant_id, current_user.id).deactivate_user(user_id); db.session.commit()
         return jsonify({"success": True, "user": user.to_dict()})
-    except HTTPException as exc:
-        return _handle(exc)
+    except HTTPException as exc: return _handle(exc)
 
 
 @admin_bp.route("/users/<int:user_id>/activate", methods=["POST"])
 @login_required
 def activate_user(user_id: int):
     try:
-        user = AdminService(current_user.tenant_id, current_user.id).activate_user(user_id)
-        db.session.commit()
+        user = AdminService(current_user.tenant_id, current_user.id).activate_user(user_id); db.session.commit()
         return jsonify({"success": True, "user": user.to_dict()})
-    except HTTPException as exc:
-        return _handle(exc)
+    except HTTPException as exc: return _handle(exc)
 
 
 @admin_bp.route("/users/<int:user_id>", methods=["DELETE"])
 @login_required
 def delete_user(user_id: int):
     try:
-        AdminService(current_user.tenant_id, current_user.id).delete_user(user_id)
-        db.session.commit()
+        AdminService(current_user.tenant_id, current_user.id).delete_user(user_id); db.session.commit()
         return jsonify({"success": True})
-    except HTTPException as exc:
-        return _handle(exc)
+    except HTTPException as exc: return _handle(exc)
 
 
 @admin_bp.route("/suppliers/<int:supplier_id>/deactivate", methods=["POST"])
 @login_required
 def deactivate_supplier(supplier_id: int):
     try:
-        supplier = AdminService(current_user.tenant_id, current_user.id).deactivate_supplier(supplier_id)
-        db.session.commit()
+        supplier = AdminService(current_user.tenant_id, current_user.id).deactivate_supplier(supplier_id); db.session.commit()
         return jsonify({"success": True, "supplier": supplier.to_dict()})
-    except HTTPException as exc:
-        return _handle(exc)
+    except HTTPException as exc: return _handle(exc)
 
 
 @admin_bp.route("/suppliers/<int:supplier_id>/activate", methods=["POST"])
 @login_required
 def activate_supplier(supplier_id: int):
     try:
-        supplier = AdminService(current_user.tenant_id, current_user.id).activate_supplier(supplier_id)
-        db.session.commit()
+        supplier = AdminService(current_user.tenant_id, current_user.id).activate_supplier(supplier_id); db.session.commit()
         return jsonify({"success": True, "supplier": supplier.to_dict()})
-    except HTTPException as exc:
-        return _handle(exc)
+    except HTTPException as exc: return _handle(exc)
 
 
 @admin_bp.route("/suppliers/<int:supplier_id>", methods=["DELETE"])
 @login_required
 def delete_supplier(supplier_id: int):
     try:
-        AdminService(current_user.tenant_id, current_user.id).delete_supplier(supplier_id)
-        db.session.commit()
+        AdminService(current_user.tenant_id, current_user.id).delete_supplier(supplier_id); db.session.commit()
         return jsonify({"success": True})
-    except HTTPException as exc:
-        return _handle(exc)
+    except HTTPException as exc: return _handle(exc)
 
 
 @admin_bp.route("/products/<int:product_id>", methods=["DELETE"])
 @login_required
 def delete_product(product_id: int):
     product = _tenant_product(product_id)
-    if product.active:
-        raise Conflict("Deactivate the product before permanent deletion.")
-    offer_count = len(product.supplier_offers)
-    if offer_count:
-        raise Conflict(f"Product has {offer_count} supplier offer(s). Remove the offers before deleting the product.")
-    name = product.name
-    target_id = product.id
+    # Admin is explicitly allowed to permanently remove the catalog record.
+    # Supplier offers are owned by the product relationship and are cascaded.
+    name = product.name; target_id = product.id
     db.session.delete(product)
-    AuditService.log_event(current_user.tenant_id, current_user.id, "admin.product_deleted", f"Deleted product {name}", {"product_id": target_id})
+    AuditService.log_event(current_user.tenant_id, current_user.id, "admin.product_deleted", f"Permanently deleted product {name}", {"product_id": target_id, "previous_active": product.active})
     db.session.commit()
     return jsonify({"success": True})
 
@@ -145,37 +129,24 @@ def delete_product(product_id: int):
 @admin_bp.route("/orders/<int:order_id>", methods=["DELETE"])
 @login_required
 def delete_order(order_id: int):
-    order = db.session.execute(select(Order).where(Order.id == order_id, Order.tenant_id == current_user.tenant_id)).scalar_one_or_none()
-    if order is None:
-        raise NotFound("Order not found")
-    if order.status != STATUS_DRAFT:
-        raise Conflict("Only draft orders can be permanently deleted. Historical orders must remain in the audit trail.")
-    number = order.order_number
-    target_id = order.id
-    db.session.delete(order)
-    AuditService.log_event(current_user.tenant_id, current_user.id, "admin.order_deleted", f"Deleted draft order {number}", {"order_id": target_id})
-    db.session.commit()
-    return jsonify({"success": True})
+    try:
+        OrderService(current_user.tenant_id).delete_order_as_admin(current_user, order_id)
+        db.session.commit()
+        return jsonify({"success": True})
+    except HTTPException as exc: return _handle(exc)
 
 
 @admin_bp.route("/imports/<int:session_id>", methods=["DELETE"])
 @login_required
 def delete_import(session_id: int):
     session = db.session.execute(select(ImportSession).where(ImportSession.id == session_id, ImportSession.tenant_id == current_user.tenant_id)).scalar_one_or_none()
-    if session is None:
-        raise NotFound("Import session not found")
-    if session.status != STATUS_FAILED:
-        raise Conflict("Only failed import sessions can be permanently deleted. Imported or in-progress history must be retained.")
-    storage_path = session.storage_path
-    filename = session.filename
-    target_id = session.id
-    db.session.delete(session)
-    db.session.flush()
+    if session is None: raise NotFound("Import session not found")
+    if session.status != STATUS_FAILED: raise Conflict("Only failed import sessions can be permanently deleted. Imported or in-progress history must be retained.")
+    storage_path = session.storage_path; filename = session.filename; target_id = session.id
+    db.session.delete(session); db.session.flush()
     if storage_path:
-        try:
-            Path(storage_path).unlink(missing_ok=True)
-        except OSError:
-            pass
+        try: Path(storage_path).unlink(missing_ok=True)
+        except OSError: pass
     AuditService.log_event(current_user.tenant_id, current_user.id, "admin.import_deleted", f"Deleted failed import {filename}", {"import_session_id": target_id})
     db.session.commit()
     return jsonify({"success": True})
