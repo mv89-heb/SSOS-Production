@@ -1,3 +1,4 @@
+import math
 import re
 import unicodedata
 
@@ -29,8 +30,6 @@ def normalize_email(email: str) -> str:
     normalized = "".join(ch for ch in normalized if ch not in _EMAIL_IGNORABLE_CHARS)
     normalized = normalized.replace("\u00a0", " ").strip()
 
-    # Be tolerant if a copied address includes the common mailto: prefix or
-    # surrounding angle quotes/quotation marks.
     if normalized.lower().startswith("mailto:"):
         normalized = normalized[7:].strip()
 
@@ -38,13 +37,7 @@ def normalize_email(email: str) -> str:
 
 
 def is_valid_email(email: str) -> bool:
-    """Return True when *email* has a safe, conventional login syntax.
-
-    This function intentionally has no dependency on email-validator. The
-    application does not need DNS or mailbox verification merely to create a
-    login account, and package-policy differences must not turn a valid address
-    into a 400 response.
-    """
+    """Return True when *email* has a safe, conventional login syntax."""
     normalized = normalize_email(email)
     if not normalized or len(normalized) > 254:
         return False
@@ -68,10 +61,13 @@ def validate_product_payload(data: dict) -> str | None:
 
     if "current_price" in data and data["current_price"] is not None:
         try:
-            if float(data["current_price"]) < 0:
-                return "current_price must not be negative"
+            price = float(data["current_price"])
         except (TypeError, ValueError):
             return "current_price must be a number"
+        if not math.isfinite(price):
+            return "current_price must be a finite number"
+        if price < 0:
+            return "current_price must not be negative"
 
     barcode = data.get("barcode")
     if barcode is not None and barcode != "" and not str(barcode).strip().isdigit():
