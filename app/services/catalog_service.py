@@ -87,6 +87,32 @@ class CatalogService:
     def get_product(self, product_id: int):
         return self.product_repo.get_by_id_or_404(product_id)
 
+    def _validate_product_identity(self, data: dict, exclude_product_id: int | None = None):
+        """Prevent duplicate tenant-scoped SKU/barcode before the DB write.
+
+        The fields remain nullable, so empty values are intentionally ignored.
+        This application-level guard protects existing databases even before a
+        future unique database index is installed.
+        """
+        sku = data.get("sku")
+        barcode = data.get("barcode")
+
+        normalized_sku = str(sku).strip() if sku is not None else ""
+        normalized_barcode = str(barcode).strip() if barcode is not None else ""
+
+        if not normalized_sku and not normalized_barcode:
+            return
+
+        for product in self.product_repo.get_all_for_matching():
+            if exclude_product_id is not None and product.id == exclude_product_id:
+                continue
+
+            if normalized_sku and product.sku and product.sku.strip().casefold() == normalized_sku.casefold():
+                raise Conflict(f'SKU "{normalized_sku}" is already used by another product.')
+
+            if normalized_barcode and product.barcode and product.barcode.strip() == normalized_barcode:
+                raise Conflict(f'Barcode "{normalized_barcode}" is already used by another product.')
+
     def create_product(self, data: dict):
         if not isinstance(data, dict):
             raise BadRequest("Product payload must be an object")
@@ -97,7 +123,14 @@ class CatalogService:
         validation_error = validate_product_payload(data)
         if validation_error:
             raise BadRequest(validation_error)
+        self._validate_product_identity(data)
+
         fields = {k: v for k, v in data.items() if k in self.PRODUCT_FIELDS}
+        if fields.get("sku") is not None:
+            fields["sku"] = str(fields["sku"]).strip() or None
+        if fields.get("barcode") is not None:
+            fields["barcode"] = str(fields["barcode"]).strip() or None
+
         product = self.product_repo.model(tenant_id=self.tenant_id, supplier_id=supplier_id, **fields)
         self.product_repo.add(product)
         AuditService.log_event(
@@ -118,9 +151,19 @@ class CatalogService:
         validation_error = validate_product_payload(data)
         if validation_error:
             raise BadRequest(validation_error)
+
+        identity_data = {
+            "sku": data["sku"] if "sku" in data else product.sku,
+            "barcode": data["barcode"] if "barcode" in data else product.barcode,
+        }
+        self._validate_product_identity(identity_data, exclude_product_id=product.id)
+
         for field in self.PRODUCT_FIELDS:
             if field in data:
-                setattr(product, field, data[field])
+                value = data[field]
+                if field in ("sku", "barcode") and value is not None:
+                    value = str(value).strip() or None
+                setattr(product, field, value)
 
         AuditService.log_event(
             self.tenant_id, self.user_id, "catalog.product_updated",
