@@ -10,7 +10,6 @@ from app.models.import_session import ImportSession, STATUS_FAILED
 from app.models.order import Order, STATUS_DRAFT
 from app.models.product import Product
 from app.models.supplier import Supplier
-from app.models.supplier_product_offer import SupplierProductOffer
 from app.models.user import ROLE_ADMIN, User
 from app.services.admin_service import AdminService
 from app.services.audit_service import AuditService
@@ -132,9 +131,7 @@ def delete_product(product_id: int):
     product = _tenant_product(product_id)
     if product.active:
         raise Conflict("Deactivate the product before permanent deletion.")
-    offer_count = db.session.scalar(select(func.count(SupplierProductOffer.id)).where(
-        SupplierProductOffer.tenant_id == current_user.tenant_id, SupplierProductOffer.product_id == product.id,
-    )) or 0
+    offer_count = len(product.supplier_offers)
     if offer_count:
         raise Conflict(f"Product has {offer_count} supplier offer(s). Remove the offers before deleting the product.")
     name = product.name
