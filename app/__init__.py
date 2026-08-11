@@ -14,23 +14,20 @@ def create_app(config_name=None):
     app.config.from_object(config_class)
     config_class.init_app(app)
 
+    # Production must fail closed instead of silently starting with a known
+    # Flask secret, a local SQLite fallback, or an accidental localhost CORS
+    # policy that makes the deployed frontend unusable.
     if config_class.__name__ == "ProductionConfig":
-        missing = [
-            name for name in ("SECRET_KEY", "DATABASE_URL", "CORS_ORIGINS")
-            if not os.environ.get(name)
-        ]
+        required = ("SECRET_KEY", "DATABASE_URL", "CORS_ORIGINS", "SQLALCHEMY_DATABASE_URI")
+        missing = [name for name in required if not app.config.get(name)]
         if missing:
             raise RuntimeError(
-                "Missing required production environment variable(s): "
-                + ", ".join(missing)
+                "Missing required production configuration: " + ", ".join(missing)
             )
-        app.config["CORS_ORIGINS"] = [
-            origin.strip()
-            for origin in os.environ["CORS_ORIGINS"].split(",")
-            if origin.strip()
-        ]
         if not app.config["CORS_ORIGINS"]:
-            raise RuntimeError("CORS_ORIGINS must contain at least one allowed origin in production")
+            raise RuntimeError(
+                "CORS_ORIGINS must contain at least one allowed origin in production"
+            )
 
     _ensure_directories(app)
     _init_extensions(app)
@@ -42,10 +39,10 @@ def create_app(config_name=None):
 
 def _ensure_directories(app):
     os.makedirs(app.instance_path, exist_ok=True)
-    # Uploaded business documents are private application data. Never place
-    # them below Flask's static directory where the web server can serve them
-    # without tenant/auth checks.
-    upload_dir = os.path.join(app.instance_path, "uploads")
+
+    # Uploaded business documents are tenant-private data. Never place them
+    # below app/static because Flask serves that directory publicly.
+    upload_dir = os.path.join(app.instance_path, app.config["PRIVATE_UPLOAD_SUBDIR"])
     os.makedirs(upload_dir, exist_ok=True)
     app.config["UPLOAD_FOLDER"] = upload_dir
 
@@ -110,6 +107,9 @@ def _register_blueprints(app):
     app.register_blueprint(health_bp)
     app.register_blueprint(imports_bp)
     app.register_blueprint(users_bp)
+    # Admin endpoints must be registered explicitly. Without this blueprint,
+    # DELETE/PATCH /api/admin/* calls return 404 before Flask-CORS can produce
+    # a valid preflight response, which makes the browser report a CORS error.
     app.register_blueprint(admin_bp)
 
     csrf.exempt(health_bp)
