@@ -1,11 +1,13 @@
 import re
 import unicodedata
 
-from email_validator import EmailNotValidError, validate_email
 
-# Deliberately keep application email validation syntax-focused. The
-# email-validator package is useful for normalization, but it must not reject a
-# normal address that the application can safely store and use as a login.
+# Syntax-only validation for login email addresses.
+#
+# We deliberately do not perform DNS/deliverability checks and do not depend
+# on the version-specific policy of email-validator. A valid application login
+# address such as elia@reshit.co.il must behave identically in local, CI and
+# Render environments.
 EMAIL_RE = re.compile(
     r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
     r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
@@ -19,7 +21,7 @@ _EMAIL_IGNORABLE_CHARS = {
 
 
 def normalize_email(email: str) -> str:
-    """Normalize user-entered email without performing DNS/deliverability checks."""
+    """Normalize a user-entered login email without network checks."""
     if not isinstance(email, str):
         return ""
 
@@ -27,34 +29,26 @@ def normalize_email(email: str) -> str:
     normalized = "".join(ch for ch in normalized if ch not in _EMAIL_IGNORABLE_CHARS)
     normalized = normalized.replace("\u00a0", " ").strip()
 
+    # Be tolerant if a copied address includes the common mailto: prefix or
+    # surrounding angle quotes/quotation marks.
     if normalized.lower().startswith("mailto:"):
         normalized = normalized[7:].strip()
 
-    normalized = normalized.strip("<>\"'").strip().lower()
-    return normalized
+    return normalized.strip("<>\"'").strip().lower()
 
 
 def is_valid_email(email: str) -> bool:
-    """Validate a normal login email address without DNS checks.
+    """Return True when *email* has a safe, conventional login syntax.
 
-    The application's accepted format is intentionally syntax-based. This
-    prevents environment/package-specific behavior in email-validator from
-    blocking legitimate addresses such as ``elia@reshit.co.il``.
+    This function intentionally has no dependency on email-validator. The
+    application does not need DNS or mailbox verification merely to create a
+    login account, and package-policy differences must not turn a valid address
+    into a 400 response.
     """
     normalized = normalize_email(email)
     if not normalized or len(normalized) > 254:
         return False
-    if not EMAIL_RE.fullmatch(normalized):
-        return False
-
-    # Try the standards-oriented parser as an additional sanity check. If its
-    # version-specific policy rejects an otherwise valid application address,
-    # the explicit syntax check above remains authoritative.
-    try:
-        result = validate_email(normalized, check_deliverability=False)
-        return bool(result.normalized)
-    except (EmailNotValidError, TypeError, ValueError):
-        return True
+    return EMAIL_RE.fullmatch(normalized) is not None
 
 
 def is_strong_password(password: str) -> bool:
