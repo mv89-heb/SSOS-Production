@@ -14,9 +14,6 @@ def create_app(config_name=None):
     app.config.from_object(config_class)
     config_class.init_app(app)
 
-    # Production must fail closed instead of silently starting with a known
-    # Flask secret, a local SQLite fallback, or an accidental localhost CORS
-    # policy that makes the deployed frontend unusable.
     if config_class.__name__ == "ProductionConfig":
         missing = [
             name for name in ("SECRET_KEY", "DATABASE_URL", "CORS_ORIGINS")
@@ -45,7 +42,10 @@ def create_app(config_name=None):
 
 def _ensure_directories(app):
     os.makedirs(app.instance_path, exist_ok=True)
-    upload_dir = os.path.join(app.root_path, "static", "uploads")
+    # Uploaded business documents are private application data. Never place
+    # them below Flask's static directory where the web server can serve them
+    # without tenant/auth checks.
+    upload_dir = os.path.join(app.instance_path, "uploads")
     os.makedirs(upload_dir, exist_ok=True)
     app.config["UPLOAD_FOLDER"] = upload_dir
 
@@ -100,6 +100,7 @@ def _register_blueprints(app):
     from app.routes.health import health_bp
     from app.routes.imports import imports_bp
     from app.routes.users import users_bp
+    from app.routes.admin import admin_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
@@ -109,6 +110,7 @@ def _register_blueprints(app):
     app.register_blueprint(health_bp)
     app.register_blueprint(imports_bp)
     app.register_blueprint(users_bp)
+    app.register_blueprint(admin_bp)
 
     csrf.exempt(health_bp)
 
