@@ -1,0 +1,2 @@
+Temporary deployment verification marker for ssos-backend/main synchronization.
+Created to verify that the Render backend service is deploying from the repository main branch.
