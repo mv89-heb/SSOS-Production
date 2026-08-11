@@ -1,8 +1,27 @@
 from datetime import datetime, timezone
 from app.extensions import db
 
+
 class Product(db.Model):
     __tablename__ = "products"
+    __table_args__ = (
+        db.Index(
+            "uq_products_tenant_sku",
+            "tenant_id",
+            "sku",
+            unique=True,
+            postgresql_where=db.text("sku IS NOT NULL AND btrim(sku) <> ''"),
+            sqlite_where=db.text("sku IS NOT NULL AND trim(sku) <> ''"),
+        ),
+        db.Index(
+            "uq_products_tenant_barcode",
+            "tenant_id",
+            "barcode",
+            unique=True,
+            postgresql_where=db.text("barcode IS NOT NULL AND btrim(barcode) <> ''"),
+            sqlite_where=db.text("barcode IS NOT NULL AND trim(barcode) <> ''"),
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
