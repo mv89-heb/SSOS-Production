@@ -15,11 +15,11 @@ def create_app(config_name=None):
     config_class.init_app(app)
 
     # Production must fail closed instead of silently starting with a known
-    # Flask secret or a local SQLite fallback. CORS remains configurable via
-    # CORS_ORIGINS and keeps the existing working deployment behavior.
+    # Flask secret, a local SQLite fallback, or an accidental localhost CORS
+    # policy that makes the deployed frontend unusable.
     if config_class.__name__ == "ProductionConfig":
         missing = [
-            name for name in ("SECRET_KEY", "DATABASE_URL")
+            name for name in ("SECRET_KEY", "DATABASE_URL", "CORS_ORIGINS")
             if not os.environ.get(name)
         ]
         if missing:
@@ -27,6 +27,13 @@ def create_app(config_name=None):
                 "Missing required production environment variable(s): "
                 + ", ".join(missing)
             )
+        app.config["CORS_ORIGINS"] = [
+            origin.strip()
+            for origin in os.environ["CORS_ORIGINS"].split(",")
+            if origin.strip()
+        ]
+        if not app.config["CORS_ORIGINS"]:
+            raise RuntimeError("CORS_ORIGINS must contain at least one allowed origin in production")
 
     _ensure_directories(app)
     _init_extensions(app)
