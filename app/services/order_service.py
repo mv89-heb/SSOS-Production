@@ -1,5 +1,6 @@
 from werkzeug.exceptions import BadRequest, Conflict, NotFound
 
+from app.models.user import ROLE_ADMIN, ROLE_MANAGER
 from app.models.order import (
     Order,
     STATUS_DRAFT,
@@ -94,6 +95,8 @@ class OrderService:
             raise Conflict(
                 f"Order can only be edited while in '{STATUS_DRAFT}' status (current: '{order.status}')"
             )
+        if user.role not in (ROLE_MANAGER, ROLE_ADMIN) and order.user_id != user.id:
+            raise Conflict("Only the order creator or a manager can edit this draft")
 
         if "notes" in payload:
             order.notes = payload.get("notes")
@@ -145,6 +148,8 @@ class OrderService:
             raise Conflict(
                 f"Only '{STATUS_DRAFT}' orders can be submitted (current: '{order.status}')"
             )
+        if user.role not in (ROLE_MANAGER, ROLE_ADMIN) and order.user_id != user.id:
+            raise Conflict("Only the order creator or a manager can submit this draft")
         if not order.items:
             raise Conflict("An order must contain at least one item before submission")
 
@@ -190,6 +195,8 @@ class OrderService:
             raise Conflict(
                 f"Only '{STATUS_SUBMITTED}' orders can be rejected (current: '{order.status}')"
             )
+        if order.user_id == user.id:
+            raise Conflict("The order creator cannot reject their own order")
 
         reason = (reason or "").strip()
         if len(reason) > 1000:
