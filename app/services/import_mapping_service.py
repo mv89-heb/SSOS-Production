@@ -74,6 +74,11 @@ def _is_positive_int(value) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
+def _template_key(column_index: int, header: str) -> str:
+    """Return a stable key that remains unique when a sheet repeats a header."""
+    return f"{column_index}:{header}"
+
+
 class ImportMappingService:
     def __init__(self, tenant_id: int, user_id: int):
         self.tenant_id = tenant_id
@@ -333,8 +338,13 @@ class ImportMappingService:
                 raise BadRequest("supplier_id must be a positive integer")
             self.supplier_repo.get_by_id_or_404(supplier_id)
 
+        # Use index + header as the persisted key. Header-only keys break when
+        # a supplier workbook legitimately contains duplicate labels such as
+        # two different "מחיר" columns.
         column_mapping = {
-            c.column_header: {
+            _template_key(c.column_index, c.column_header): {
+                "column_index": c.column_index,
+                "column_header": c.column_header,
                 "target": c.final_target,
                 "supplier_id": c.final_supplier_id,
                 "supplier_name": c.final_supplier_name,
@@ -364,14 +374,7 @@ class ImportMappingService:
         return self.template_repo.list_all()
 
     def _validate_template_scope(self, mapping, template):
-        """Prevent a reusable template from silently switching suppliers.
-
-        A TALL session has one supplier at the session level. A WIDE session
-        has no single supplier and may legitimately contain supplier IDs per
-        offer column. Both the template-level supplier and any embedded
-        supplier IDs must agree with the target session when a single supplier
-        is known.
-        """
+        """Prevent a reusable template from silently switching suppliers."""
         session_supplier_id = (
             mapping.session.supplier_id
             if mapping.session is not None
@@ -396,9 +399,13 @@ class ImportMappingService:
             if supplier_id is not None:
                 if not _is_positive_int(supplier_id):
                     raise Conflict("Template contains an invalid supplier_id")
+                # Fetching through the tenant-scoped repository also prevents
+                # a template from referencing a supplier owned by another tenant.
+                self.supplier_repo.get_by_id_or_404(supplier_id)
                 embedded_supplier_ids.add(supplier_id)
 
         if template_supplier_id is not None:
+            self.supplier_repo.get_by_id_or_404(template_supplier_id)
             if any(supplier_id != template_supplier_id for supplier_id in embedded_supplier_ids):
                 raise Conflict(
                     "Template contains supplier mappings that do not match its supplier."
@@ -409,6 +416,29 @@ class ImportMappingService:
                 raise Conflict(
                     "Template contains supplier mappings for a different supplier than this import."
                 )
+
+    @staticmethod
+    def _template_entry_for_column(template, col):
+        """Resolve both new index-safe templates and legacy header-only templates."""
+        mapping = template.column_mapping or {}
+        exact = mapping.get(_template_key(col.column_index, col.column_header))
+        if exact is not None:
+            return exact
+
+        # Backward compatibility for templates saved before the duplicate-header
+        # fix. Only accept a legacy header key when it is unambiguous in the
+        # current mapping; otherwise fail closed rather than applying the same
+        # decision to multiple columns.
+        legacy = mapping.get(col.column_header)
+        if legacy is None:
+            return None
+        matching = [
+            value for key, value in mapping.items()
+            if isinstance(key, str)
+            and key == col.column_header
+            and isinstance(value, dict)
+        ]
+        return legacy if len(matching) == 1 else None
 
     def apply_template(self, mapping_id: int, template_id: int):
         mapping = self.mapping_repo.get_by_id_or_404(mapping_id)
@@ -424,8 +454,8 @@ class ImportMappingService:
 
         applied_count = 0
         for col in mapping.columns:
-            entry = template.column_mapping.get(col.column_header)
-            if not entry:
+            entry = self._template_entry_for_column(template, col)
+            if entry is None:
                 continue
             if not isinstance(entry, dict):
                 raise Conflict(f"Invalid mapping entry for column {col.column_header}")
