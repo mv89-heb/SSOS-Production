@@ -14,6 +14,13 @@ def _csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
 
 
+def _required_env(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise RuntimeError(f"{name} must be configured in production")
+    return value
+
+
 class BaseConfig:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key-change-me")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -48,15 +55,24 @@ class BaseConfig:
 
 class ProductionConfig(BaseConfig):
     DEBUG = False
-    db_url = os.environ.get("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'instance', 'ssos.db')}")
-    db_url = _normalize_db_url(db_url)
+
+    # Production must fail closed. Never silently fall back to SQLite or a
+    # development signing key when a required deployment secret is missing.
+    SECRET_KEY = _required_env("SECRET_KEY")
+    DATABASE_URL = _required_env("DATABASE_URL")
+    CORS_ORIGINS = _csv_env("CORS_ORIGINS")
+    if not CORS_ORIGINS:
+        raise RuntimeError("CORS_ORIGINS must contain at least one allowed origin in production")
+
+    db_url = _normalize_db_url(DATABASE_URL)
+    if not db_url.startswith("postgresql"):
+        raise RuntimeError("Production DATABASE_URL must use PostgreSQL/Neon")
     SQLALCHEMY_DATABASE_URI = db_url
-    if db_url.startswith("postgresql"):
-        SQLALCHEMY_ENGINE_OPTIONS = {
-            "connect_args": {"sslmode": "require"},
-            "pool_pre_ping": True,
-            "pool_recycle": 300,
-        }
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "connect_args": {"sslmode": "require"},
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+    }
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_SAMESITE = "None"
 
