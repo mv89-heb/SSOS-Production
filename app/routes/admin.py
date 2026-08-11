@@ -29,12 +29,8 @@ def _require_admin():
 
 @admin_bp.before_request
 def _admin_guard():
-    # CORS preflight requests are anonymous OPTIONS requests. Let Flask-CORS
-    # answer them before the admin authentication/authorization guard runs.
-    # The real request is still fully protected by _require_admin().
     if request.method == "OPTIONS":
         return None
-
     try:
         _require_admin()
     except HTTPException as exc:
@@ -47,6 +43,13 @@ def _tenant_product(product_id: int) -> Product:
     if product is None:
         raise NotFound("Product not found")
     return product
+
+
+def _tenant_order(order_id: int) -> Order:
+    order = db.session.execute(select(Order).where(Order.id == order_id, Order.tenant_id == current_user.tenant_id)).scalar_one_or_none()
+    if order is None:
+        raise NotFound("Order not found")
+    return order
 
 
 @admin_bp.route("/overview", methods=["GET"])
@@ -131,6 +134,38 @@ def delete_product(product_id: int):
     return jsonify({"success": True})
 
 
+@admin_bp.route("/orders/<int:order_id>", methods=["GET"])
+@login_required
+def get_order(order_id: int):
+    order = _tenant_order(order_id)
+    return jsonify({"success": True, "order": order.to_dict()})
+
+
+@admin_bp.route("/orders/<int:order_id>", methods=["PATCH"])
+@login_required
+def update_order(order_id: int):
+    order = _tenant_order(order_id)
+    data = request.get_json(silent=True) or {}
+    allowed_statuses = {"draft", "submitted", "approved", "sent", "completed", "cancelled"}
+    changes = {}
+    if "notes" in data:
+        order.notes = (data.get("notes") or "").strip() or None
+        changes["notes_changed"] = True
+    if "status" in data:
+        status = str(data.get("status") or "").strip().lower()
+        if status not in allowed_statuses:
+            raise Conflict("Invalid order status")
+        if status != order.status:
+            changes["from_status"] = order.status
+            changes["to_status"] = status
+            order.status = status
+    if not changes:
+        return jsonify({"success": True, "order": order.to_dict(), "changed": False})
+    AuditService.log_event(current_user.tenant_id, current_user.id, "admin.order_updated", f"Order {order.order_number} updated by administrator", {"order_id": order.id, **changes})
+    db.session.commit()
+    return jsonify({"success": True, "order": order.to_dict(), "changed": True})
+
+
 @admin_bp.route("/orders/<int:order_id>", methods=["DELETE"])
 @login_required
 def delete_order(order_id: int):
@@ -139,6 +174,21 @@ def delete_order(order_id: int):
         db.session.commit()
         return jsonify({"success": True})
     except HTTPException as exc: return _handle(exc)
+
+
+@admin_bp.route("/audit", methods=["GET"])
+@login_required
+def admin_audit():
+    from app.repositories.audit_repository import AuditRepository
+    limit = min(max(request.args.get("limit", 50, type=int) or 50, 1), 200)
+    offset = max(request.args.get("offset", 0, type=int) or 0, 0)
+    logs = AuditRepository(tenant_id=current_user.tenant_id).list_all(limit=limit, offset=offset)
+    action = (request.args.get("action") or "").strip().lower()
+    items = [log.to_dict() for log in logs]
+    if action:
+        items = [item for item in items if action in str(item.get("action", "")).lower()]
+    valid, broken_id = AuditService.verify_chain(current_user.tenant_id)
+    return jsonify({"success": True, "logs": items, "audit_chain_valid": valid, "first_broken_log_id": broken_id, "limit": limit, "offset": offset})
 
 
 @admin_bp.route("/imports/<int:session_id>", methods=["DELETE"])
