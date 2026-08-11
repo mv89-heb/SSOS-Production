@@ -95,3 +95,62 @@ def test_invalid_order_quantities_are_rejected(logged_in_client_a, make_order):
     for quantity in (0, -1, 100001, "abc"):
         resp, _, _ = make_order(logged_in_client_a, quantity=quantity, sku=f"SKU-{quantity}")
         assert resp.status_code == 400, (quantity, resp.get_json())
+
+
+def test_employee_cannot_edit_another_users_draft(logged_in_client_a, tenant_a_admin, make_order):
+    tenant_data, _ = tenant_a_admin
+    slug = tenant_data["tenant"]["slug"]
+
+    first, _, _ = make_order(logged_in_client_a, product_name="Protected Draft")
+    assert first.status_code == 201
+    order_id = first.get_json()["order"]["id"]
+
+    logged_in_client_a.post("/api/auth/logout")
+    register = logged_in_client_a.post("/api/auth/register", json={
+        "email": "second.employee@acme.test",
+        "password": "Passw0rd1",
+        "full_name": "Second Employee",
+        "tenant_slug": slug,
+    })
+    assert register.status_code == 201
+    logged_in_client_a.post("/api/auth/login", json={
+        "email": "second.employee@acme.test", "password": "Passw0rd1"
+    })
+
+    blocked = logged_in_client_a.put(f"/api/orders/{order_id}", json={"notes": "hijacked"})
+    assert blocked.status_code == 409
+
+
+def test_employee_cannot_submit_another_users_draft(logged_in_client_a, tenant_a_admin, make_order):
+    tenant_data, _ = tenant_a_admin
+    slug = tenant_data["tenant"]["slug"]
+
+    first, _, _ = make_order(logged_in_client_a, product_name="Protected Submit")
+    assert first.status_code == 201
+    order_id = first.get_json()["order"]["id"]
+
+    logged_in_client_a.post("/api/auth/logout")
+    register = logged_in_client_a.post("/api/auth/register", json={
+        "email": "third.employee@acme.test",
+        "password": "Passw0rd1",
+        "full_name": "Third Employee",
+        "tenant_slug": slug,
+    })
+    assert register.status_code == 201
+    logged_in_client_a.post("/api/auth/login", json={
+        "email": "third.employee@acme.test", "password": "Passw0rd1"
+    })
+
+    blocked = logged_in_client_a.post(f"/api/orders/{order_id}/submit")
+    assert blocked.status_code == 409
+
+
+def test_order_creator_cannot_reject_own_order(logged_in_client_a, make_order):
+    first, _, _ = make_order(logged_in_client_a, product_name="Own Reject")
+    assert first.status_code == 201
+    order_id = first.get_json()["order"]["id"]
+    assert logged_in_client_a.post(f"/api/orders/{order_id}/submit").status_code == 200
+
+    blocked = logged_in_client_a.post(f"/api/orders/{order_id}/reject", json={"reason": "self reject"})
+    assert blocked.status_code == 409
+    assert "creator" in blocked.get_json()["message"].lower()
