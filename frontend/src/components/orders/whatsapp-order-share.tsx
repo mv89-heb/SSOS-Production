@@ -10,10 +10,6 @@ type ShareOrder = {
   supplier_name: string;
   currency: string;
   items: OrderItem[];
-  subtotal: number;
-  discount_total: number;
-  tax_total: number;
-  final_total: number;
   notes?: string | null;
 };
 
@@ -22,25 +18,21 @@ type TemplateKey = "formal" | "short" | "delivery";
 const templates: Record<TemplateKey, { label: string; build: (order: ShareOrder) => string }> = {
   formal: {
     label: "הזמנה רשמית",
-    build: order => `שלום ${order.supplier_name},\n\nמצורפת הזמנת רכש ${order.order_number}.\nנשמח לאישור קבלת ההזמנה ולתיאום אספקה.\n\nסה״כ הזמנה: ${money(order.currency, order.final_total)}\nמספר פריטים: ${order.items.length}${order.notes ? `\n\nהערות:\n${order.notes}` : ""}\n\nתודה רבה.`,
+    build: order => `שלום ${order.supplier_name},\n\nמצורפת הזמנת רכש ${order.order_number}.\n\nנשמח לאישור קבלת ההזמנה ולתיאום אספקה.${order.notes ? `\n\nהערות:\n${order.notes}` : ""}\n\nתודה רבה.`,
   },
   short: {
     label: "הודעה קצרה",
-    build: order => `שלום, הזמנת רכש ${order.order_number} מוכנה לאישור. סה״כ: ${money(order.currency, order.final_total)}. אשמח לאישור קבלה ותיאום אספקה. תודה.`,
+    build: order => `שלום, הזמנת רכש ${order.order_number} מוכנה לאישור. אשמח לאישור קבלה ותיאום אספקה.${order.notes ? `\nהערה: ${order.notes}` : ""} תודה.`,
   },
   delivery: {
     label: "תיאום אספקה",
-    build: order => `שלום, לגבי הזמנה ${order.order_number} בסך ${money(order.currency, order.final_total)} — נשמח לתאם מועד אספקה. אנא אשרו קבלת ההזמנה וציינו מועד אספקה אפשרי. תודה.`,
+    build: order => `שלום, לגבי הזמנה ${order.order_number} — נשמח לתאם מועד אספקה. אנא אשרו קבלת ההזמנה וציינו מועד אספקה אפשרי.${order.notes ? `\nהערות: ${order.notes}` : ""}\nתודה.`,
   },
 };
 
-function money(currency: string, value: number) {
-  return `${currency} ${Number(value || 0).toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 function buildDetailedMessage(order: ShareOrder) {
-  const lines = order.items.map((item, index) => `${index + 1}. ${item.product_name} | כמות: ${item.quantity} | ${money(order.currency, item.unit_price)} ליח׳ | ${money(order.currency, item.total_price)}`);
-  return `שלום ${order.supplier_name},\n\nהזמנת רכש ${order.order_number}\n\n${lines.join("\n")}\n\nסה״כ לפני הנחות: ${money(order.currency, order.subtotal)}\nהנחה: ${money(order.currency, order.discount_total)}\nמע״מ: ${money(order.currency, order.tax_total)}\nסה״כ לתשלום: ${money(order.currency, order.final_total)}${order.notes ? `\n\nהערות:\n${order.notes}` : ""}\n\nנשמח לאישור קבלת ההזמנה ולתיאום אספקה. תודה רבה.`;
+  const lines = order.items.map((item, index) => `${index + 1}. ${item.product_name} | כמות: ${item.quantity}`);
+  return `שלום ${order.supplier_name},\n\nהזמנת רכש ${order.order_number}\n\n${lines.join("\n")}${order.notes ? `\n\nהערות:\n${order.notes}` : ""}\n\nנשמח לאישור קבלת ההזמנה ולתיאום אספקה. תודה רבה.`;
 }
 
 export function WhatsAppOrderShare({ order }: { order: ShareOrder }) {
