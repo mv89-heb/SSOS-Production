@@ -8,7 +8,6 @@ from app.models.import_session import ImportSession
 from app.models.order import Order
 from app.models.product import Product
 from app.models.supplier import Supplier
-from app.models.supplier_offer import SupplierProductOffer
 from app.models.user import ROLE_ADMIN, User
 from app.services.audit_service import AuditService
 
@@ -95,8 +94,8 @@ class AdminService:
         supplier = self._tenant_supplier(supplier_id)
         if supplier.active:
             raise Conflict("Deactivate the supplier before permanent deletion.")
-        product_count = int(db.session.scalar(select(func.count(Product.id)).where(Product.tenant_id == self.tenant_id, Product.supplier_id == supplier.id)) or 0)
-        offer_count = int(db.session.scalar(select(func.count(SupplierProductOffer.id)).where(SupplierProductOffer.tenant_id == self.tenant_id, SupplierProductOffer.supplier_id == supplier.id)) or 0)
+        product_count = len(supplier.products)
+        offer_count = len(supplier.offered_products)
         import_count = int(db.session.scalar(select(func.count(ImportSession.id)).where(ImportSession.tenant_id == self.tenant_id, ImportSession.supplier_id == supplier.id)) or 0)
         if product_count or offer_count or import_count:
             raise Conflict(f"Supplier has {product_count} product(s), {offer_count} offer(s), or {import_count} import(s). Remove/archive dependent data first.")
