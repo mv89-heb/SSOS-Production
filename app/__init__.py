@@ -14,6 +14,20 @@ def create_app(config_name=None):
     app.config.from_object(config_class)
     config_class.init_app(app)
 
+    # Production must fail closed instead of silently starting with a known
+    # Flask secret, a local SQLite fallback, or an implicit localhost CORS
+    # policy. Explicit test/development configs remain self-contained.
+    if config_class.__name__ == "ProductionConfig":
+        missing = [
+            name for name in ("SECRET_KEY", "DATABASE_URL", "CORS_ORIGINS")
+            if not os.environ.get(name)
+        ]
+        if missing:
+            raise RuntimeError(
+                "Missing required production environment variable(s): "
+                + ", ".join(missing)
+            )
+
     _ensure_directories(app)
     _init_extensions(app)
     _register_blueprints(app)
