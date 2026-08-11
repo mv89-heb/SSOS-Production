@@ -1,6 +1,7 @@
 import io
 
 import openpyxl
+from flask_login import current_user
 
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -31,12 +32,8 @@ def test_template_for_supplier_a_cannot_be_applied_to_supplier_b(logged_in_clien
         "/api/catalog/suppliers", json={"name": "Supplier B"}
     ).get_json()["supplier"]
 
-    # Mapping creation/approval is intentionally not exercised here; this is
-    # a service-boundary regression test through the HTTP mapping endpoints.
     from app.extensions import db
-    from app.models.import_mapping import ImportMapping
     from app.models.import_mapping import ImportMappingTemplate
-    from app.models.import_session import STATUS_UPLOADED
 
     data = _xlsx_bytes([["מוצר", "מחיר"], ["X", "10"]])
     response = _upload(logged_in_client_a, data, supplier_id=supplier_b["id"])
@@ -46,20 +43,27 @@ def test_template_for_supplier_a_cannot_be_applied_to_supplier_b(logged_in_clien
     logged_in_client_a.post(f"/api/imports/{session_id}/analyze")
     mapping_response = logged_in_client_a.get(f"/api/imports/{session_id}/mapping")
     assert mapping_response.status_code == 200
-    mapping_id = mapping_response.get_json()["mapping"]["id"]
 
-    # Seed a maliciously reusable template directly so the test remains
-    # focused on the service's scope validation rather than UI suggestion logic.
     template = ImportMappingTemplate(
-        tenant_id=supplier_b["id"] and 1,
+        tenant_id=current_user.tenant_id,
         supplier_id=supplier_a["id"],
         name="Supplier A template",
         source_filename="template-scope.xlsx",
         column_mapping={
-            "מוצר": {"target": "PRODUCT_NAME", "supplier_id": None, "supplier_name": None, "price_type": None},
-            "מחיר": {"target": "PRICE", "supplier_id": supplier_a["id"], "supplier_name": "Supplier A", "price_type": None},
+            "מוצר": {
+                "target": "PRODUCT_NAME",
+                "supplier_id": None,
+                "supplier_name": None,
+                "price_type": None,
+            },
+            "מחיר": {
+                "target": "PRICE",
+                "supplier_id": supplier_a["id"],
+                "supplier_name": "Supplier A",
+                "price_type": None,
+            },
         },
-        created_by=1,
+        created_by=current_user.id,
     )
     db.session.add(template)
     db.session.commit()
