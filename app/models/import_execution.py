@@ -15,8 +15,23 @@ class ImportExecution(db.Model):
     pipeline that writes to products/suppliers/supplier_product_offers —
     and it only ever does so via CatalogService's existing validated,
     audited write methods, never by touching those tables directly.
+
+    Database invariant: at most one COMMITTED execution may exist for a
+    tenant/session at any moment. Once rolled back, a new execution for the
+    same session is allowed. This is a second line of defense in addition
+    to the ImportSession row lock in ImportExecutionService.
     """
     __tablename__ = "import_executions"
+    __table_args__ = (
+        db.Index(
+            "uq_import_executions_tenant_session_committed",
+            "tenant_id",
+            "import_session_id",
+            unique=True,
+            postgresql_where=db.text("status = 'COMMITTED'"),
+            sqlite_where=db.text("status = 'COMMITTED'"),
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
