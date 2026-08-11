@@ -61,18 +61,17 @@ class AdminService:
         user = self._tenant_user(user_id)
         if user.id == self.actor_user_id:
             raise Conflict("You cannot delete your own account.")
-        if user.active:
-            raise Conflict("Deactivate the user before permanent deletion.")
-        if user.role == ROLE_ADMIN and self._active_admin_count(user.id) == 0:
-            raise Conflict("The last system administrator cannot be permanently deleted.")
+        if user.role == ROLE_ADMIN and user.active and self._active_admin_count(user.id) == 0:
+            raise Conflict("The last active administrator cannot be permanently deleted.")
         order_count = int(db.session.scalar(select(func.count(Order.id)).where(Order.tenant_id == self.tenant_id, Order.user_id == user.id)) or 0)
         import_count = int(db.session.scalar(select(func.count(ImportSession.id)).where(ImportSession.tenant_id == self.tenant_id, ImportSession.uploaded_by == user.id)) or 0)
         if order_count or import_count:
-            raise Conflict(f"User has {order_count} order(s) and {import_count} import(s) in history. Keep the account deactivated instead of deleting it.")
+            raise Conflict(f"User has {order_count} order(s) and {import_count} import(s) in history. Keep the account instead of deleting it.")
         email = user.email
         target_id = user.id
+        target_role = user.role
         db.session.delete(user)
-        AuditService.log_event(self.tenant_id, self.actor_user_id, "admin.user_deleted", f"Permanently deleted user {email}", {"target_user_id": target_id, "target_role": user.role})
+        AuditService.log_event(self.tenant_id, self.actor_user_id, "admin.user_deleted", f"Permanently deleted user {email}", {"target_user_id": target_id, "target_role": target_role})
 
     def deactivate_supplier(self, supplier_id: int) -> Supplier:
         supplier = self._tenant_supplier(supplier_id)
@@ -92,8 +91,6 @@ class AdminService:
 
     def delete_supplier(self, supplier_id: int) -> None:
         supplier = self._tenant_supplier(supplier_id)
-        if supplier.active:
-            raise Conflict("Deactivate the supplier before permanent deletion.")
         product_count = len(supplier.products)
         offer_count = len(supplier.offered_products)
         import_count = int(db.session.scalar(select(func.count(ImportSession.id)).where(ImportSession.tenant_id == self.tenant_id, ImportSession.supplier_id == supplier.id)) or 0)
