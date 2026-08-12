@@ -11,7 +11,10 @@ export function AutoClassifyButton() {
   const mutation = useAutoClassifyProducts();
   const [message, setMessage] = useState<string | null>(null);
 
-  if (!pathname?.startsWith("/dashboard/catalog")) return null;
+  // The dashboard uses locale-prefixed routes (for example /he/dashboard/catalog).
+  // Match the catalog segment rather than assuming a non-localized pathname.
+  const isCatalogPage = Boolean(pathname?.match(/(?:^|\/)dashboard\/catalog(?:\/|$)/));
+  if (!isCatalogPage) return null;
 
   const run = () => {
     setMessage(null);
