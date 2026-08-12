@@ -24,9 +24,16 @@ def create_app(config_name=None):
 
     _ensure_directories(app)
     _init_extensions(app)
+    _install_import_analysis_patches()
     _register_blueprints(app)
     _register_error_handlers(app)
     return app
+
+
+def _install_import_analysis_patches():
+    """Install small compatibility enrichments before import routes are loaded."""
+    from app.services.import_supplier_detection import install_supplier_detection_patch
+    install_supplier_detection_patch()
 
 
 def _ensure_directories(app):
