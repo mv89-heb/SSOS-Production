@@ -18,21 +18,24 @@ def test_product_is_classified_automatically_on_create(logged_in_client_a):
     assert product["category_confidence"] is not None
 
 
-def test_user_feedback_is_reused_for_same_normalized_name(app, db):
-    with app.app_context():
-        service = ProductClassificationService()
-        feedback = service.record_feedback(
-            tenant_id=1,
-            user_id=None,
-            product_id=1,
-            product_name="טבעות בצל קפואות 1 קג",
-            actual_category="קפואים",
-            predicted_category="ירקות",
-            confidence=0.55,
-        )
-        db.session.commit()
-        result = service.classify(1, "טבעות בצל קפואות 1 קג")
+def test_user_feedback_is_reused_for_same_normalized_name(logged_in_client_a, app, db):
+    supplier_response = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "Frozen Supplier"})
+    supplier_id = supplier_response.get_json()["supplier"]["id"]
+    product_response = logged_in_client_a.post(
+        "/api/catalog/products",
+        json={"supplier_id": supplier_id, "name": "טבעות בצל קפואות 1 קג", "current_price": 12},
+    )
+    product_id = product_response.get_json()["product"]["id"]
 
-        assert feedback.actual_category == "קפואים"
-        assert result["category"] == "קפואים"
-        assert result["source"] == "LEARNED"
+    response = logged_in_client_a.post(
+        f"/api/catalog/products/{product_id}/category-feedback",
+        json={"category": "קפואים"},
+    )
+    assert response.status_code == 200, response.get_json()
+
+    with app.app_context():
+        product = db.session.get(Product, product_id)
+        result = ProductClassificationService().classify(product.tenant_id, product.name)
+
+    assert result["category"] == "קפואים"
+    assert result["source"] == "LEARNED"
