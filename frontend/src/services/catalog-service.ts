@@ -61,23 +61,8 @@ export interface UpdateProductInput {
   recommended_stock?: number;
 }
 
-export interface CreateOfferInput {
-  supplier_id: number;
-  price: number;
-  currency?: string;
-  supplier_sku?: string;
-  unit?: string;
-  units_per_carton?: number;
-}
-
-export interface UpdateOfferInput {
-  price?: number;
-  currency?: string;
-  supplier_sku?: string;
-  unit?: string;
-  units_per_carton?: number;
-  active?: boolean;
-}
+export interface CreateOfferInput { supplier_id: number; price: number; currency?: string; supplier_sku?: string; unit?: string; units_per_carton?: number; }
+export interface UpdateOfferInput { price?: number; currency?: string; supplier_sku?: string; unit?: string; units_per_carton?: number; active?: boolean; }
 
 export const catalogService = {
   listSuppliers: async (activeOnly = false) => {
@@ -129,6 +114,15 @@ export const catalogService = {
   },
   classifyProduct: async (id: number) => {
     const { data } = await apiClient.post<{ success: boolean; classification: { category: string; confidence: number; source: string }; product: Product }>(`/api/catalog/products/${id}/classify`);
+    return data;
+  },
+  autoClassifyProducts: async (limit = 1000) => {
+    const { data } = await apiClient.post<{
+      success: boolean;
+      counts: { classified: number; review_needed: number; skipped: number };
+      examples: Array<{ id: number; name: string; category: string; confidence: number; source: string }>;
+      remaining_uncategorized: number;
+    }>("/api/catalog/products/auto-classify", { limit });
     return data;
   },
   saveCategoryFeedback: async (id: number, category: string) => {
