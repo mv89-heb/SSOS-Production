@@ -14,34 +14,23 @@ def create_app(config_name=None):
     app.config.from_object(config_class)
     config_class.init_app(app)
 
-    # Production must fail closed instead of silently starting with a known
-    # Flask secret, a local SQLite fallback, or an accidental localhost CORS
-    # policy that makes the deployed frontend unusable.
     if config_class.__name__ == "ProductionConfig":
         required = ("SECRET_KEY", "DATABASE_URL", "CORS_ORIGINS", "SQLALCHEMY_DATABASE_URI")
         missing = [name for name in required if not app.config.get(name)]
         if missing:
-            raise RuntimeError(
-                "Missing required production configuration: " + ", ".join(missing)
-            )
+            raise RuntimeError("Missing required production configuration: " + ", ".join(missing))
         if not app.config["CORS_ORIGINS"]:
-            raise RuntimeError(
-                "CORS_ORIGINS must contain at least one allowed origin in production"
-            )
+            raise RuntimeError("CORS_ORIGINS must contain at least one allowed origin in production")
 
     _ensure_directories(app)
     _init_extensions(app)
     _register_blueprints(app)
     _register_error_handlers(app)
-
     return app
 
 
 def _ensure_directories(app):
     os.makedirs(app.instance_path, exist_ok=True)
-
-    # Uploaded business documents are tenant-private data. Never place them
-    # below app/static because Flask serves that directory publicly.
     upload_dir = os.path.join(app.instance_path, app.config["PRIVATE_UPLOAD_SUBDIR"])
     os.makedirs(upload_dir, exist_ok=True)
     app.config["UPLOAD_FOLDER"] = upload_dir
@@ -53,13 +42,7 @@ def _init_extensions(app):
     login_manager.init_app(app)
     csrf.init_app(app)
     limiter.init_app(app)
-
-    cors.init_app(
-        app,
-        resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}},
-        supports_credentials=True,
-    )
-
+    cors.init_app(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}}, supports_credentials=True)
     swagger.init_app(app)
 
     @login_manager.unauthorized_handler
@@ -75,16 +58,7 @@ def _init_extensions(app):
             parsed_id = int(user_id)
         except (TypeError, ValueError):
             return None
-
-        stmt = (
-            select(User)
-            .join(User.tenant)
-            .where(
-                User.id == parsed_id,
-                User.active.is_(True),
-                Tenant.active.is_(True),
-            )
-        )
+        stmt = select(User).join(User.tenant).where(User.id == parsed_id, User.active.is_(True), Tenant.active.is_(True))
         return db.session.execute(stmt).scalar_one_or_none()
 
 
@@ -92,6 +66,7 @@ def _register_blueprints(app):
     from app.routes.auth import auth_bp
     from app.routes.orders import orders_bp
     from app.routes.catalog import catalog_bp
+    from app.routes.category_routes import category_bp
     from app.routes.audit import audit_bp
     from app.routes.notifications import notifications_bp
     from app.routes.health import health_bp
@@ -102,24 +77,17 @@ def _register_blueprints(app):
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
     app.register_blueprint(catalog_bp)
+    app.register_blueprint(category_bp)
     app.register_blueprint(audit_bp)
     app.register_blueprint(notifications_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(imports_bp)
     app.register_blueprint(users_bp)
-    # Admin endpoints must be registered explicitly. Without this blueprint,
-    # DELETE/PATCH /api/admin/* calls return 404 before Flask-CORS can produce
-    # a valid preflight response, which makes the browser report a CORS error.
     app.register_blueprint(admin_bp)
-
     csrf.exempt(health_bp)
 
 
 def _register_error_handlers(app):
     @app.errorhandler(HTTPException)
     def handle_exception(e):
-        return jsonify({
-            "success": False,
-            "error": e.name.lower().replace(" ", "_"),
-            "message": e.description,
-        }), e.code
+        return jsonify({"success": False, "error": e.name.lower().replace(" ", "_"), "message": e.description}), e.code
