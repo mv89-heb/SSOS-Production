@@ -12,7 +12,6 @@ export function AutoClassifyButton() {
   const [message, setMessage] = useState<string | null>(null);
 
   // The dashboard uses locale-prefixed routes (for example /he/dashboard/catalog).
-  // Match the catalog segment rather than assuming a non-localized pathname.
   const isCatalogPage = Boolean(pathname?.match(/(?:^|\/)dashboard\/catalog(?:\/|$)/));
   if (!isCatalogPage) return null;
 
@@ -27,19 +26,30 @@ export function AutoClassifyButton() {
   };
 
   return (
-    <div className="fixed bottom-5 left-5 z-40 flex max-w-[min(92vw,520px)] items-center gap-2 rounded-2xl border border-indigo-100 bg-white/95 p-2 shadow-xl backdrop-blur dark:border-indigo-900/50 dark:bg-slate-900/95">
-      <Button onClick={run} disabled={mutation.isPending} size="sm" className="shrink-0">
-        {mutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Bot size={15} />}
-        {mutation.isPending ? "מסווג..." : "סווג מוצרים אוטומטית"}
-      </Button>
-      {message ? (
-        <div className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300">
-          <CheckCircle2 size={14} className="text-emerald-600" />
-          <span>{message}</span>
+    <section className="mb-5 rounded-2xl border border-indigo-100 bg-gradient-to-l from-indigo-50 via-white to-white p-3 shadow-sm dark:border-indigo-900/50 dark:from-indigo-950/40 dark:via-slate-900 dark:to-slate-900">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-300">
+            <Bot size={19} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-slate-900 dark:text-white">סיווג מוצרים אוטומטי</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">המוצרים החדשים מסווגים אוטומטית. הפעולה הזו משלימה מוצרים קיימים שעדיין חסר להם סיווג.</p>
+          </div>
         </div>
-      ) : (
-        <span className="hidden text-xs text-slate-500 sm:inline">מוצרים חדשים מסווגים אוטומטית; הכפתור משלים מוצרים ישנים.</span>
-      )}
-    </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {message && (
+            <div className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300" role="status" aria-live="polite">
+              <CheckCircle2 size={14} className="text-emerald-600" />
+              <span>{message}</span>
+            </div>
+          )}
+          <Button onClick={run} disabled={mutation.isPending} size="sm" className="shrink-0 shadow-sm">
+            {mutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Bot size={15} />}
+            {mutation.isPending ? "מסווג..." : "סווג מוצרים אוטומטית"}
+          </Button>
+        </div>
+      </div>
+    </section>
   );
 }
