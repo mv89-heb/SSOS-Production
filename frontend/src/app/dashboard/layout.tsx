@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import CommandPalette from "@/components/layout/command-palette";
 import { AutoClassifyButton } from "@/components/catalog/auto-classify-button";
+import { DashboardFilters } from "@/components/layout/dashboard-filters";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <main className="min-h-[calc(100vh-4rem)] min-w-0 overflow-x-hidden">
           <div className="mx-auto w-full max-w-[1440px] min-w-0 px-3 py-4 sm:px-5 sm:py-5 lg:px-7 lg:py-7">
             <AutoClassifyButton />
+            <Suspense fallback={null}><DashboardFilters /></Suspense>
             {children}
           </div>
         </main>
