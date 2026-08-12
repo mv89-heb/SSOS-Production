@@ -6,15 +6,20 @@ than aborting the entire deployment: the application already validates new
 and edited SKU/barcode values, while the database constraint can be introduced
 later after the legacy duplicates are resolved.
 
+This migration intentionally continues from the production schema revision
+20260720_preview_unit_cat. Production databases were observed at that
+revision; keeping the migration graph linear ensures ``flask db upgrade`` can
+advance them without creating a second Alembic head.
+
 Revision ID: 20260811_catalog_integrity
-Revises: 20260720_import_execution
+Revises: 20260720_preview_unit_cat
 Create Date: 2026-08-11 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "20260811_catalog_integrity"
-down_revision = "20260720_import_execution"
+down_revision = "20260720_preview_unit_cat"
 
 
 def _duplicate_rows(bind, table, column):
@@ -40,9 +45,6 @@ def _create_unique_index_if_clean(bind, index_name, column):
             f"tenant={row[0]} {column}={row[1]!r} count={row[2]}"
             for row in duplicates[:5]
         )
-        # Do not make an existing production catalog unavailable merely because
-        # old data predates the uniqueness rule. New writes are still guarded by
-        # CatalogService, and the index can be added after an admin cleanup.
         print(
             f"WARNING: skipping {index_name}; legacy duplicate {column} values exist: {examples}"
         )
