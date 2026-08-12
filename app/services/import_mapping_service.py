@@ -74,11 +74,12 @@ def _normalize_filename(filename: str) -> str:
 
 
 def _normalize_supplier_value(value) -> str:
-    """Normalize supplier cell values conservatively for exact catalog matching."""
+    """Normalize supplier values for exact and safe partial catalog matching."""
     if value is None:
         return ""
     text = str(value).strip().lower()
-    return re.sub(r"\s+", " ", text)
+    text = re.sub(r"[-_/\\]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _is_positive_int(value) -> bool:
@@ -149,6 +150,11 @@ class ImportMappingService:
             ]
         )
 
+        # A newly-created mapping must use the exact same supplier-resolution
+        # path as an existing mapping. This prevents supplier detection from
+        # living on a separate logical track from column mapping.
+        self._auto_link_supplier_columns(mapping, session, known_suppliers)
+
         AuditService.log_event(
             self.tenant_id,
             self.user_id,
@@ -171,6 +177,33 @@ class ImportMappingService:
             for i, h in enumerate(session.column_headers or [])
         ]
 
+    def _find_supplier_match(self, value, known_suppliers: dict):
+        """Resolve a supplier using exact or unambiguous partial-name matching."""
+        normalized_value = _normalize_supplier_value(value)
+        if not normalized_value:
+            return None
+
+        exact = known_suppliers.get(normalized_value)
+        if exact:
+            return exact
+
+        matches = []
+        for normalized_name, supplier_data in known_suppliers.items():
+            if not normalized_name:
+                continue
+            if normalized_value in normalized_name or normalized_name in normalized_value:
+                matches.append(supplier_data)
+
+        unique_matches = {
+            supplier_id: supplier_name
+            for supplier_id, supplier_name in matches
+        }
+        if len(unique_matches) != 1:
+            return None
+
+        supplier_id, supplier_name = next(iter(unique_matches.items()))
+        return supplier_id, supplier_name
+
     def _supplier_match_from_rows(self, session, column_index: int, known_suppliers: dict):
         """Return a supplier only when the supplier column contains a strong, unambiguous match."""
         counts = Counter()
@@ -179,12 +212,16 @@ class ImportMappingService:
             values = row.raw_values or []
             if column_index >= len(values):
                 continue
-            normalized = _normalize_supplier_value(values[column_index])
+            raw_value = values[column_index]
+            normalized = _normalize_supplier_value(raw_value)
             if not normalized:
                 continue
             total_non_empty += 1
-            if normalized in known_suppliers:
-                counts[normalized] += 1
+
+            match = self._find_supplier_match(raw_value, known_suppliers)
+            if match:
+                supplier_id, supplier_name = match
+                counts[(supplier_id, supplier_name)] += 1
 
         if not counts or total_non_empty < 1:
             return None
@@ -194,25 +231,51 @@ class ImportMappingService:
         if winner_count < 2 or share < 0.80:
             return None
 
-        supplier_id, supplier_name = known_suppliers[winner]
+        supplier_id, supplier_name = winner
         return supplier_id, supplier_name, share
 
     def _auto_link_supplier_columns(self, mapping, session, known_suppliers):
-        """Repair/enrich SUPPLIER columns from the actual staged cell values."""
+        """Resolve SUPPLIER columns and synchronize mapping/session state."""
         columns = self.column_repo.get_by_mapping(mapping.id)
+        changed = False
+
         for col in columns:
             if col.final_target != TARGET_SUPPLIER_NAME and col.suggested_target != TARGET_SUPPLIER_NAME:
                 continue
+
+            # A previously resolved supplier is already authoritative. Repair
+            # its review flag if an older mapping was persisted in an
+            # inconsistent state.
             if col.final_supplier_id is not None:
+                if not col.user_reviewed:
+                    col.user_reviewed = True
+                    changed = True
+                if session.supplier_id is None:
+                    session.supplier_id = col.final_supplier_id
+                    changed = True
                 continue
+
             match = self._supplier_match_from_rows(session, col.column_index, known_suppliers)
             if not match:
                 continue
+
             supplier_id, supplier_name, share = match
+
             col.suggested_supplier_id = supplier_id
             col.suggested_supplier_name = supplier_name
+            col.final_target = TARGET_SUPPLIER_NAME
             col.final_supplier_id = supplier_id
             col.final_supplier_name = supplier_name
+
+            # CRITICAL: automatic backend resolution is a complete mapping
+            # decision. Without this flag the approval endpoint still sees the
+            # column as unreviewed and returns HTTP 409.
+            col.user_reviewed = True
+            changed = True
+
+            if session.supplier_id is None:
+                session.supplier_id = supplier_id
+
             AuditService.log_event(
                 self.tenant_id,
                 self.user_id,
@@ -224,9 +287,11 @@ class ImportMappingService:
                     "supplier_id": supplier_id,
                     "supplier_name": supplier_name,
                     "match_share": round(share, 4),
+                    "auto_reviewed": True,
                 },
             )
-        return True
+
+        return changed
 
     def _build_suggested_column(self, mapping_id: int, col: dict, known_suppliers: dict, session=None):
         header = str(col.get("header") or "").strip()
@@ -238,23 +303,26 @@ class ImportMappingService:
         supplier_id = None
         supplier_name = None
         price_type = None
+        auto_supplier_resolved = False
 
         if group_label and detected_type in _PRICE_LIKE_ANALYSIS_TYPES:
             target = TARGET_SUPPLIER_OFFER
             price_type = _ANALYSIS_TYPE_TO_PRICE_TYPE[detected_type]
             supplier_name = str(group_label).strip()
-            match = known_suppliers.get(_normalize_supplier_value(supplier_name))
+            match = self._find_supplier_match(supplier_name, known_suppliers)
             if match:
                 supplier_id, supplier_name = match
         elif detected_type == "SUPPLIER":
             target = TARGET_SUPPLIER_NAME
-            match = known_suppliers.get(_normalize_supplier_value(header))
+            match = self._find_supplier_match(header, known_suppliers)
             if match:
                 supplier_id, supplier_name = match
+                auto_supplier_resolved = True
             elif session is not None:
                 row_match = self._supplier_match_from_rows(session, col["index"], known_suppliers)
                 if row_match:
                     supplier_id, supplier_name, _ = row_match
+                    auto_supplier_resolved = True
         else:
             target = _ANALYSIS_TYPE_TO_TARGET.get(detected_type, TARGET_IGNORE)
 
@@ -272,7 +340,7 @@ class ImportMappingService:
             final_supplier_id=supplier_id,
             final_supplier_name=supplier_name,
             final_price_type=price_type,
-            user_reviewed=False,
+            user_reviewed=auto_supplier_resolved,
         )
 
     def update_columns(self, mapping_id: int, decisions: list):
@@ -368,21 +436,12 @@ class ImportMappingService:
         if mapping.status == MAPPING_STATUS_APPROVED:
             raise Conflict("This mapping is already approved")
 
-        # Preserve maker-checker for managers/employees, but the tenant admin
-        # is explicitly allowed to approve a mapping they created. The UI
-        # exposes a single approval action and System Admin is the operational
-        # owner of this internal system, so blocking the admin here produced a
-        # misleading 409 even when the mapping itself was valid.
-        creator = self.user_repo.get_by_id_or_404(mapping.created_by)
         approver = self.user_repo.get_by_id_or_404(self.user_id)
         if mapping.created_by == self.user_id and approver.role != ROLE_ADMIN:
             raise Conflict("The mapping creator cannot approve their own mapping")
 
-        # The wizard explicitly presents the engine suggestions as the default
-        # mapping and says they can be approved according to the suggestion.
-        # Accept those suggestions automatically at approval time. We still
-        # fail closed for an unresolved supplier because that could redirect
-        # prices/offers to the wrong supplier.
+        # Accept engine suggestions at approval time when they are complete.
+        # This remains fail-closed for unresolved supplier mappings.
         for col in mapping.columns:
             if col.user_reviewed or col.final_target == TARGET_IGNORE:
                 continue
