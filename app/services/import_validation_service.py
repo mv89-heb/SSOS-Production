@@ -1,33 +1,50 @@
 """Phase 3.2C — Validation & Import Preview Engine."""
-import re
 import difflib
+import re
 from decimal import Decimal, InvalidOperation
-from werkzeug.exceptions import BadRequest, NotFound
 
-from app.repositories.import_session_repository import ImportSessionRepository
-from app.repositories.import_row_repository import ImportRowRepository
+from app.models.import_mapping import (
+    MAPPING_STATUS_APPROVED,
+    TARGET_BARCODE,
+    TARGET_CATEGORY,
+    TARGET_DISCOUNT_PRICE,
+    TARGET_PRICE,
+    TARGET_PRICE_AFTER_VAT,
+    TARGET_PRICE_BEFORE_VAT,
+    TARGET_PRODUCT_CODE,
+    TARGET_PRODUCT_NAME,
+    TARGET_SUPPLIER_NAME,
+    TARGET_SUPPLIER_OFFER,
+    TARGET_UNIT,
+)
+from app.models.import_validation import (
+    ACTION_CREATE,
+    ACTION_ERROR,
+    ACTION_EXISTING,
+    ACTION_SKIP,
+    ACTION_UPDATE,
+    ImportPreview,
+    SEVERITY_ERROR,
+    SEVERITY_WARNING,
+    VALIDATION_STATUS_COMPLETED,
+)
 from app.repositories.import_mapping_repository import ImportMappingRepository
+from app.repositories.import_row_repository import ImportRowRepository
+from app.repositories.import_session_repository import ImportSessionRepository
 from app.repositories.import_validation_repository import (
-    ImportValidationRepository, ImportPreviewRepository, ImportIssueRepository,
+    ImportIssueRepository,
+    ImportPreviewRepository,
+    ImportValidationRepository,
 )
 from app.repositories.product_repository import ProductRepository
 from app.repositories.supplier_repository import SupplierRepository
-from app.models.import_mapping import (
-    MAPPING_STATUS_APPROVED,
-    TARGET_PRODUCT_NAME, TARGET_PRODUCT_CODE, TARGET_BARCODE, TARGET_CATEGORY, TARGET_UNIT,
-    TARGET_SUPPLIER_NAME, TARGET_SUPPLIER_OFFER, TARGET_PRICE, TARGET_PRICE_BEFORE_VAT,
-    TARGET_PRICE_AFTER_VAT, TARGET_DISCOUNT_PRICE,
-)
-from app.models.import_validation import (
-    ImportPreview,
-    VALIDATION_STATUS_COMPLETED,
-    ACTION_CREATE, ACTION_UPDATE, ACTION_SKIP, ACTION_EXISTING, ACTION_ERROR,
-    SEVERITY_ERROR, SEVERITY_WARNING,
-)
 from app.services.audit_service import AuditService
 
 _PRIMARY_PRICE_TARGETS = (
-    TARGET_PRICE, TARGET_PRICE_BEFORE_VAT, TARGET_PRICE_AFTER_VAT, TARGET_DISCOUNT_PRICE
+    TARGET_PRICE,
+    TARGET_PRICE_BEFORE_VAT,
+    TARGET_PRICE_AFTER_VAT,
+    TARGET_DISCOUNT_PRICE,
 )
 _PRICE_TYPE_PRIORITY = {"regular": 0, "before_vat": 1, "after_vat": 2, "discount": 3, None: 4}
 UNIT_SYNONYMS = {
@@ -44,15 +61,13 @@ class ImportValidationError(Exception):
 
 
 def _clean(value) -> str:
-    return (value or "").strip()
+    return str(value).strip() if value is not None else ""
 
 
 def _normalize_supplier(value) -> str:
-    """Normalize supplier labels from price lists without losing Hebrew text."""
     text = _clean(value).lower()
     text = re.sub(r"[-_/\\]+", " ", text)
     text = re.sub(r"[()\[\]{},.:'\"״׳]", " ", text)
-    # Common connector word often appears in the DB name but not in a price list.
     text = re.sub(r"\bאנד\b", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
@@ -114,20 +129,23 @@ class ImportValidationService:
         existing_suppliers = self.supplier_repo.get_all_for_matching()
         known_units = {p.unit.strip() for p in existing_products if p.unit}
 
-        supplier_by_name = {
-            _normalize_supplier(s.name): s for s in existing_suppliers if s.name
-        }
+        supplier_by_name = {_normalize_supplier(s.name): s for s in existing_suppliers if s.name}
         product_by_barcode = {p.barcode.strip(): p for p in existing_products if p.barcode}
         product_by_code = {p.sku.strip().lower(): p for p in existing_products if p.sku}
         product_by_name = {p.name.strip().lower(): p for p in existing_products if p.name}
         columns_by_index = {c.column_index: c for c in mapping.columns}
 
-        preview_rows, issues = [], []
         summary = {
-            "products_to_create": 0, "products_to_update": 0, "products_to_skip": 0,
-            "suppliers_to_create": 0, "offers_to_create": 0, "offers_to_update": 0,
-            "warning_count": 0, "error_count": 0,
+            "products_to_create": 0,
+            "products_to_update": 0,
+            "products_to_skip": 0,
+            "suppliers_to_create": 0,
+            "offers_to_create": 0,
+            "offers_to_update": 0,
+            "warning_count": 0,
+            "error_count": 0,
         }
+        preview_rows, issues = [], []
         seen_in_file_by_barcode, seen_in_file_by_name = {}, {}
         pending_new_suppliers = {}
 
@@ -141,6 +159,7 @@ class ImportValidationService:
             preview.tenant_id = self.tenant_id
             preview.import_validation_id = validation.id
             preview_rows.append(preview)
+
             for issue_data in row_issues:
                 issues.append(self.issue_repo.model(
                     tenant_id=self.tenant_id,
@@ -158,6 +177,7 @@ class ImportValidationService:
                 summary["products_to_update"] += 1
             elif preview.product_action == ACTION_SKIP:
                 summary["products_to_skip"] += 1
+
             for offer in preview.offers or []:
                 if offer["action"] == ACTION_CREATE:
                     summary["offers_to_create"] += 1
@@ -171,7 +191,9 @@ class ImportValidationService:
             setattr(validation, key, value)
 
         AuditService.log_event(
-            self.tenant_id, self.user_id, "import.validated",
+            self.tenant_id,
+            self.user_id,
+            "import.validated",
             f"Validated {session.filename} ({len(rows)} row(s))",
             {"import_validation_id": validation.id, **summary},
         )
@@ -191,19 +213,15 @@ class ImportValidationService:
                     return _clean(values[idx])
             return None
 
-        def supplier_mapping():
-            """Return the mapped supplier column, if this is a TALL supplier list."""
-            for col in columns_by_index.values():
-                if col.final_target == TARGET_SUPPLIER_NAME:
-                    return col
-            return None
-
         issues = []
 
         def add_issue(severity, code, message, field=None):
             issues.append({
-                "row_number": row.row_number, "field": field,
-                "severity": severity, "code": code, "message": message,
+                "row_number": row.row_number,
+                "field": field,
+                "severity": severity,
+                "code": code,
+                "message": message,
             })
 
         product_name = value_for(TARGET_PRODUCT_NAME)
@@ -215,31 +233,50 @@ class ImportValidationService:
         if not product_name:
             add_issue(SEVERITY_ERROR, "missing_product_name", "Row has no product name.", "product_name")
             return ImportPreview(
-                row_number=row.row_number, product_action=ACTION_ERROR,
-                product_name=None, has_errors=True, has_warnings=False, offers=[]
+                row_number=row.row_number,
+                product_action=ACTION_ERROR,
+                product_name=None,
+                has_errors=True,
+                has_warnings=False,
+                offers=[],
             ), issues
 
+        # A missing unit is a warning only. Price-list files commonly omit it.
         if not unit:
             add_issue(SEVERITY_WARNING, "missing_unit", f'Product "{product_name}" has no unit.', "unit")
         elif unit in UNIT_SYNONYMS:
-            add_issue(SEVERITY_WARNING, "unit_normalization_suggestion",
-                      f'Unit "{unit}" could be normalized to "{UNIT_SYNONYMS[unit]}".', "unit")
+            add_issue(
+                SEVERITY_WARNING,
+                "unit_normalization_suggestion",
+                f'Unit "{unit}" could be normalized to "{UNIT_SYNONYMS[unit]}".',
+                "unit",
+            )
         elif known_units and unit not in known_units and not any(_names_similar(unit, u) for u in known_units):
             add_issue(SEVERITY_WARNING, "new_unit", f'"{unit}" is a new unit not seen elsewhere in the catalog.', "unit")
 
         if barcode:
             if barcode in seen_in_file_by_barcode:
-                add_issue(SEVERITY_WARNING, "duplicate_in_file",
-                          f'Barcode {barcode} also appears on row {seen_in_file_by_barcode[barcode]}.', "barcode")
+                add_issue(
+                    SEVERITY_WARNING,
+                    "duplicate_in_file",
+                    f"Barcode {barcode} also appears on row {seen_in_file_by_barcode[barcode]}.",
+                    "barcode",
+                )
             else:
                 seen_in_file_by_barcode[barcode] = row.row_number
+
         name_key = product_name.strip().lower()
         if name_key in seen_in_file_by_name:
-            add_issue(SEVERITY_WARNING, "duplicate_in_file",
-                      f'Product name "{product_name}" also appears on row {seen_in_file_by_name[name_key]}.', "product_name")
+            add_issue(
+                SEVERITY_WARNING,
+                "duplicate_in_file",
+                f'Product name "{product_name}" also appears on row {seen_in_file_by_name[name_key]}.',
+                "product_name",
+            )
         else:
             seen_in_file_by_name[name_key] = row.row_number
 
+        # WIDE format: one or more supplier-offer columns.
         offer_entries = []
         for idx, col in columns_by_index.items():
             if col.final_target != TARGET_SUPPLIER_OFFER or idx >= len(values):
@@ -250,15 +287,22 @@ class ImportValidationService:
             price, price_error = _parse_price(raw_price)
             supplier_name = col.final_supplier_name
             if not supplier_name:
-                add_issue(SEVERITY_ERROR, "missing_supplier_name",
-                          f'Column "{col.column_header}" is mapped as a supplier offer but has no supplier assigned.', "supplier")
+                add_issue(
+                    SEVERITY_ERROR,
+                    "missing_supplier_name",
+                    f'Column "{col.column_header}" is mapped as a supplier offer but has no supplier assigned.',
+                    "supplier",
+                )
                 continue
             if price_error:
                 add_issue(SEVERITY_ERROR, "invalid_price", price_error, "price")
                 continue
             offer_entries.append({
-                "column_index": idx, "supplier_id": col.final_supplier_id,
-                "supplier_name": supplier_name, "price": price, "price_type": col.final_price_type,
+                "column_index": idx,
+                "supplier_id": col.final_supplier_id,
+                "supplier_name": supplier_name,
+                "price": price,
+                "price_type": col.final_price_type,
             })
 
         best_by_supplier = {}
@@ -270,12 +314,9 @@ class ImportValidationService:
         offer_entries = list(best_by_supplier.values())
 
         primary_supplier_name = value_for(TARGET_SUPPLIER_NAME)
-        supplier_col = supplier_mapping()
         primary_supplier_id = None
 
-        # IMPORTANT: SUPPLIER_NAME in a TALL sheet is a row-level value.
-        # Never treat the whole column as one supplier. Resolve each row
-        # independently and retain the canonical DB name in the preview.
+        # TALL format: supplier is a row-level value, not a single workbook-level value.
         if primary_supplier_name:
             primary_supplier_id = self._resolve_supplier(
                 primary_supplier_name, supplier_by_name, pending_new_suppliers
@@ -310,8 +351,7 @@ class ImportValidationService:
             )
 
         if not primary_supplier_name:
-            add_issue(SEVERITY_ERROR, "missing_supplier",
-                      f'Product "{product_name}" has no supplier.', "supplier")
+            add_issue(SEVERITY_ERROR, "missing_supplier", f'Product "{product_name}" has no supplier.', "supplier")
         if primary_price is None:
             add_issue(SEVERITY_ERROR, "missing_price", f'Product "{product_name}" has no usable price.', "price")
         elif primary_price == 0:
@@ -319,38 +359,65 @@ class ImportValidationService:
         elif primary_price < 0:
             add_issue(SEVERITY_ERROR, "negative_price", f'Product "{product_name}" has a negative price.', "price")
 
+        # Match by strongest identifiers first. For TALL files, supplier is part
+        # of the identity when more than one supplier can sell the same product.
         matched_product = None
         if barcode and barcode in product_by_barcode:
-            matched_product = product_by_barcode[barcode]
-        elif product_code and product_code.strip().lower() in product_by_code:
-            matched_product = product_by_code[product_code.strip().lower()]
-        elif name_key in product_by_name:
-            matched_product = product_by_name[name_key]
-        else:
+            candidate = product_by_barcode[barcode]
+            if primary_supplier_id is None or candidate.supplier_id == primary_supplier_id:
+                matched_product = candidate
+        if matched_product is None and product_code and product_code.strip().lower() in product_by_code:
+            candidate = product_by_code[product_code.strip().lower()]
+            if primary_supplier_id is None or candidate.supplier_id == primary_supplier_id:
+                matched_product = candidate
+        if matched_product is None and name_key in product_by_name:
+            candidate = product_by_name[name_key]
+            if primary_supplier_id is None or candidate.supplier_id == primary_supplier_id:
+                matched_product = candidate
+
+        if matched_product is None and name_key in product_by_name and primary_supplier_id is not None:
+            # Same product name exists under another supplier. Keep it as a new
+            # supplier-specific product rather than changing the other supplier's price.
+            add_issue(
+                SEVERITY_WARNING,
+                "same_product_other_supplier",
+                f'"{product_name}" already exists for another supplier; a supplier-specific listing will be created.',
+                "supplier",
+            )
+        elif matched_product is None:
             for existing_name, existing_product in product_by_name.items():
                 if _names_similar(name_key, existing_name):
-                    add_issue(SEVERITY_WARNING, "similar_product_name",
-                              f'"{product_name}" is similar to existing product "{existing_product.name}" — review before creating a duplicate.',
-                              "product_name")
+                    add_issue(
+                        SEVERITY_WARNING,
+                        "similar_product_name",
+                        f'"{product_name}" is similar to existing product "{existing_product.name}" — review before creating a duplicate.',
+                        "product_name",
+                    )
                     break
 
-        old_price = Decimal(str(matched_product.current_price)) if matched_product is not None else None
+        old_price = Decimal(str(matched_product.current_price)) if matched_product is not None and matched_product.current_price is not None else None
         has_blocking_error = any(i["severity"] == SEVERITY_ERROR for i in issues)
+
         if matched_product is not None:
             if has_blocking_error:
                 product_action = ACTION_ERROR
             elif primary_price is not None and primary_price != old_price:
                 product_action = ACTION_UPDATE
-                if old_price != 0 and abs(primary_price - old_price) / old_price >= _UNUSUAL_PRICE_CHANGE_RATIO:
+                if old_price not in (None, 0) and abs(primary_price - old_price) / old_price >= _UNUSUAL_PRICE_CHANGE_RATIO:
                     pct = ((primary_price - old_price) / old_price) * 100
-                    add_issue(SEVERITY_WARNING, "unusual_price_change",
-                              f'Price for "{product_name}" would change from {old_price} to {primary_price} ({"+" if pct > 0 else ""}{pct:.0f}%).',
-                              "price")
+                    add_issue(
+                        SEVERITY_WARNING,
+                        "unusual_price_change",
+                        f'Price for "{product_name}" would change from {old_price} to {primary_price} ({"+" if pct > 0 else ""}{pct:.0f}%).',
+                        "price",
+                    )
             else:
                 product_action = ACTION_SKIP
         else:
             product_action = ACTION_ERROR if has_blocking_error else ACTION_CREATE
 
+        # WIDE offers: retain every supplier price, while execution excludes the
+        # row's primary supplier+price from SupplierProductOffer creation.
         resolved_offers = []
         for entry in offer_entries:
             supplier_id = entry["supplier_id"] or self._resolve_supplier(
@@ -364,6 +431,21 @@ class ImportValidationService:
                 "action": ACTION_CREATE if matched_product is None else ACTION_UPDATE,
             })
 
+        # TALL price lists have a single price column plus a row-level supplier.
+        # Represent that price as the row's primary offer too. This is the missing
+        # bridge that previously made Step 4 show 0 price records even though the
+        # file had hundreds of prices. The execution layer deliberately skips the
+        # primary entry as a separate SupplierProductOffer.
+        if not offer_entries and primary_supplier_name and primary_price is not None:
+            resolved_offers.append({
+                "supplier_name": primary_supplier_name,
+                "matched_supplier_id": primary_supplier_id,
+                "price": float(primary_price),
+                "price_type": "regular",
+                "action": ACTION_CREATE if matched_product is None else ACTION_UPDATE,
+                "is_primary": True,
+            })
+
         return ImportPreview(
             row_number=row.row_number,
             product_action=product_action,
@@ -371,7 +453,10 @@ class ImportValidationService:
             matched_product_id=matched_product.id if matched_product else None,
             unit=unit,
             category=category,
-            supplier_action=(ACTION_EXISTING if primary_supplier_id else (ACTION_CREATE if primary_supplier_name else None)),
+            supplier_action=(
+                ACTION_EXISTING if primary_supplier_id
+                else (ACTION_CREATE if primary_supplier_name else None)
+            ),
             supplier_name=primary_supplier_name,
             matched_supplier_id=primary_supplier_id,
             price=primary_price,
@@ -383,12 +468,6 @@ class ImportValidationService:
 
     @staticmethod
     def _resolve_supplier(name: str, supplier_by_name: dict, pending_new_suppliers: dict):
-        """Resolve an imported supplier label to an existing supplier safely.
-
-        Supports exact names, unambiguous token/subset matches (e.g.
-        'אריאל' -> 'אריאל שיווק בשר'), and a conservative fuzzy fallback.
-        Ambiguous matches fail closed and become a new-supplier candidate.
-        """
         normalized = _normalize_supplier(name)
         if not normalized:
             return None
@@ -406,7 +485,7 @@ class ImportValidationService:
                 continue
             if source_tokens and canonical_tokens:
                 overlap = len(source_tokens & canonical_tokens)
-                if overlap >= 2 and overlap / len(source_tokens) >= 0.66:
+                if overlap >= 1 and overlap / len(source_tokens) >= 0.66:
                     candidates.append(supplier)
 
         unique = {s.id: s for s in candidates}
