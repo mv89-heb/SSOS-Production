@@ -1,3 +1,5 @@
+"use client";
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { catalogService, CreateSupplierInput, UpdateSupplierInput, CreateProductInput, UpdateProductInput, CreateOfferInput, UpdateOfferInput } from "@/services/catalog-service";
 import type { Product, Supplier } from "@/types";
