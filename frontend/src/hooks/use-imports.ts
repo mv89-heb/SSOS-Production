@@ -132,7 +132,25 @@ export function useImportValidationDetails(sessionId: number | null, enabled = t
 export function useImportPreview(sessionId: number | null, enabled = true) {
   return useQuery({
     queryKey: previewKey(sessionId ?? -1),
-    queryFn: () => importService.getPreview(sessionId as number, 500),
+    queryFn: async () => {
+      // The API caps a single preview request at 500 rows. Fetch all pages so
+      // Step 4/5 statistics describe the entire import, not just the first
+      // page (e.g. a 548-row supplier price list).
+      const pageSize = 500;
+      let offset = 0;
+      let first: Awaited<ReturnType<typeof importService.getPreview>> | null = null;
+      const allRows = [] as Awaited<ReturnType<typeof importService.getPreview>>["rows"];
+
+      while (true) {
+        const page = await importService.getPreview(sessionId as number, pageSize, offset);
+        if (!first) first = page;
+        allRows.push(...page.rows);
+        if (page.rows.length < pageSize) break;
+        offset += pageSize;
+      }
+
+      return { ...first!, rows: allRows };
+    },
     enabled: sessionId != null && enabled,
     retry: false,
   });
