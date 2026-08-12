@@ -79,7 +79,13 @@ class CatalogService:
             product.category = None
         if product.category and not force_reclassify: return
         result = self.classifier.classify(self.tenant_id, product.name)
-        product.category = result["category"]; product.category_source = result["source"]; product.category_confidence = result["confidence"]; product.category_reviewed = result["confidence"] >= 0.90
+        product.category = result["category"]
+        product.category_source = result["source"]
+        product.category_confidence = result["confidence"]
+        # `reviewed` means a human has explicitly accepted the category. A
+        # high-confidence rules match is still automatic and must remain open
+        # for review; learned results already originate from a human correction.
+        product.category_reviewed = result["source"] in {"USER", "LEARNED"}
 
     def create_product(self, data: dict):
         if not isinstance(data, dict): raise BadRequest("Product payload must be an object")
