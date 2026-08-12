@@ -1,6 +1,7 @@
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import CommandPalette from "@/components/layout/command-palette";
+import { AutoClassifyButton } from "@/components/catalog/auto-classify-button";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       <CommandPalette />
+      <AutoClassifyButton />
     </div>
   );
 }
