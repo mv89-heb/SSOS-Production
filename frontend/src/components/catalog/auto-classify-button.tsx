@@ -43,7 +43,7 @@ export function AutoClassifyButton() {
               <span>{message}</span>
             </div>
           )}
-          <Button onClick={run} disabled={mutation.isPending} size="sm" className="shrink-0 shadow-sm">
+          <Button onClick={run} disabled={mutation.isPending} className="shrink-0 shadow-sm">
             {mutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Bot size={15} />}
             {mutation.isPending ? "מסווג..." : "סווג מוצרים אוטומטית"}
           </Button>
