@@ -39,23 +39,77 @@ def _value_for(row, columns_by_index, target):
     return None
 
 
-def find_duplicate_row_numbers(rows, columns_by_index, session_supplier_name=None, resolved_supplier_by_row=None):
-    """Return every row number participating in a duplicate product+supplier key."""
+def find_duplicate_groups(
+    rows,
+    columns_by_index,
+    session_supplier_name=None,
+    resolved_supplier_by_row=None,
+):
+    """Return duplicate row numbers grouped by their product+supplier key.
+
+    The grouping is deliberately performed before flattening row numbers. This
+    prevents the old bug where every duplicate row in the workbook was inserted
+    into every duplicate error message.
+
+    Returns:
+        dict[tuple[str, str], list[int]]
+
+    Example:
+        {
+            ("אסאדו", "אריאל"): [4, 5],
+            ("שניצל", "אריאל"): [7, 8, 9],
+        }
+    """
     groups = defaultdict(list)
     resolved_supplier_by_row = resolved_supplier_by_row or {}
+
     for row in rows:
-        product_name = _norm(_value_for(row, columns_by_index, TARGET_PRODUCT_NAME))
-        raw_supplier = _value_for(row, columns_by_index, TARGET_SUPPLIER_NAME) or session_supplier_name
+        product_name = _norm(
+            _value_for(row, columns_by_index, TARGET_PRODUCT_NAME)
+        )
+        raw_supplier = (
+            _value_for(row, columns_by_index, TARGET_SUPPLIER_NAME)
+            or session_supplier_name
+        )
         resolved_supplier = resolved_supplier_by_row.get(row.row_number)
-        supplier_key = f"id:{resolved_supplier}" if resolved_supplier else _norm(raw_supplier)
+        supplier_key = (
+            f"id:{resolved_supplier}"
+            if resolved_supplier is not None
+            else _norm(raw_supplier)
+        )
+
         if product_name and supplier_key:
             groups[(product_name, supplier_key)].append(row.row_number)
 
-    duplicate_rows = set()
-    for row_numbers in groups.values():
-        if len(row_numbers) > 1:
-            duplicate_rows.update(row_numbers)
-    return duplicate_rows
+    return {
+        key: sorted(row_numbers)
+        for key, row_numbers in groups.items()
+        if len(row_numbers) > 1
+    }
+
+
+def find_duplicate_row_numbers(
+    rows,
+    columns_by_index,
+    session_supplier_name=None,
+    resolved_supplier_by_row=None,
+):
+    """Return every row participating in any duplicate group.
+
+    Kept as a compatibility helper for callers that only need the flattened
+    set. Error-message generation must use ``find_duplicate_groups`` instead.
+    """
+    duplicate_groups = find_duplicate_groups(
+        rows,
+        columns_by_index,
+        session_supplier_name=session_supplier_name,
+        resolved_supplier_by_row=resolved_supplier_by_row,
+    )
+    return {
+        row_number
+        for row_numbers in duplicate_groups.values()
+        for row_number in row_numbers
+    }
 
 
 def _remove_replaced_issues(validation):
@@ -89,7 +143,7 @@ def apply_integrity_repairs(validation, session, mapping, rows):
         for preview in previews
         if preview.matched_supplier_id is not None
     }
-    duplicate_row_numbers = find_duplicate_row_numbers(
+    duplicate_groups = find_duplicate_groups(
         rows,
         columns_by_index,
         session_supplier_name=session.supplier.name if session.supplier else None,
@@ -98,27 +152,35 @@ def apply_integrity_repairs(validation, session, mapping, rows):
 
     _remove_replaced_issues(validation)
 
-    duplicate_rows = [
-        preview_by_row[row_number]
-        for row_number in sorted(duplicate_row_numbers)
-        if row_number in preview_by_row
-    ]
-
-    all_duplicate_numbers = sorted(duplicate_row_numbers)
-    for preview in duplicate_rows:
-        preview.product_action = ACTION_ERROR
-        preview.has_errors = True
-        issue = ImportIssue(
-            tenant_id=validation.tenant_id,
-            import_validation_id=validation.id,
-            row_number=preview.row_number,
-            field="product_name",
-            severity=SEVERITY_ERROR,
-            code=DUPLICATE_ERROR_CODE,
-            message=f"{DUPLICATE_ERROR_MESSAGE} (שורות: {', '.join(map(str, all_duplicate_numbers))})",
+    # Each duplicate group gets its own message containing ONLY that group's
+    # Excel row numbers. Rows from other products/suppliers never leak into it.
+    for _, group_row_numbers in duplicate_groups.items():
+        group_row_numbers = sorted(group_row_numbers)
+        group_row_numbers_text = ", ".join(map(str, group_row_numbers))
+        group_message = (
+            f"{DUPLICATE_ERROR_MESSAGE} "
+            f"(שורות: {group_row_numbers_text})"
         )
-        db.session.add(issue)
-        validation.issues.append(issue)
+
+        for row_number in group_row_numbers:
+            preview = preview_by_row.get(row_number)
+            if preview is None:
+                continue
+
+            preview.product_action = ACTION_ERROR
+            preview.has_errors = True
+
+            issue = ImportIssue(
+                tenant_id=validation.tenant_id,
+                import_validation_id=validation.id,
+                row_number=row_number,
+                field="product_name",
+                severity=SEVERITY_ERROR,
+                code=DUPLICATE_ERROR_CODE,
+                message=group_message,
+            )
+            db.session.add(issue)
+            validation.issues.append(issue)
 
     # Recompute persisted summary from the repaired preview so Step 4/6 and
     # ImportExecutionService see exactly the same truth.
@@ -160,7 +222,7 @@ def apply_integrity_repairs(validation, session, mapping, rows):
         issue.severity == SEVERITY_ERROR for issue in remaining_issues
     )
 
-    return duplicate_row_numbers
+    return duplicate_groups
 
 
 def install_import_validation_integrity_patch():
