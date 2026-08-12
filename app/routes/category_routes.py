@@ -4,6 +4,7 @@ from werkzeug.exceptions import BadRequest, NotFound, HTTPException
 
 from app.extensions import db
 from app.models.product import Product
+from app.services.audit_service import AuditService
 from app.services.permission_service import PermissionService
 from app.services.product_classification_service import ProductClassificationService
 
@@ -33,10 +34,23 @@ def classify_product(product_id):
         product.category = result["category"]
         product.category_source = result["source"]
         product.category_confidence = result["confidence"]
-        product.category_reviewed = result["confidence"] >= 0.90
+        product.category_reviewed = result["source"] in {"USER", "LEARNED"}
+        AuditService.log_event(
+            current_user.tenant_id,
+            current_user.id,
+            "catalog.product_classified",
+            f"Classified product {product.name}",
+            {
+                "product_id": product.id,
+                "category": product.category,
+                "source": product.category_source,
+                "confidence": float(product.category_confidence),
+            },
+        )
         db.session.commit()
         return jsonify({"success": True, "classification": result, "product": product.to_dict()})
     except HTTPException as exc:
+        db.session.rollback()
         return _error(exc)
 
 
@@ -66,7 +80,20 @@ def category_feedback(product_id):
         product.category_source = "USER"
         product.category_confidence = 1.0
         product.category_reviewed = True
+        AuditService.log_event(
+            current_user.tenant_id,
+            current_user.id,
+            "catalog.product_category_feedback",
+            f"Corrected category for {product.name}",
+            {
+                "product_id": product.id,
+                "category": category,
+                "previous_category": result.get("category"),
+                "previous_source": result.get("source"),
+            },
+        )
         db.session.commit()
         return jsonify({"success": True, "product": product.to_dict()})
     except HTTPException as exc:
+        db.session.rollback()
         return _error(exc)
