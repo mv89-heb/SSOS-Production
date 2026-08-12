@@ -18,6 +18,18 @@ CATEGORIES = (
     "רטבים ותבלינים", "חד פעמי", "ניקיון", "ציוד מטבח", "אחר",
 )
 
+# Hard overrides are evaluated before fuzzy/rule scoring. These are deliberately
+# small and conservative: they cover common Hebrew collisions where one token
+# is misleading (for example "תפוח" inside "תפוח אדמה").
+HARD_RULES = (
+    ("ירקות", ("תפוח אדמה", "תפוחי אדמה", "תפו אדמה")),
+    ("רטבים ותבלינים", ("פלפל שחור", "פלפל לבן", "פלפל גרוס", "פלפל אדום טחון")),
+    ("שימורים", ("טונה בקופסה", "טונה בשימורים", "טונה משומרת", "תירס בקופסה", "תירס משומר")),
+    ("קפואים", ("שניצל עוף קפוא", "שניצל קפוא", "אפונה קפואה", "שעועית קפואה", "ירקות קפואים", "פירות קפואים")),
+    ("חד פעמי", ("צלחת חד פעמית", "צלחות חד פעמיות", "כוס חד פעמית", "כוסות חד פעמיות", "מזלגות חד פעמיים", "כפיות חד פעמיות")),
+    ("עוף", ("שניצל עוף", "חזה עוף", "כנפי עוף", "פרגית", "נאגטס עוף")),
+)
+
 # Rules are evaluated from the most specific concepts to the broadest ones.
 # A rule may contain several phrases; a match is token-boundary based, never
 # a raw substring match, so "תפוח אדמה" cannot accidentally match "תפוח".
@@ -34,7 +46,7 @@ PRIORITY_RULES = [
     )),
     ("חד פעמי", (
         "צלחות חד פעמיות", "צלחת חד פעמית", "כוסות חד פעמיות", "כוס חד פעמית",
-        "מזלגות חד פעמיים", "כפיות חד פעמיות", "סכום חד פעמי", "סכו"ם חד פעמי",
+        "מזלגות חד פעמיים", "כפיות חד פעמיות", "סכום חד פעמי", "סכו\"ם חד פעמי",
         "חד פעמי", "חדפ", "מפיות", "קשיות",
     )),
     ("רטבים ותבלינים", (
@@ -103,8 +115,6 @@ PRIORITY_RULES = [
     )),
 ]
 
-# Explicit exceptions prevent a broad token from winning over the meaning of
-# the complete product name.
 EXCLUSIONS = {
     "ירקות": ("פלפל שחור", "פלפל לבן", "פלפל גרוס", "פלפל אדום טחון"),
     "פירות": ("תפוח אדמה", "תפוחי אדמה", "תפו אדמה"),
@@ -117,7 +127,6 @@ EXCLUSIONS = {
 def normalize_product_name(name: str) -> str:
     value = (name or "").strip().casefold()
     value = value.replace("״", '"').replace("׳", "'")
-    # Remove quantities but preserve the product words around them.
     value = re.sub(r"\b\d+(?:[.,]\d+)?\s*(?:ק\"ג|קג|גרם|גר'|ליטר|ל'|מ\"ל|מל|יח')\b", " ", value)
     value = re.sub(r"[^א-תa-z0-9\s]", " ", value)
     return re.sub(r"\s+", " ", value).strip()
@@ -167,9 +176,17 @@ class ProductClassificationService:
         if not normalized:
             raise BadRequest("Product name is required for classification")
 
+        # Exact human feedback always wins.
         feedback = self._latest_feedback(tenant_id, normalized)
         if feedback:
             return {"category": feedback.actual_category, "confidence": 1.0, "source": "LEARNED", "reason": "התאמה להחלטה קודמת של משתמש"}
+
+        # Hard semantic overrides come before fuzzy learning. This prevents a
+        # similar but different product from overriding an obvious phrase.
+        for category, phrases in HARD_RULES:
+            matches = [phrase for phrase in phrases if _phrase_present(normalized, phrase)]
+            if matches:
+                return {"category": category, "confidence": 0.99, "source": "RULES", "reason": "התאמה מדויקת: " + ", ".join(matches[:3])}
 
         similar_feedback, similarity = self._similar_feedback(tenant_id, normalized)
         if similar_feedback is not None and similarity >= 0.95:
@@ -182,9 +199,7 @@ class ProductClassificationService:
             matches = [phrase for phrase in phrases if _phrase_present(normalized, phrase)]
             if not matches:
                 continue
-            # Exact/long phrases carry substantially more weight than one-word matches.
             score = max((3.0 + 1.2 * len(normalize_product_name(p).split()) for p in matches), default=0.0)
-            # Multiple independent matches are useful evidence.
             score += min(1.5, max(0, len(matches) - 1) * 0.35)
             candidates.append((score, -priority, category, matches))
 
@@ -196,7 +211,6 @@ class ProductClassificationService:
         second_score = candidates[1][0] if len(candidates) > 1 else 0.0
         margin = best_score - second_score
 
-        # Never auto-classify when two categories have comparable evidence.
         if best_score < 3.0 or (len(candidates) > 1 and margin < 1.0):
             return {"category": None, "confidence": 0.0, "source": "RULES", "reason": "נמצאו כמה אפשרויות או שאין מספיק ודאות; המוצר דורש בדיקה"}
 
