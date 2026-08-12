@@ -16,7 +16,7 @@ function getGlobalFilters() {
 
 function filterSuppliers(items: Supplier[], activeOnly: boolean) {
   const params = getGlobalFilters();
-  const status = params.get("gf_status");
+  const status = params.get("gf_supplier_status");
   const contact = params.get("gf_contact");
   const phone = params.get("gf_phone");
   const email = params.get("gf_email");
@@ -44,7 +44,7 @@ function filterSuppliers(items: Supplier[], activeOnly: boolean) {
 function filterProducts(items: Product[], supplierId?: number, activeOnly = false) {
   const params = getGlobalFilters();
   const globalSupplier = Number(params.get("gf_supplier"));
-  const status = params.get("gf_status");
+  const status = params.get("gf_product_status");
   const stock = params.get("gf_stock");
   const unit = params.get("gf_unit");
   const missing = params.get("gf_missing");
@@ -80,7 +80,7 @@ function filterProducts(items: Product[], supplierId?: number, activeOnly = fals
 function globalFilterKey() {
   if (typeof window === "undefined") return "";
   const params = new URLSearchParams(window.location.search);
-  return ["gf_supplier", "gf_status", "gf_stock", "gf_price_min", "gf_price_max", "gf_unit", "gf_missing", "gf_category", "gf_contact", "gf_phone", "gf_email", "gf_days"].map((key) => `${key}=${params.get(key) ?? ""}`).join("&");
+  return ["gf_supplier", "gf_product_status", "gf_stock", "gf_price_min", "gf_price_max", "gf_unit", "gf_missing", "gf_category", "gf_supplier_status", "gf_contact", "gf_phone", "gf_email", "gf_days"].map((key) => `${key}=${params.get(key) ?? ""}`).join("&");
 }
 
 export function useSuppliers(activeOnly = false) {
