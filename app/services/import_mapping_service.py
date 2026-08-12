@@ -34,6 +34,8 @@ from app.models.import_mapping import (
     PRICE_TYPE_AFTER_VAT,
     PRICE_TYPE_DISCOUNT,
 )
+from app.models.user import ROLE_ADMIN
+from app.repositories.user_repository import UserRepository
 from app.services.audit_service import AuditService
 
 _ANALYSIS_TYPE_TO_TARGET = {
@@ -98,6 +100,7 @@ class ImportMappingService:
         self.column_repo = ImportMappingColumnRepository(tenant_id)
         self.template_repo = ImportMappingTemplateRepository(tenant_id)
         self.supplier_repo = SupplierRepository(tenant_id)
+        self.user_repo = UserRepository(tenant_id)
 
     def get_or_create_mapping(self, session_id: int):
         if not _is_positive_int(session_id):
@@ -113,9 +116,6 @@ class ImportMappingService:
             session_id, session.staged_sheet_name
         )
         if existing:
-            # Mappings are persisted between visits. Enrich an existing mapping
-            # with a high-confidence supplier value discovered from the staged
-            # rows, so older mappings created before this fix are repaired too.
             known_suppliers = {
                 _normalize_supplier_value(s.name): (s.id, s.name)
                 for s in self.supplier_repo.get_active()
@@ -172,13 +172,7 @@ class ImportMappingService:
         ]
 
     def _supplier_match_from_rows(self, session, column_index: int, known_suppliers: dict):
-        """Return a supplier only when the supplier column contains a strong, unambiguous match.
-
-        The import analysis correctly identifies the *SUPPLIER* column from its header,
-        but a tall price list stores the actual supplier in the column's cell values.
-        We therefore inspect the staged raw_values and use the dominant exact catalog
-        match. This deliberately fails closed when values are mixed or unknown.
-        """
+        """Return a supplier only when the supplier column contains a strong, unambiguous match."""
         counts = Counter()
         total_non_empty = 0
         for row in getattr(session, "rows", []) or []:
@@ -196,8 +190,6 @@ class ImportMappingService:
             return None
 
         winner, winner_count = counts.most_common(1)[0]
-        # Require both a meaningful number of matches and a clear majority.
-        # For a normal single-supplier list this is effectively 100%.
         share = winner_count / total_non_empty
         if winner_count < 2 or share < 0.80:
             return None
@@ -207,7 +199,6 @@ class ImportMappingService:
 
     def _auto_link_supplier_columns(self, mapping, session, known_suppliers):
         """Repair/enrich SUPPLIER columns from the actual staged cell values."""
-        changed = False
         columns = self.column_repo.get_by_mapping(mapping.id)
         for col in columns:
             if col.final_target != TARGET_SUPPLIER_NAME and col.suggested_target != TARGET_SUPPLIER_NAME:
@@ -222,7 +213,6 @@ class ImportMappingService:
             col.suggested_supplier_name = supplier_name
             col.final_supplier_id = supplier_id
             col.final_supplier_name = supplier_name
-            changed = True
             AuditService.log_event(
                 self.tenant_id,
                 self.user_id,
@@ -236,7 +226,7 @@ class ImportMappingService:
                     "match_share": round(share, 4),
                 },
             )
-        return changed
+        return True
 
     def _build_suggested_column(self, mapping_id: int, col: dict, known_suppliers: dict, session=None):
         header = str(col.get("header") or "").strip()
@@ -258,12 +248,9 @@ class ImportMappingService:
                 supplier_id, supplier_name = match
         elif detected_type == "SUPPLIER":
             target = TARGET_SUPPLIER_NAME
-            # First try the header itself for wide-format workbooks.
             match = known_suppliers.get(_normalize_supplier_value(header))
             if match:
                 supplier_id, supplier_name = match
-            # For a normal tall supplier column (e.g. "שם ספק"), the real
-            # supplier is in the cells, not in the header.
             elif session is not None:
                 row_match = self._supplier_match_from_rows(session, col["index"], known_suppliers)
                 if row_match:
@@ -381,8 +368,44 @@ class ImportMappingService:
         if mapping.status == MAPPING_STATUS_APPROVED:
             raise Conflict("This mapping is already approved")
 
-        if mapping.created_by == self.user_id:
+        # Preserve maker-checker for managers/employees, but the tenant admin
+        # is explicitly allowed to approve a mapping they created. The UI
+        # exposes a single approval action and System Admin is the operational
+        # owner of this internal system, so blocking the admin here produced a
+        # misleading 409 even when the mapping itself was valid.
+        creator = self.user_repo.get_by_id_or_404(mapping.created_by)
+        approver = self.user_repo.get_by_id_or_404(self.user_id)
+        if mapping.created_by == self.user_id and approver.role != ROLE_ADMIN:
             raise Conflict("The mapping creator cannot approve their own mapping")
+
+        # The wizard explicitly presents the engine suggestions as the default
+        # mapping and says they can be approved according to the suggestion.
+        # Accept those suggestions automatically at approval time. We still
+        # fail closed for an unresolved supplier because that could redirect
+        # prices/offers to the wrong supplier.
+        for col in mapping.columns:
+            if col.user_reviewed or col.final_target == TARGET_IGNORE:
+                continue
+            if col.final_target != col.suggested_target:
+                continue
+            if col.final_target == TARGET_SUPPLIER_NAME and col.final_supplier_id is None:
+                continue
+            if col.final_target == TARGET_SUPPLIER_OFFER and col.final_supplier_id is None:
+                continue
+            if col.final_target in {
+                TARGET_PRODUCT_NAME,
+                TARGET_PRODUCT_CODE,
+                TARGET_BARCODE,
+                TARGET_CATEGORY,
+                TARGET_UNIT,
+                TARGET_PRICE,
+                TARGET_PRICE_BEFORE_VAT,
+                TARGET_PRICE_AFTER_VAT,
+                TARGET_DISCOUNT_PRICE,
+                TARGET_SUPPLIER_NAME,
+                TARGET_SUPPLIER_OFFER,
+            }:
+                col.user_reviewed = True
 
         unreviewed = [
             c for c in mapping.columns
@@ -408,6 +431,7 @@ class ImportMappingService:
                 "reviewed_columns": len(mapping.columns),
                 "approved_by": self.user_id,
                 "created_by": mapping.created_by,
+                "admin_self_approval": mapping.created_by == self.user_id,
             },
         )
         return mapping
