@@ -8,6 +8,7 @@ import { permissions } from "@/lib/permissions";
 import { useCreateSupplier, useProducts, useSuppliers, useUpdateSupplier } from "@/hooks/use-catalog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { ActiveBadge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from "@/components/ui/table";
@@ -18,14 +19,55 @@ import type { Supplier } from "@/types";
 
 const EMPTY_FORM = { name: "", contact_name: "", email: "", phone: "", phone2: "", customer_number: "", delivery_days: "", order_days: "" };
 type EditableField = keyof typeof EMPTY_FORM;
+type PresenceFilter = "all" | "yes" | "no";
+type SupplierStatusFilter = "all" | "active" | "inactive";
+type DaysFilter = "all" | "complete" | "missing";
+
+function hasValue(value: unknown) {
+  return String(value ?? "").trim().length > 0;
+}
+
+function TableFilterInput({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
+  return <div className="relative"><Search className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" /><Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder} className="h-8 min-w-[120px] pr-7 text-xs" /></div>;
+}
+
+function TableFilterSelect({ value, onChange, children }: { value: string; onChange: (value: string) => void; children: React.ReactNode }) {
+  return <Select value={value} onChange={(e) => onChange(e.target.value)} className="h-8 min-w-[120px] text-xs">{children}</Select>;
+}
 
 export default function SuppliersPage() {
   const { user } = useAuth();
   const canManage = permissions.canManageCatalog(user);
-  const [search, setSearch] = useState(""); const [modalOpen, setModalOpen] = useState(false); const [form, setForm] = useState(EMPTY_FORM); const [formError, setFormError] = useState<string | null>(null); const [editing, setEditing] = useState<{ id: number; field: EditableField; value: string } | null>(null);
-  const { data: suppliers, isLoading, isError, refetch } = useSuppliers(); const { data: allProducts } = useProducts(); const createSupplier = useCreateSupplier(); const updateSupplier = useUpdateSupplier(editing?.id ?? -1);
+  const [columnSearch, setColumnSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<SupplierStatusFilter>("all");
+  const [contactFilter, setContactFilter] = useState<PresenceFilter>("all");
+  const [phoneFilter, setPhoneFilter] = useState<PresenceFilter>("all");
+  const [emailFilter, setEmailFilter] = useState<PresenceFilter>("all");
+  const [daysFilter, setDaysFilter] = useState<DaysFilter>("all");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: number; field: EditableField; value: string } | null>(null);
+  const { data: suppliers, isLoading, isError, refetch } = useSuppliers();
+  const { data: allProducts } = useProducts();
+  const createSupplier = useCreateSupplier();
+  const updateSupplier = useUpdateSupplier(editing?.id ?? -1);
   const productCountBySupplier = useMemo(() => { const counts = new Map<number, number>(); (allProducts ?? []).forEach((product) => counts.set(product.supplier_id, (counts.get(product.supplier_id) ?? 0) + 1)); return counts; }, [allProducts]);
-  const filtered = useMemo(() => { const query = search.trim().toLowerCase(); return (suppliers ?? []).filter((supplier) => !query || [supplier.name, supplier.contact_name, supplier.email, supplier.phone, supplier.customer_number, supplier.order_days, supplier.delivery_days].filter(Boolean).some((value) => String(value).toLowerCase().includes(query))); }, [suppliers, search]);
+  const filtered = useMemo(() => {
+    return (suppliers ?? []).filter((supplier) => {
+      const query = columnSearch.trim().toLowerCase();
+      const searchable = [supplier.name, supplier.contact_name, supplier.email, supplier.phone, supplier.phone2, supplier.customer_number, supplier.order_days, supplier.delivery_days].filter(Boolean).map(String).join(" ").toLowerCase();
+      const matchesSearch = !query || searchable.includes(query);
+      const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? supplier.active : !supplier.active);
+      const matchesContact = contactFilter === "all" || (contactFilter === "yes" ? hasValue(supplier.contact_name) : !hasValue(supplier.contact_name));
+      const matchesPhone = phoneFilter === "all" || (phoneFilter === "yes" ? hasValue(supplier.phone) || hasValue(supplier.phone2) : !hasValue(supplier.phone) && !hasValue(supplier.phone2));
+      const matchesEmail = emailFilter === "all" || (emailFilter === "yes" ? hasValue(supplier.email) : !hasValue(supplier.email));
+      const matchesDays = daysFilter === "all" || (daysFilter === "complete" ? hasValue(supplier.order_days) && hasValue(supplier.delivery_days) : !hasValue(supplier.order_days) || !hasValue(supplier.delivery_days));
+      return matchesSearch && matchesStatus && matchesContact && matchesPhone && matchesEmail && matchesDays;
+    });
+  }, [suppliers, columnSearch, statusFilter, contactFilter, phoneFilter, emailFilter, daysFilter]);
+  const activeFilters = [columnSearch, statusFilter, contactFilter, phoneFilter, emailFilter, daysFilter].filter((value) => value && value !== "all").length;
+  const clearFilters = () => { setColumnSearch(""); setStatusFilter("all"); setContactFilter("all"); setPhoneFilter("all"); setEmailFilter("all"); setDaysFilter("all"); };
   const openCreateModal = () => { setForm({ ...EMPTY_FORM }); setFormError(null); setModalOpen(true); };
   const startEdit = (supplier: Supplier, field: EditableField) => setEditing({ id: supplier.id, field, value: String(supplier[field] ?? "") });
   const cancelEdit = () => setEditing(null);
@@ -34,12 +76,12 @@ export default function SuppliersPage() {
   const handleSubmit = () => { setFormError(null); if (!form.name.trim()) return setFormError("שם הספק הוא שדה חובה."); createSupplier.mutate({ name: form.name.trim(), contact_name: form.contact_name.trim() || undefined, email: form.email.trim() || undefined, phone: form.phone.trim() || undefined, phone2: form.phone2.trim() || undefined, customer_number: form.customer_number.trim() || undefined, delivery_days: form.delivery_days.trim() || undefined, order_days: form.order_days.trim() || undefined }, { onSuccess: () => setModalOpen(false) }); };
 
   return <div className="space-y-6 pb-8" dir="rtl">
-    <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"><Users className="h-3.5 w-3.5" />ניהול ספקים</div><h1 className="page-title">ספקים</h1><p className="page-subtitle">לחץ על שדה בטבלה כדי לערוך אותו ישירות. Enter לשמירה, Esc לביטול.</p></div>{canManage && <Button onClick={openCreateModal}><Plus size={16} />ספק חדש</Button>}</section>
+    <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"><Users className="h-3.5 w-3.5" />ניהול ספקים</div><h1 className="page-title">ספקים</h1><p className="page-subtitle">הסינון מתבצע ישירות בשורת הסינון של הטבלה. לחץ על שדה בטבלה כדי לערוך אותו ישירות.</p></div>{canManage && <Button onClick={openCreateModal}><Plus size={16} />ספק חדש</Button>}</section>
     <section className="grid grid-cols-2 gap-3 md:grid-cols-4"><SummaryCard icon={Users} label="ספקים" value={suppliers?.length ?? 0} /><SummaryCard icon={Package} label="מוצרים" value={allProducts?.length ?? 0} /><SummaryCard icon={Package} label="ספקים עם קטלוג" value={(suppliers ?? []).filter((s) => (productCountBySupplier.get(s.id) ?? 0) > 0).length} /><SummaryCard icon={ShoppingCart} label="תוצאות" value={filtered.length} /></section>
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="relative max-w-xl"><Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><Input placeholder="חיפוש לפי ספק, איש קשר, טלפון, אימייל או מספר לקוח..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-11 pr-10" /></div></div>
+    {activeFilters > 0 && <div className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-xs font-semibold text-indigo-700 dark:border-indigo-900/50 dark:bg-indigo-950/20 dark:text-indigo-300"><span>{filtered.length} ספקים תואמים את הסינון</span><button type="button" onClick={clearFilters} className="font-bold hover:underline">נקה סינון</button></div>}
     {isLoading && <div className="overflow-hidden rounded-2xl border bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><TableSkeleton rows={6} cols={9} /></div>}{isError && <ErrorState description="טעינת הספקים נכשלה." onRetry={() => refetch()} />}
-    {!isLoading && !isError && filtered.length === 0 && <EmptyState icon={Users} title={suppliers?.length ? "לא נמצאו ספקים התואמים לחיפוש" : "אין ספקים עדיין"} description={suppliers?.length ? "נסה לשנות את מילות החיפוש." : canManage ? "הוסף ספק לפני יצירת מוצרים והזמנות." : undefined} actionLabel={canManage && !suppliers?.length ? "ספק חדש" : undefined} onAction={openCreateModal} />}
-    {!isLoading && !isError && filtered.length > 0 && <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><Table><TableHead><tr><TableHeaderCell>ספק</TableHeaderCell><TableHeaderCell>איש קשר</TableHeaderCell><TableHeaderCell>טלפונים</TableHeaderCell><TableHeaderCell>מס' לקוח</TableHeaderCell><TableHeaderCell>ימי הזמנות</TableHeaderCell><TableHeaderCell>ימי אספקה</TableHeaderCell><TableHeaderCell>מוצרים</TableHeaderCell><TableHeaderCell>סטטוס</TableHeaderCell><TableHeaderCell>פעולה</TableHeaderCell></tr></TableHead><TableBody>{filtered.map((supplier) => { const productCount = productCountBySupplier.get(supplier.id) ?? 0; return <TableRow key={supplier.id}>
+    {!isLoading && !isError && filtered.length === 0 && <EmptyState icon={Users} title={suppliers?.length ? "לא נמצאו ספקים התואמים לסינון" : "אין ספקים עדיין"} description={suppliers?.length ? "נסה לשנות את הסינון בשורת הכותרות של הטבלה." : canManage ? "הוסף ספק לפני יצירת מוצרים והזמנות." : undefined} actionLabel={canManage && !suppliers?.length ? "ספק חדש" : undefined} onAction={openCreateModal} />}
+    {!isLoading && !isError && filtered.length > 0 && <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><Table><TableHead><tr><TableHeaderCell>ספק</TableHeaderCell><TableHeaderCell>איש קשר</TableHeaderCell><TableHeaderCell>טלפונים</TableHeaderCell><TableHeaderCell>מס' לקוח</TableHeaderCell><TableHeaderCell>ימי הזמנות</TableHeaderCell><TableHeaderCell>ימי אספקה</TableHeaderCell><TableHeaderCell>מוצרים</TableHeaderCell><TableHeaderCell>סטטוס</TableHeaderCell><TableHeaderCell>פעולה</TableHeaderCell></tr><tr className="border-b border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/60"><TableHeaderCell><TableFilterInput value={columnSearch} onChange={setColumnSearch} placeholder="חיפוש ספק..." /></TableHeaderCell><TableHeaderCell><TableFilterSelect value={contactFilter} onChange={setContactFilter}><option value="all">הכל</option><option value="yes">יש איש קשר</option><option value="no">חסר איש קשר</option></TableFilterSelect></TableHeaderCell><TableHeaderCell><TableFilterSelect value={phoneFilter} onChange={setPhoneFilter}><option value="all">הכל</option><option value="yes">יש טלפון</option><option value="no">חסר טלפון</option></TableFilterSelect></TableHeaderCell><TableHeaderCell><TableFilterInput value={columnSearch} onChange={setColumnSearch} placeholder="חיפוש בכל השדות..." /></TableHeaderCell><TableHeaderCell><TableFilterSelect value={daysFilter} onChange={setDaysFilter}><option value="all">הכל</option><option value="complete">מוגדרים</option><option value="missing">חסרים</option></TableFilterSelect></TableHeaderCell><TableHeaderCell><TableFilterSelect value={daysFilter} onChange={setDaysFilter}><option value="all">הכל</option><option value="complete">מוגדרים</option><option value="missing">חסרים</option></TableFilterSelect></TableHeaderCell><TableHeaderCell /><TableHeaderCell><TableFilterSelect value={statusFilter} onChange={setStatusFilter}><option value="all">כל הסטטוסים</option><option value="active">פעילים</option><option value="inactive">לא פעילים</option></TableFilterSelect></TableHeaderCell><TableHeaderCell /></tr></TableHead><TableBody>{filtered.map((supplier) => { const productCount = productCountBySupplier.get(supplier.id) ?? 0; return <TableRow key={supplier.id}>
       <TableCell><div className="min-w-[180px]"><Link href={`/dashboard/suppliers/${supplier.id}`} className="font-extrabold text-slate-900 hover:text-indigo-700 dark:text-white">{supplier.name}</Link>{canManage && <button type="button" onClick={() => startEdit(supplier, "name")} className="mr-2 rounded-md p-1 text-indigo-400 hover:bg-indigo-50" aria-label="עריכת שם ספק"><Pencil size={13} /></button>}</div></TableCell>
       <TableCell>{cell(supplier, "contact_name", supplier.contact_name || "—")}</TableCell>
       <TableCell><div className="space-y-1 text-xs">{cell(supplier, "phone", supplier.phone || "—")} {supplier.phone2 && cell(supplier, "phone2", supplier.phone2)}</div></TableCell>
