@@ -11,13 +11,12 @@ export function AutoClassifyButton() {
   const mutation = useAutoClassifyProducts();
   const [message, setMessage] = useState<string | null>(null);
 
-  // The dashboard uses locale-prefixed routes (for example /he/dashboard/catalog).
   const isCatalogPage = Boolean(pathname?.match(/(?:^|\/)dashboard\/catalog(?:\/|$)/));
   if (!isCatalogPage) return null;
 
   const run = () => {
     setMessage(null);
-    mutation.mutate(1000, {
+    mutation.mutate({ limit: 1000 }, {
       onSuccess: (result) => {
         setMessage(`סווגו ${result.counts.classified} מוצרים. ${result.counts.review_needed} דורשים בדיקה.`);
       },
