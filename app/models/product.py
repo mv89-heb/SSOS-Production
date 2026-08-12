@@ -26,7 +26,6 @@ class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
     supplier_id = db.Column(db.Integer, db.ForeignKey("suppliers.id"), nullable=False, index=True)
-
     sku = db.Column(db.String(100), index=True)
     name = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
@@ -35,26 +34,25 @@ class Product(db.Model):
     active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
-    # --- Phase 1: Core Data Foundation (Product Model Upgrade) -------------
-    # All nullable — existing rows/clients are unaffected; nothing here is
-    # read by OrderService (Snapshot Architecture only ever copies
-    # sku/name/price at order-creation time), so none of this can change
-    # the numbers on an existing order.
     image_url = db.Column(db.String(500), nullable=True)
     barcode = db.Column(db.String(64), nullable=True, index=True)
     category = db.Column(db.String(100), nullable=True, index=True)
-    unit = db.Column(db.String(50), nullable=True)  # e.g. "יחידה", "קילו", "ארגז"
+    category_source = db.Column(db.String(30), nullable=True)
+    category_confidence = db.Column(db.Numeric(5, 4), nullable=True)
+    category_reviewed = db.Column(db.Boolean, nullable=False, default=False)
+    unit = db.Column(db.String(50), nullable=True)
     units_per_carton = db.Column(db.Integer, nullable=True)
-    supplier_sku = db.Column(db.String(100), nullable=True)  # supplier's own product code (distinct from our internal sku)
+    supplier_sku = db.Column(db.String(100), nullable=True)
     current_stock = db.Column(db.Integer, nullable=True)
     min_stock = db.Column(db.Integer, nullable=True)
     recommended_stock = db.Column(db.Integer, nullable=True)
 
     supplier = db.relationship("Supplier", back_populates="products")
-    # Phase 2: other suppliers' prices for this same product (comparison
-    # data only — never read by OrderService, see SupplierProductOffer).
     supplier_offers = db.relationship(
         "SupplierProductOffer", back_populates="product", cascade="all, delete-orphan"
+    )
+    classification_feedback = db.relationship(
+        "ProductClassificationFeedback", back_populates="product", cascade="all, delete-orphan"
     )
 
     def to_dict(self):
@@ -71,6 +69,9 @@ class Product(db.Model):
             "image_url": self.image_url,
             "barcode": self.barcode,
             "category": self.category,
+            "category_source": self.category_source,
+            "category_confidence": float(self.category_confidence) if self.category_confidence is not None else None,
+            "category_reviewed": self.category_reviewed,
             "unit": self.unit,
             "units_per_carton": self.units_per_carton,
             "supplier_sku": self.supplier_sku,
