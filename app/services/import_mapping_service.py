@@ -1,5 +1,6 @@
 """Import column mapping workspace, review, approval, and reusable templates."""
 import re
+from collections import Counter
 from datetime import datetime, timezone
 
 from werkzeug.exceptions import BadRequest, Conflict
@@ -70,6 +71,14 @@ def _normalize_filename(filename: str) -> str:
     return re.sub(r"^\d+_", "", filename or "").strip().lower()
 
 
+def _normalize_supplier_value(value) -> str:
+    """Normalize supplier cell values conservatively for exact catalog matching."""
+    if value is None:
+        return ""
+    text = str(value).strip().lower()
+    return re.sub(r"\s+", " ", text)
+
+
 def _is_positive_int(value) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
@@ -104,6 +113,14 @@ class ImportMappingService:
             session_id, session.staged_sheet_name
         )
         if existing:
+            # Mappings are persisted between visits. Enrich an existing mapping
+            # with a high-confidence supplier value discovered from the staged
+            # rows, so older mappings created before this fix are repaired too.
+            known_suppliers = {
+                _normalize_supplier_value(s.name): (s.id, s.name)
+                for s in self.supplier_repo.get_active()
+            }
+            self._auto_link_supplier_columns(existing, session, known_suppliers)
             return existing, self._find_matching_templates(session)
 
         analysis_rows = self.analysis_repo.get_by_session(session_id)
@@ -121,13 +138,13 @@ class ImportMappingService:
         self.mapping_repo.add(mapping)
 
         known_suppliers = {
-            s.name.strip().lower(): (s.id, s.name)
+            _normalize_supplier_value(s.name): (s.id, s.name)
             for s in self.supplier_repo.get_active()
         }
         columns_data = analysis.columns if analysis else self._fallback_columns(session)
         self.column_repo.bulk_add(
             [
-                self._build_suggested_column(mapping.id, col, known_suppliers)
+                self._build_suggested_column(mapping.id, col, known_suppliers, session)
                 for col in columns_data
             ]
         )
@@ -154,7 +171,74 @@ class ImportMappingService:
             for i, h in enumerate(session.column_headers or [])
         ]
 
-    def _build_suggested_column(self, mapping_id: int, col: dict, known_suppliers: dict):
+    def _supplier_match_from_rows(self, session, column_index: int, known_suppliers: dict):
+        """Return a supplier only when the supplier column contains a strong, unambiguous match.
+
+        The import analysis correctly identifies the *SUPPLIER* column from its header,
+        but a tall price list stores the actual supplier in the column's cell values.
+        We therefore inspect the staged raw_values and use the dominant exact catalog
+        match. This deliberately fails closed when values are mixed or unknown.
+        """
+        counts = Counter()
+        total_non_empty = 0
+        for row in getattr(session, "rows", []) or []:
+            values = row.raw_values or []
+            if column_index >= len(values):
+                continue
+            normalized = _normalize_supplier_value(values[column_index])
+            if not normalized:
+                continue
+            total_non_empty += 1
+            if normalized in known_suppliers:
+                counts[normalized] += 1
+
+        if not counts or total_non_empty < 1:
+            return None
+
+        winner, winner_count = counts.most_common(1)[0]
+        # Require both a meaningful number of matches and a clear majority.
+        # For a normal single-supplier list this is effectively 100%.
+        share = winner_count / total_non_empty
+        if winner_count < 2 or share < 0.80:
+            return None
+
+        supplier_id, supplier_name = known_suppliers[winner]
+        return supplier_id, supplier_name, share
+
+    def _auto_link_supplier_columns(self, mapping, session, known_suppliers):
+        """Repair/enrich SUPPLIER columns from the actual staged cell values."""
+        changed = False
+        columns = self.column_repo.get_by_mapping(mapping.id)
+        for col in columns:
+            if col.final_target != TARGET_SUPPLIER_NAME and col.suggested_target != TARGET_SUPPLIER_NAME:
+                continue
+            if col.final_supplier_id is not None:
+                continue
+            match = self._supplier_match_from_rows(session, col.column_index, known_suppliers)
+            if not match:
+                continue
+            supplier_id, supplier_name, share = match
+            col.suggested_supplier_id = supplier_id
+            col.suggested_supplier_name = supplier_name
+            col.final_supplier_id = supplier_id
+            col.final_supplier_name = supplier_name
+            changed = True
+            AuditService.log_event(
+                self.tenant_id,
+                self.user_id,
+                "import.mapping_supplier_auto_linked",
+                f'Auto-linked supplier "{supplier_name}" from import column "{col.column_header}"',
+                {
+                    "import_mapping_id": mapping.id,
+                    "column_index": col.column_index,
+                    "supplier_id": supplier_id,
+                    "supplier_name": supplier_name,
+                    "match_share": round(share, 4),
+                },
+            )
+        return changed
+
+    def _build_suggested_column(self, mapping_id: int, col: dict, known_suppliers: dict, session=None):
         header = str(col.get("header") or "").strip()
         if not header:
             raise BadRequest("Import mapping contains a column with an empty header")
@@ -169,14 +253,21 @@ class ImportMappingService:
             target = TARGET_SUPPLIER_OFFER
             price_type = _ANALYSIS_TYPE_TO_PRICE_TYPE[detected_type]
             supplier_name = str(group_label).strip()
-            match = known_suppliers.get(supplier_name.lower())
+            match = known_suppliers.get(_normalize_supplier_value(supplier_name))
             if match:
                 supplier_id, supplier_name = match
         elif detected_type == "SUPPLIER":
             target = TARGET_SUPPLIER_NAME
-            match = known_suppliers.get(header.lower())
+            # First try the header itself for wide-format workbooks.
+            match = known_suppliers.get(_normalize_supplier_value(header))
             if match:
                 supplier_id, supplier_name = match
+            # For a normal tall supplier column (e.g. "שם ספק"), the real
+            # supplier is in the cells, not in the header.
+            elif session is not None:
+                row_match = self._supplier_match_from_rows(session, col["index"], known_suppliers)
+                if row_match:
+                    supplier_id, supplier_name, _ = row_match
         else:
             target = _ANALYSIS_TYPE_TO_TARGET.get(detected_type, TARGET_IGNORE)
 
@@ -238,9 +329,7 @@ class ImportMappingService:
             if target == TARGET_SUPPLIER_OFFER:
                 col = columns_by_index[column_index]
                 if not (price_type or col.final_price_type):
-                    raise BadRequest(
-                        "price_type is required when target is SUPPLIER_OFFER"
-                    )
+                    raise BadRequest("price_type is required when target is SUPPLIER_OFFER")
 
             supplier_id = decision.get("supplier_id")
             if supplier_id is not None:
@@ -338,9 +427,6 @@ class ImportMappingService:
                 raise BadRequest("supplier_id must be a positive integer")
             self.supplier_repo.get_by_id_or_404(supplier_id)
 
-        # Use index + header as the persisted key. Header-only keys break when
-        # a supplier workbook legitimately contains duplicate labels such as
-        # two different "מחיר" columns.
         column_mapping = {
             _template_key(c.column_index, c.column_header): {
                 "column_index": c.column_index,
@@ -375,21 +461,11 @@ class ImportMappingService:
 
     def _validate_template_scope(self, mapping, template):
         """Prevent a reusable template from silently switching suppliers."""
-        session_supplier_id = (
-            mapping.session.supplier_id
-            if mapping.session is not None
-            else None
-        )
+        session_supplier_id = mapping.session.supplier_id if mapping.session is not None else None
         template_supplier_id = template.supplier_id
 
-        if (
-            session_supplier_id is not None
-            and template_supplier_id is not None
-            and session_supplier_id != template_supplier_id
-        ):
-            raise Conflict(
-                "This template belongs to a different supplier and cannot be applied to this import."
-            )
+        if session_supplier_id is not None and template_supplier_id is not None and session_supplier_id != template_supplier_id:
+            raise Conflict("This template belongs to a different supplier and cannot be applied to this import.")
 
         embedded_supplier_ids = set()
         for entry in (template.column_mapping or {}).values():
@@ -399,44 +475,30 @@ class ImportMappingService:
             if supplier_id is not None:
                 if not _is_positive_int(supplier_id):
                     raise Conflict("Template contains an invalid supplier_id")
-                # Fetching through the tenant-scoped repository also prevents
-                # a template from referencing a supplier owned by another tenant.
                 self.supplier_repo.get_by_id_or_404(supplier_id)
                 embedded_supplier_ids.add(supplier_id)
 
         if template_supplier_id is not None:
             self.supplier_repo.get_by_id_or_404(template_supplier_id)
             if any(supplier_id != template_supplier_id for supplier_id in embedded_supplier_ids):
-                raise Conflict(
-                    "Template contains supplier mappings that do not match its supplier."
-                )
+                raise Conflict("Template contains supplier mappings that do not match its supplier.")
 
         if session_supplier_id is not None:
             if any(supplier_id != session_supplier_id for supplier_id in embedded_supplier_ids):
-                raise Conflict(
-                    "Template contains supplier mappings for a different supplier than this import."
-                )
+                raise Conflict("Template contains supplier mappings for a different supplier than this import.")
 
     @staticmethod
     def _template_entry_for_column(template, col):
-        """Resolve both new index-safe templates and legacy header-only templates."""
         mapping = template.column_mapping or {}
         exact = mapping.get(_template_key(col.column_index, col.column_header))
         if exact is not None:
             return exact
-
-        # Backward compatibility for templates saved before the duplicate-header
-        # fix. Only accept a legacy header key when it is unambiguous in the
-        # current mapping; otherwise fail closed rather than applying the same
-        # decision to multiple columns.
         legacy = mapping.get(col.column_header)
         if legacy is None:
             return None
         matching = [
             value for key, value in mapping.items()
-            if isinstance(key, str)
-            and key == col.column_header
-            and isinstance(value, dict)
+            if isinstance(key, str) and key == col.column_header and isinstance(value, dict)
         ]
         return legacy if len(matching) == 1 else None
 
