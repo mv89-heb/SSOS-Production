@@ -1,14 +1,15 @@
 """import execution integrity constraints
 
 Adds a database-level guard that prevents two COMMITTED executions from
-existing for the same tenant/import session at the same time.
+existing for the same tenant/import session when existing data is clean.
 
-A rolled-back execution is intentionally excluded from the unique index so
-the existing commit -> rollback -> recommit workflow remains valid.
+Legacy duplicate committed executions are preserved and reported rather than
+aborting the whole deployment. Application-level transaction handling remains
+in place for new executions, and the unique index can be introduced after the
+legacy records are reconciled.
 
 Revision ID: 20260811_import_execution_integrity
 Revises: 20260811_catalog_integrity
-Create Date: 2026-08-11 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
@@ -19,7 +20,6 @@ down_revision = "20260811_catalog_integrity"
 
 def upgrade():
     bind = op.get_bind()
-
     duplicates = bind.execute(
         sa.text(
             """
@@ -37,12 +37,13 @@ def upgrade():
     if duplicates:
         examples = ", ".join(
             f"tenant={row[0]} session={row[1]} count={row[2]}"
-            for row in duplicates
+            for row in duplicates[:5]
         )
-        raise RuntimeError(
-            "Cannot apply committed-import uniqueness constraint: duplicate "
-            f"COMMITTED executions already exist. Resolve them first. Examples: {examples}"
+        print(
+            "WARNING: skipping uq_import_executions_tenant_session_committed; "
+            f"legacy duplicates exist: {examples}"
         )
+        return
 
     op.create_index(
         "uq_import_executions_tenant_session_committed",
@@ -55,7 +56,13 @@ def upgrade():
 
 
 def downgrade():
-    op.drop_index(
-        "uq_import_executions_tenant_session_committed",
-        table_name="import_executions",
-    )
+    bind = op.get_bind()
+    existing = {
+        index["name"]
+        for index in sa.inspect(bind).get_indexes("import_executions")
+    }
+    if "uq_import_executions_tenant_session_committed" in existing:
+        op.drop_index(
+            "uq_import_executions_tenant_session_committed",
+            table_name="import_executions",
+        )
