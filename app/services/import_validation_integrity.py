@@ -118,8 +118,7 @@ def apply_integrity_repairs(validation, session, mapping, rows):
             message=f"{DUPLICATE_ERROR_MESSAGE} (שורות: {', '.join(map(str, all_duplicate_numbers))})",
         )
         db.session.add(issue)
-        if hasattr(validation, "issues"):
-            validation.issues.append(issue)
+        validation.issues.append(issue)
 
     # Recompute persisted summary from the repaired preview so Step 4/6 and
     # ImportExecutionService see exactly the same truth.
