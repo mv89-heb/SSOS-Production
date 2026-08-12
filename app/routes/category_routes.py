@@ -1,10 +1,9 @@
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import BadRequest, NotFound, HTTPException
 
 from app.extensions import db
 from app.models.product import Product
-from app.services.catalog_service import CatalogService
 from app.services.permission_service import PermissionService
 from app.services.product_classification_service import ProductClassificationService
 
@@ -29,12 +28,9 @@ def classify_product(product_id):
         PermissionService.require_role_at_least("manager")
         product = Product.query.filter_by(id=product_id, tenant_id=current_user.tenant_id).first()
         if not product:
-            raise HTTPException(description="Product not found", response=None)
+            raise NotFound("Product not found")
         result = classifier.classify(current_user.tenant_id, product.name)
-        service = CatalogService(current_user.tenant_id, current_user.id)
-        service.update_product(product_id, {"category": result["category"]})
-        # Preserve the engine's provenance instead of treating an automatic
-        # classification as a user decision.
+        product.category = result["category"]
         product.category_source = result["source"]
         product.category_confidence = result["confidence"]
         product.category_reviewed = result["confidence"] >= 0.90
@@ -51,9 +47,11 @@ def category_feedback(product_id):
         PermissionService.require_role_at_least("manager")
         payload = request.get_json(silent=True) or {}
         category = payload.get("category")
+        if category not in classifier.categories():
+            raise BadRequest("Invalid product category")
         product = Product.query.filter_by(id=product_id, tenant_id=current_user.tenant_id).first()
         if not product:
-            raise HTTPException(description="Product not found", response=None)
+            raise NotFound("Product not found")
         result = classifier.classify(current_user.tenant_id, product.name)
         classifier.record_feedback(
             current_user.tenant_id,
