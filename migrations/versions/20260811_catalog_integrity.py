@@ -1,15 +1,10 @@
 """catalog integrity constraints
 
-Adds tenant-scoped uniqueness for the two product identifiers that are
-already treated as identifiers by the application:
-
-* Product.sku — unique within a tenant when present.
-* Product.barcode — unique within a tenant when present.
-
-NULL remains allowed, so products without an identifier are unaffected.
-The migration deliberately fails before creating the indexes when existing
-data contains duplicates; this prevents silently changing or deleting
-catalog data during deployment.
+Adds tenant-scoped uniqueness for product identifiers when existing data is
+already clean. Legacy duplicate identifiers are preserved and reported rather
+than aborting the entire deployment: the application already validates new
+and edited SKU/barcode values, while the database constraint can be introduced
+later after the legacy duplicates are resolved.
 
 Revision ID: 20260811_catalog_integrity
 Revises: 20260720_import_execution
@@ -22,8 +17,8 @@ revision = "20260811_catalog_integrity"
 down_revision = "20260720_import_execution"
 
 
-def _assert_no_duplicates(bind, table, column, label):
-    rows = bind.execute(
+def _duplicate_rows(bind, table, column):
+    return bind.execute(
         sa.text(
             f"""
             SELECT tenant_id, {column}, COUNT(*) AS duplicate_count
@@ -36,44 +31,50 @@ def _assert_no_duplicates(bind, table, column, label):
             """
         )
     ).fetchall()
-    if rows:
+
+
+def _create_unique_index_if_clean(bind, index_name, column):
+    duplicates = _duplicate_rows(bind, "products", column)
+    if duplicates:
         examples = ", ".join(
             f"tenant={row[0]} {column}={row[1]!r} count={row[2]}"
-            for row in rows
+            for row in duplicates[:5]
         )
-        raise RuntimeError(
-            f"Cannot apply {label} uniqueness constraint: duplicate values "
-            f"already exist. Resolve the duplicates first. Examples: {examples}"
+        # Do not make an existing production catalog unavailable merely because
+        # old data predates the uniqueness rule. New writes are still guarded by
+        # CatalogService, and the index can be added after an admin cleanup.
+        print(
+            f"WARNING: skipping {index_name}; legacy duplicate {column} values exist: {examples}"
         )
+        return False
+
+    op.create_index(
+        index_name,
+        "products",
+        ["tenant_id", column],
+        unique=True,
+        postgresql_where=sa.text(
+            f"{column} IS NOT NULL AND btrim({column}) <> ''"
+        ),
+        sqlite_where=sa.text(
+            f"{column} IS NOT NULL AND trim({column}) <> ''"
+        ),
+    )
+    return True
 
 
 def upgrade():
     bind = op.get_bind()
-
-    _assert_no_duplicates(bind, "products", "sku", "SKU")
-    _assert_no_duplicates(bind, "products", "barcode", "barcode")
-
-    # Partial indexes make the intended rule explicit: blank/NULL identifiers
-    # are not treated as identifiers, while real identifiers are unique per
-    # tenant. PostgreSQL and SQLite both support partial indexes.
-    op.create_index(
-        "uq_products_tenant_sku",
-        "products",
-        ["tenant_id", "sku"],
-        unique=True,
-        postgresql_where=sa.text("sku IS NOT NULL AND btrim(sku) <> ''"),
-        sqlite_where=sa.text("sku IS NOT NULL AND trim(sku) <> ''"),
-    )
-    op.create_index(
-        "uq_products_tenant_barcode",
-        "products",
-        ["tenant_id", "barcode"],
-        unique=True,
-        postgresql_where=sa.text("barcode IS NOT NULL AND btrim(barcode) <> ''"),
-        sqlite_where=sa.text("barcode IS NOT NULL AND trim(barcode) <> ''"),
-    )
+    _create_unique_index_if_clean(bind, "uq_products_tenant_sku", "sku")
+    _create_unique_index_if_clean(bind, "uq_products_tenant_barcode", "barcode")
 
 
 def downgrade():
-    op.drop_index("uq_products_tenant_barcode", table_name="products")
-    op.drop_index("uq_products_tenant_sku", table_name="products")
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing = {index["name"] for index in inspector.get_indexes("products")}
+
+    if "uq_products_tenant_barcode" in existing:
+        op.drop_index("uq_products_tenant_barcode", table_name="products")
+    if "uq_products_tenant_sku" in existing:
+        op.drop_index("uq_products_tenant_sku", table_name="products")
