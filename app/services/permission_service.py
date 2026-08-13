@@ -13,26 +13,36 @@ class PermissionService:
             raise Unauthorized("Authentication required")
 
     @staticmethod
+    def _normalized_role(role) -> str:
+        return str(role or "").strip().lower()
+
+    @staticmethod
     def require_role_at_least(minimum_role: str):
         PermissionService.require_authenticated()
-        user_rank = ROLE_RANK.get(current_user.role, 0)
-        min_rank = ROLE_RANK.get(minimum_role, 99)
+        user_role = PermissionService._normalized_role(current_user.role)
+        required_role = PermissionService._normalized_role(minimum_role)
+        user_rank = ROLE_RANK.get(user_role, 0)
+        min_rank = ROLE_RANK.get(required_role, 99)
         if user_rank < min_rank:
-            raise Forbidden(f"Requires role '{minimum_role}' or higher")
+            raise Forbidden(f"Requires role '{required_role}' or higher")
 
     @staticmethod
     def require_exact_role(role: str):
         PermissionService.require_authenticated()
-        if current_user.role != role and current_user.role != ROLE_ADMIN:
-            raise Forbidden(f"Requires role '{role}'")
+        current_role = PermissionService._normalized_role(current_user.role)
+        required_role = PermissionService._normalized_role(role)
+        if current_role != required_role and current_role != ROLE_ADMIN:
+            raise Forbidden(f"Requires role '{required_role}'")
 
     @staticmethod
     def can_manage_orders() -> bool:
-        return current_user.is_authenticated and current_user.role in (ROLE_ADMIN, "manager")
+        role = PermissionService._normalized_role(current_user.role)
+        return current_user.is_authenticated and role in (ROLE_ADMIN, "manager")
 
     @staticmethod
     def can_delete_orders() -> bool:
-        return current_user.is_authenticated and current_user.role == ROLE_ADMIN
+        role = PermissionService._normalized_role(current_user.role)
+        return current_user.is_authenticated and role == ROLE_ADMIN
 
     @staticmethod
     def require_same_tenant(resource_tenant_id: int):
