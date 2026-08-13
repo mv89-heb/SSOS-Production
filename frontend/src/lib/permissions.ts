@@ -11,7 +11,9 @@ const ROLE_RANK: Record<UserRole, number> = {
 
 function atLeast(user: User | null | undefined, minimum: UserRole): boolean {
   if (!user) return false;
-  return (ROLE_RANK[user.role] ?? 0) >= ROLE_RANK[minimum];
+  const role = String(user.role ?? "").trim().toLowerCase() as UserRole;
+  const required = String(minimum).trim().toLowerCase() as UserRole;
+  return (ROLE_RANK[role] ?? 0) >= (ROLE_RANK[required] ?? 99);
 }
 
 export const permissions = {
