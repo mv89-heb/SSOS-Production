@@ -36,6 +36,10 @@ const apiClient = axios.create({
 
 const SAFE_METHODS = new Set(["get", "head", "options"]);
 
+type RetryableRequestConfig = NonNullable<Parameters<typeof apiClient.request>[0]> & {
+  _csrfRetry?: boolean;
+};
+
 let csrfTokenPromise: Promise<string> | null = null;
 
 async function fetchCsrfToken(): Promise<string> {
@@ -46,8 +50,8 @@ async function fetchCsrfToken(): Promise<string> {
   return data.csrf_token;
 }
 
-/** Call after logout (or on a 403 CSRF failure) so the next mutating
- * request fetches a fresh token instead of reusing a stale one. */
+/** Call after logout (or on a CSRF failure) so the next mutating request
+ * fetches a fresh token instead of reusing a stale one. */
 export function resetCsrfToken() {
   csrfTokenPromise = null;
 }
@@ -73,9 +77,26 @@ apiClient.interceptors.request.use(async (config) => {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     const status = error.response?.status;
-    const errorMessage = error.response?.data?.message || "אירעה שגיאה בתקשורת עם השרת";
+    const errorMessage = String(error.response?.data?.message || "");
+    const normalizedMessage = errorMessage.toLowerCase();
+    const requestConfig = error.config as RetryableRequestConfig | undefined;
+    const method = String(requestConfig?.method || "get").toLowerCase();
+    const isCsrfFailure =
+      !SAFE_METHODS.has(method) &&
+      (status === 400 || status === 403) &&
+      (normalizedMessage.includes("csrf") || normalizedMessage.includes("cross-site request forgery") || normalizedMessage.includes("token"));
+
+    // CSRF tokens are session-bound and can rotate after login/logout or
+    // deployment. Retry a failed mutation exactly once with a fresh token.
+    // This fixes the common "admin can edit, but Save does nothing" case
+    // without weakening any backend permission checks.
+    if (isCsrfFailure && requestConfig && !requestConfig._csrfRetry) {
+      requestConfig._csrfRetry = true;
+      resetCsrfToken();
+      return apiClient.request(requestConfig);
+    }
 
     if (status === 401) {
       if (typeof window !== "undefined" && window.location.pathname !== "/login") {
@@ -85,7 +106,7 @@ apiClient.interceptors.response.use(
 
     return Promise.reject({
       ...error,
-      friendlyMessage: errorMessage,
+      friendlyMessage: errorMessage || "אירעה שגיאה בתקשורת עם השרת",
     });
   }
 );
