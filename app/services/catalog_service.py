@@ -16,6 +16,16 @@ class CatalogService:
     SUPPLIER_FIELDS = ("name", "contact_name", "email", "phone", "phone2", "customer_number", "delivery_days", "order_days", "active")
     PRODUCT_FIELDS = ("name", "sku", "description", "current_price", "currency", "active", "image_url", "barcode", "category", "unit", "units_per_carton", "supplier_sku", "current_stock", "min_stock", "recommended_stock")
     OFFER_FIELDS = ("supplier_sku", "price", "currency", "unit", "units_per_carton", "active")
+    WEEK_DAYS = ("ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת")
+    DAY_ALIASES = {
+        "א": "ראשון", "א׳": "ראשון", "ראשון": "ראשון",
+        "ב": "שני", "ב׳": "שני", "שני": "שני",
+        "ג": "שלישי", "ג׳": "שלישי", "שלישי": "שלישי",
+        "ד": "רביעי", "ד׳": "רביעי", "רביעי": "רביעי",
+        "ה": "חמישי", "ה׳": "חמישי", "חמישי": "חמישי",
+        "ו": "שישי", "ו׳": "שישי", "שישי": "שישי",
+        "ש": "שבת", "ש׳": "שבת", "שבת": "שבת",
+    }
 
     def __init__(self, tenant_id: int, user_id: int):
         self.tenant_id = tenant_id
@@ -25,6 +35,35 @@ class CatalogService:
         self.offer_repo = SupplierOfferRepository(tenant_id)
         self.classifier = ProductClassificationService()
 
+    @classmethod
+    def _normalize_days(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple, set)):
+            parts = list(value)
+        else:
+            parts = str(value).replace(";", ",").replace("|", ",").split(",")
+        selected = set()
+        for part in parts:
+            key = str(part).strip()
+            if not key:
+                continue
+            key_without_mark = key.replace("׳", "").replace("'", "")
+            day = cls.DAY_ALIASES.get(key) or cls.DAY_ALIASES.get(key_without_mark)
+            if not day:
+                raise BadRequest(f"Invalid weekday: {key}")
+            selected.add(day)
+        return ", ".join(day for day in cls.WEEK_DAYS if day in selected)
+
+    @classmethod
+    def _normalize_supplier_fields(cls, data: dict):
+        fields = {k: v for k, v in data.items() if k in cls.SUPPLIER_FIELDS}
+        if "order_days" in fields:
+            fields["order_days"] = cls._normalize_days(fields["order_days"])
+        if "delivery_days" in fields:
+            fields["delivery_days"] = cls._normalize_days(fields["delivery_days"])
+        return fields
+
     def list_suppliers(self, active_only=False): return self.supplier_repo.get_active() if active_only else self.supplier_repo.list_all()
 
     def create_supplier(self, data: dict):
@@ -32,7 +71,7 @@ class CatalogService:
         name = str(data.get("name") or "").strip()
         if not name: raise BadRequest("Supplier name is required")
         if len(name) > 200: raise BadRequest("Supplier name is too long")
-        fields = {k: v for k, v in data.items() if k in self.SUPPLIER_FIELDS}; fields["name"] = name
+        fields = self._normalize_supplier_fields(data); fields["name"] = name
         supplier = self.supplier_repo.model(tenant_id=self.tenant_id, **fields); self.supplier_repo.add(supplier)
         AuditService.log_event(self.tenant_id, self.user_id, "catalog.supplier_created", f"Created supplier {supplier.name}", {"supplier_id": supplier.id})
         return supplier
@@ -48,9 +87,10 @@ class CatalogService:
             name = str(data.get("name") or "").strip()
             if not name: raise BadRequest("Supplier name is required")
             if len(name) > 200: raise BadRequest("Supplier name is too long")
-            data = {**data, "name": name}
+        fields = self._normalize_supplier_fields(data)
+        if "name" in fields: fields["name"] = str(fields["name"]).strip()
         for field in self.SUPPLIER_FIELDS:
-            if field in data: setattr(supplier, field, data[field])
+            if field in fields: setattr(supplier, field, fields[field])
         AuditService.log_event(self.tenant_id, self.user_id, "catalog.supplier_updated", f"Updated supplier {supplier.name}", {"supplier_id": supplier.id, "fields": sorted(data.keys())})
         return supplier
 
@@ -73,7 +113,6 @@ class CatalogService:
         if supplied_category is not None:
             category = str(supplied_category).strip()
             if category:
-                # Keep existing/custom tenant categories valid for backward compatibility.
                 if len(category) > 100: raise BadRequest("Product category is too long")
                 product.category = category; product.category_source = "USER"; product.category_confidence = 1.0; product.category_reviewed = True; return
             product.category = None
@@ -82,9 +121,6 @@ class CatalogService:
         product.category = result["category"]
         product.category_source = result["source"]
         product.category_confidence = result["confidence"]
-        # `reviewed` means a human has explicitly accepted the category. A
-        # high-confidence rules match is still automatic and must remain open
-        # for review; learned results already originate from a human correction.
         product.category_reviewed = result["source"] in {"USER", "LEARNED"}
 
     def create_product(self, data: dict):
