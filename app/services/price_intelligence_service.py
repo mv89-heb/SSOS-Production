@@ -61,7 +61,7 @@ class PriceIntelligenceService:
         cartons = cls._decimal(units_per_carton)
         if normalized == "CARTON":
             if cartons <= 0:
-                return amount, None
+                return amount, "CARTON"
             amount = amount / cartons
             normalized = "UNIT"
         factor = cls.UNIT_FACTORS.get(normalized)
@@ -105,8 +105,6 @@ class PriceIntelligenceService:
         for offer in product.supplier_offers:
             if not offer.active or self._decimal(offer.price) <= 0:
                 continue
-            # The primary listing is authoritative for that supplier; never
-            # create a second competing row from stale/invalid alternate data.
             if offer.supplier_id == product.supplier_id:
                 continue
             by_supplier[offer.supplier_id] = self._price_payload(
@@ -176,7 +174,7 @@ class PriceIntelligenceService:
         amount = self._decimal(observed_price)
         if amount <= 0:
             raise ValueError("observed_price must be greater than zero")
-        normalized_price, inferred_unit = self.normalize_offer_price(amount, unit, package_quantity)
+        _, inferred_unit = self.normalize_offer_price(amount, unit, package_quantity)
         row = self.observation_repo.create(
             product_id=product_id,
             supplier_id=supplier_id,
@@ -197,7 +195,7 @@ class PriceIntelligenceService:
 
     def accept_price_change(self, *, product_id: int, supplier_id: int, new_price, currency="ILS", unit=None,
                             source_type="MANUAL", source_document_id=None, effective_at=None):
-        """Record an accepted price change; caller controls the catalog update transaction."""
+        """Record an accepted price change; catalog mutation stays in the caller's transaction."""
         product = self.product_repo.get_by_id_or_404(product_id)
         amount = self._decimal(new_price)
         if amount <= 0:
@@ -209,9 +207,7 @@ class PriceIntelligenceService:
             if offer is None:
                 raise ValueError("Supplier does not have an offer for this product")
             old = self._decimal(offer.price)
-        change_percent = None
-        if old > 0:
-            change_percent = (amount - old) / old * Decimal("100")
+        change_percent = (amount - old) / old * Decimal("100") if old > 0 else None
         history = PriceHistory(
             tenant_id=self.tenant_id,
             product_id=product_id,
