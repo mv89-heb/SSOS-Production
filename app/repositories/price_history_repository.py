@@ -15,6 +15,12 @@ class PriceHistoryRepository(BaseRepository):
         stmt = stmt.order_by(PriceHistory.effective_at.desc(), PriceHistory.id.desc()).limit(limit)
         return list(db.session.execute(stmt).scalars().all())
 
+    def list_all(self, limit: int = 100):
+        stmt = self._tenant_select().order_by(
+            PriceHistory.effective_at.desc(), PriceHistory.id.desc()
+        ).limit(limit)
+        return list(db.session.execute(stmt).scalars().all())
+
     def add_change(self, *, product_id: int, supplier_id: int, old_price, new_price,
                    currency: str, unit: str | None, source_type: str,
                    source_document_id: int | None, effective_at, change_percent):
