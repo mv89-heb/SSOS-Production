@@ -22,16 +22,10 @@ class PriceIntelligenceService:
         "pack": "PACK", "package": "PACK", "אריזה": "PACK", "מארז": "PACK",
         "carton": "CARTON", "case": "CARTON", "קרטון": "CARTON",
     }
-    # Canonical comparison units are the units normally used for purchasing.
-    # This keeps a quantity such as 5 KG compatible with a normalized price
-    # expressed as price/KG rather than silently turning it into price/gram.
     UNIT_FACTORS = {
-        "G": ("KG", Decimal("0.001")),
-        "KG": ("KG", Decimal("1")),
-        "ML": ("L", Decimal("0.001")),
-        "L": ("L", Decimal("1")),
-        "M": ("M", Decimal("1")),
-        "UNIT": ("UNIT", Decimal("1")),
+        "G": ("KG", Decimal("0.001")), "KG": ("KG", Decimal("1")),
+        "ML": ("L", Decimal("0.001")), "L": ("L", Decimal("1")),
+        "M": ("M", Decimal("1")), "UNIT": ("UNIT", Decimal("1")),
         "PACK": ("PACK", Decimal("1")),
     }
 
@@ -46,7 +40,7 @@ class PriceIntelligenceService:
         try:
             return Decimal(str(value))
         except (InvalidOperation, TypeError, ValueError):
-            return Decimal("0")
+            raise ValueError("Invalid decimal value")
 
     @classmethod
     def normalize_unit(cls, unit: str | None) -> str | None:
@@ -61,7 +55,7 @@ class PriceIntelligenceService:
     def normalize_offer_price(cls, price, unit, units_per_carton=None):
         amount = cls._decimal(price)
         normalized = cls.normalize_unit(unit)
-        cartons = cls._decimal(units_per_carton)
+        cartons = cls._decimal(units_per_carton) if units_per_carton is not None else Decimal("0")
         if normalized == "CARTON":
             if cartons <= 0:
                 return amount, "CARTON"
@@ -71,8 +65,6 @@ class PriceIntelligenceService:
         if factor is None:
             return amount, normalized
         base_unit, source_to_base = factor
-        # If one source unit is a fraction of the canonical unit, price per
-        # canonical unit is price / source_to_base. Example: ₪0.50/g -> ₪500/kg.
         return amount / source_to_base, base_unit
 
     @classmethod
@@ -95,24 +87,17 @@ class PriceIntelligenceService:
         by_supplier = {}
         if product.current_price is not None and self._decimal(product.current_price) > 0:
             by_supplier[product.supplier_id] = self._price_payload(
-                product.supplier_id,
-                product.supplier.name if product.supplier else None,
-                product.current_price,
-                product.unit or default_unit,
-                product.units_per_carton,
-                product.currency,
-                primary=True,
+                product.supplier_id, product.supplier.name if product.supplier else None,
+                product.current_price, product.unit or default_unit, product.units_per_carton,
+                product.currency, primary=True,
             )
         for offer in product.supplier_offers:
             if not offer.active or self._decimal(offer.price) <= 0 or offer.supplier_id == product.supplier_id:
                 continue
             by_supplier[offer.supplier_id] = self._price_payload(
-                offer.supplier_id,
-                offer.supplier.name if offer.supplier else None,
-                offer.price,
-                offer.unit or product.unit or default_unit,
-                offer.units_per_carton,
-                offer.currency,
+                offer.supplier_id, offer.supplier.name if offer.supplier else None,
+                offer.price, offer.unit or product.unit or default_unit,
+                offer.units_per_carton, offer.currency,
             )
         offers = list(by_supplier.values())
         currencies = {row["currency"] for row in offers}
@@ -122,19 +107,19 @@ class PriceIntelligenceService:
             if len(units) == 1 and None not in units:
                 comparable = offers
         comparable.sort(key=lambda row: row["normalized_price"])
-        current = by_supplier.get(product.supplier_id)
         result = {
-            "product": product.to_dict(), "current": current, "offers": comparable,
+            "product": product.to_dict(), "current": by_supplier.get(product.supplier_id),
+            "offers": comparable,
             "incomparable_offers": [row for row in offers if row not in comparable],
             "best_offer": comparable[0] if comparable else None,
             "saving_per_unit": 0.0, "saving_percent": 0.0,
         }
-        best = result["best_offer"]
+        best, current = result["best_offer"], result["current"]
         if current and best and current["normalized_price"] > 0:
             saving = self._decimal(current["normalized_price"]) - self._decimal(best["normalized_price"])
             if saving > 0:
                 result["saving_per_unit"] = round(float(saving), 6)
-                result["saving_percent"] = round(float((saving / self._decimal(current["normalized_price"])) * 100), 4)
+                result["saving_percent"] = round(float(saving / self._decimal(current["normalized_price"]) * 100), 4)
         return result
 
     def calculate_savings(self, product_id: int, quantity):
@@ -158,7 +143,6 @@ class PriceIntelligenceService:
                            unit=None, package_quantity=None, comparison_unit=None, price_basis="NET",
                            source_type="INVOICE", source_document_id=None, match_method=None,
                            match_confidence=None, observed_at=None):
-        """Persist a source observation without changing catalog prices."""
         self.product_repo.get_by_id_or_404(product_id)
         amount = self._decimal(observed_price)
         if amount <= 0:
@@ -176,7 +160,6 @@ class PriceIntelligenceService:
 
     def accept_price_change(self, *, product_id: int, supplier_id: int, new_price, currency="ILS", unit=None,
                             source_type="MANUAL", source_document_id=None, effective_at=None):
-        """Record an accepted price change; catalog mutation stays in the caller's transaction."""
         product = self.product_repo.get_by_id_or_404(product_id)
         amount = self._decimal(new_price)
         if amount <= 0:
@@ -219,23 +202,27 @@ class PriceIntelligenceService:
         def evaluate(allowed_suppliers=None):
             assignments, total = [], Decimal("0")
             for product_id, quantity, comparison in normalized_items:
-                offers = comparison["offers"] if allowed_suppliers is None else [
-                    o for o in comparison["offers"] if o["supplier_id"] in allowed_suppliers
-                ]
+                offers = comparison["offers"] if allowed_suppliers is None else [o for o in comparison["offers"] if o["supplier_id"] in allowed_suppliers]
                 if not offers:
                     return None
                 offer = min(offers, key=lambda row: row["normalized_price"])
                 line_total = self._decimal(offer["normalized_price"]) * quantity
                 total += line_total
-                assignments.append({"product_id": product_id, "quantity": float(quantity),
-                                    "supplier_id": offer["supplier_id"], "supplier_name": offer["supplier_name"],
-                                    "unit_price": offer["normalized_price"], "line_total": round(float(line_total), 2)})
+                assignments.append({"product_id": product_id, "quantity": float(quantity), "supplier_id": offer["supplier_id"],
+                                    "supplier_name": offer["supplier_name"], "unit_price": offer["normalized_price"],
+                                    "line_total": round(float(line_total), 2)})
             return total, assignments
 
         best_result = evaluate()
         if max_suppliers is not None:
-            max_suppliers = max(1, min(int(max_suppliers), len(supplier_pool)))
-            candidates = list(supplier_pool)[:12]
+            try:
+                max_suppliers = int(max_suppliers)
+            except (TypeError, ValueError):
+                raise ValueError("max_suppliers must be an integer")
+            if max_suppliers < 1:
+                raise ValueError("max_suppliers must be at least 1")
+            max_suppliers = min(max_suppliers, len(supplier_pool))
+            candidates = list(supplier_pool)
             best_result = None
             for size in range(1, max_suppliers + 1):
                 for subset in combinations(candidates, size):
