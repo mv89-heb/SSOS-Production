@@ -24,7 +24,7 @@ class PriceHistory(db.Model):
 
     source_type = db.Column(db.String(30), nullable=False, default="MANUAL")
     source_document_id = db.Column(db.Integer, nullable=True)
-    effective_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+    effective_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     change_percent = db.Column(db.Numeric(10, 4), nullable=True)
