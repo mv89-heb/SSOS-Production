@@ -1,6 +1,5 @@
 from decimal import Decimal, InvalidOperation
 
-from app.models.supplier_offer import SupplierProductOffer
 from app.repositories.product_repository import ProductRepository
 from app.repositories.price_history_repository import PriceHistoryRepository
 
@@ -50,9 +49,9 @@ class PriceIntelligenceService:
     def normalize_offer_price(cls, price, unit, units_per_carton=None):
         """Return (normalized_price, comparison_unit).
 
-        A carton price is converted to a unit price only when the carton
-        quantity is explicitly known. Unknown units remain comparable only
-        when their normalized labels match.
+        Carton prices are converted to unit prices only when the carton
+        quantity is explicitly known. Missing unit metadata defaults to UNIT
+        at comparison time when the product itself is unit-priced.
         """
         amount = cls._decimal(price)
         normalized = cls.normalize_unit(unit)
@@ -77,6 +76,7 @@ class PriceIntelligenceService:
 
     def compare_product(self, product_id: int):
         product = self.product_repo.get_by_id_or_404(product_id)
+        default_unit = self.normalize_unit(product.unit) or "UNIT"
         offers = []
 
         if product.current_price is not None and self._decimal(product.current_price) > 0:
@@ -84,7 +84,7 @@ class PriceIntelligenceService:
                 product.supplier_id,
                 product.supplier.name if product.supplier else None,
                 product.current_price,
-                product.unit,
+                product.unit or default_unit,
                 product.units_per_carton,
                 product.currency,
                 primary=True,
@@ -93,11 +93,12 @@ class PriceIntelligenceService:
         for offer in product.supplier_offers:
             if not offer.active or self._decimal(offer.price) <= 0:
                 continue
+            offer_unit = offer.unit or product.unit or default_unit
             offers.append(self._price_payload(
                 offer.supplier_id,
                 offer.supplier.name if offer.supplier else None,
                 offer.price,
-                offer.unit,
+                offer_unit,
                 offer.units_per_carton,
                 offer.currency,
             ))
