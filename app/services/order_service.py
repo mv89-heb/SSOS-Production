@@ -74,26 +74,23 @@ class OrderService:
         return order
 
     def delete_order(self, user, order_id: int) -> None:
-        """Delete an order according to the actor's authority.
+        """Delete only draft orders through the normal workflow.
 
-        Regular managers can delete drafts through the normal workflow.
-        System administrators can explicitly delete any tenant order from
-        the Admin Center. The immutable snapshot is self-contained JSON, so
-        removing the order does not remove catalog history.
+        Permanent deletion of submitted/approved/sent/completed orders is a
+        separate explicit administrator operation so normal DELETE cannot
+        bypass the immutable order snapshot lifecycle.
         """
         order = self.repo.get_by_id_for_update(order_id)
-        if order is None: raise NotFound("Order not found")
-        if user.role not in (ROLE_MANAGER, ROLE_ADMIN):
-            if order.status != STATUS_DRAFT:
-                raise Conflict(f"Only '{STATUS_DRAFT}' orders can be deleted")
-            if order.user_id != user.id:
-                raise Conflict("Only the order creator or a manager can delete this draft")
-        elif user.role == ROLE_MANAGER and order.status != STATUS_DRAFT:
-            raise Conflict(f"Only '{STATUS_DRAFT}' orders can be deleted by a manager")
+        if order is None:
+            raise NotFound("Order not found")
+        if order.status != STATUS_DRAFT:
+            raise Conflict(f"Only '{STATUS_DRAFT}' orders can be deleted")
+        if user.role not in (ROLE_MANAGER, ROLE_ADMIN) and order.user_id != user.id:
+            raise Conflict("Only the order creator or a manager can delete this draft")
 
         status = order.status
         number = order.order_number
-        AuditService.log_event(self.tenant_id, user.id, "order.deleted", f"Order {number} deleted by administrator", {"order_id": order.id, "order_number": number, "previous_status": status, "administrative_delete": user.role == ROLE_ADMIN})
+        AuditService.log_event(self.tenant_id, user.id, "order.deleted", f"Order {number} deleted", {"order_id": order.id, "order_number": number, "previous_status": status, "administrative_delete": user.role == ROLE_ADMIN})
         self.repo.delete(order)
 
     def delete_order_as_admin(self, user, order_id: int) -> None:
