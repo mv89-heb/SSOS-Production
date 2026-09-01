@@ -1,4 +1,5 @@
 import os
+import shutil
 from abc import ABC, abstractmethod
 
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".pdf"}
@@ -30,6 +31,12 @@ class TesseractOCRProvider(OCRProvider):
                 "and install the tesseract-ocr system package"
             ) from exc
 
+        # pytesseract is a Python wrapper; the native binary is a separate
+        # optional dependency. Treat its absence as an unavailable OCR engine,
+        # not as a failed document upload.
+        if not shutil.which("tesseract"):
+            return ""
+
         ext = os.path.splitext(file_path)[1].lower()
         if ext == ".pdf":
             return self._extract_from_pdf(file_path, pytesseract)
@@ -43,9 +50,7 @@ class TesseractOCRProvider(OCRProvider):
             return pytesseract.image_to_string(image)
         except Exception as exc:
             if exc.__class__.__name__ == "TesseractNotFoundError":
-                raise OCRProviderError(
-                    "Tesseract is not installed; document upload succeeded but OCR is unavailable."
-                ) from exc
+                return ""
             raise
 
     @staticmethod
@@ -62,9 +67,7 @@ class TesseractOCRProvider(OCRProvider):
             return "\n".join(pytesseract.image_to_string(page) for page in pages)
         except Exception as exc:
             if exc.__class__.__name__ == "TesseractNotFoundError":
-                raise OCRProviderError(
-                    "Tesseract is not installed; document upload succeeded but OCR is unavailable."
-                ) from exc
+                return ""
             raise
 
 
