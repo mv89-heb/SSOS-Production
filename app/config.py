@@ -53,6 +53,15 @@ class BaseConfig:
         "http://localhost:3000,http://localhost:3100",
     )
 
+    # Optional AI integration. The application remains fully functional when
+    # Gemini is disabled or its API key is absent.
+    AI_ENABLED = os.environ.get("AI_ENABLED", "false").strip().lower() == "true"
+    AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini").strip().lower()
+    GEMINI_ENABLED = os.environ.get("GEMINI_ENABLED", "false").strip().lower() == "true"
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+    GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    GEMINI_TIMEOUT = float(os.environ.get("GEMINI_TIMEOUT", "30"))
+
     @staticmethod
     def init_app(app):
         pass
