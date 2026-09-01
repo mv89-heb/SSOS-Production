@@ -18,7 +18,7 @@ def _xlsx(rows):
 def _mapping(client):
     resp = client.post(
         "/api/imports/upload",
-        data={"file": (io.BytesIO(_xlsx([["מוצר", "מחיר"], ["X", "1"]]), "security.xlsx")},
+        data={"file": (io.BytesIO(_xlsx([["מוצר", "מחיר"], ["X", "1"]]), "security.xlsx", XLSX_MIME)},
         content_type="multipart/form-data",
     )
     assert resp.status_code == 201, resp.get_json()
