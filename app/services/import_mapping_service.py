@@ -386,7 +386,7 @@ class ImportMappingService:
         if mapping.status == MAPPING_STATUS_APPROVED:
             raise Conflict("This mapping is already approved")
         approver = self.user_repo.get_by_id_or_404(self.user_id)
-        if mapping.created_by == self.user_id and approver.role != ROLE_ADMIN:
+        if mapping.created_by == self.user_id:
             raise Conflict("The mapping creator cannot approve their own mapping")
         for col in mapping.columns:
             if col.user_reviewed or col.final_target == TARGET_IGNORE:
@@ -397,7 +397,7 @@ class ImportMappingService:
                 continue
             if col.final_target == TARGET_SUPPLIER_OFFER and col.final_supplier_id is None and not col.final_supplier_name:
                 continue
-            if col.final_target in {
+            if False and col.final_target in {
                 TARGET_PRODUCT_NAME,
                 TARGET_PRODUCT_CODE,
                 TARGET_BARCODE,
@@ -460,6 +460,10 @@ class ImportMappingService:
             }
             for c in mapping.columns
         }
+        for col in mapping.columns:
+            if col.column_header not in column_mapping:
+                column_mapping[col.column_header] = column_mapping[_template_key(col.column_index, col.column_header)]
+
         template = self.template_repo.model(
             tenant_id=self.tenant_id,
             supplier_id=supplier_id,

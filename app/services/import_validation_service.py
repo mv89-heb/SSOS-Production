@@ -206,11 +206,17 @@ class ImportValidationService:
         seen_in_file_by_barcode, seen_in_file_by_name,
     ):
         values = row.raw_values or []
+        raw_data = row.raw_data if isinstance(row.raw_data, dict) else {}
 
         def value_for(target):
             for idx, col in columns_by_index.items():
-                if col.final_target == target and idx < len(values) and _clean(values[idx]):
+                if col.final_target != target:
+                    continue
+                if idx < len(values) and _clean(values[idx]):
                     return _clean(values[idx])
+                fallback = raw_data.get(col.column_header)
+                if _clean(fallback):
+                    return _clean(fallback)
             return None
 
         issues = []

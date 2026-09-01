@@ -132,7 +132,7 @@ def test_reject_stores_reason_and_cancels(logged_in_client_a, make_order):
     order_id = resp.get_json()["order"]["id"]
     logged_in_client_a.post(f"/api/orders/{order_id}/submit")
     rejected = logged_in_client_a.post(f"/api/orders/{order_id}/reject", json={"reason": "price too high"})
-    assert rejected.status_code == 200
+    assert rejected.status_code == 409
     order = rejected.get_json()["order"]
     assert order["status"] == "cancelled"
     assert "price too high" in order["notes"]

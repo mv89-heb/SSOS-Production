@@ -45,7 +45,7 @@ def test_template_for_supplier_a_cannot_be_applied_to_supplier_b(logged_in_clien
     assert mapping_response.status_code == 200
 
     template = ImportMappingTemplate(
-        tenant_id=current_user.tenant_id,
+        tenant_id=logged_in_client_a.get("/api/auth/me").get_json()["user"]["tenant_id"],
         supplier_id=supplier_a["id"],
         name="Supplier A template",
         source_filename="template-scope.xlsx",
@@ -63,7 +63,7 @@ def test_template_for_supplier_a_cannot_be_applied_to_supplier_b(logged_in_clien
                 "price_type": None,
             },
         },
-        created_by=current_user.id,
+        created_by=logged_in_client_a.get("/api/auth/me").get_json()["user"]["id"],
     )
     db.session.add(template)
     db.session.commit()

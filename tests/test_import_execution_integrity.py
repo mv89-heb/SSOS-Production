@@ -5,7 +5,7 @@ from app.extensions import db
 from app.models.import_execution import ImportExecution, EXECUTION_STATUS_COMMITTED
 
 
-def test_database_rejects_second_committed_execution_for_same_session(logged_in_client_a):
+def test_database_rejects_second_committed_execution_for_same_session(logged_in_client_a, app):
     # Build a real execution through the existing end-to-end import helpers.
     from test_import_execution import _xlsx_bytes, _ready_to_commit
 
@@ -22,7 +22,8 @@ def test_database_rejects_second_committed_execution_for_same_session(logged_in_
     assert response.status_code == 201
     execution_id = response.get_json()["execution"]["id"]
 
-    existing = db.session.get(ImportExecution, execution_id)
+    with app.app_context():
+        existing = db.session.get(ImportExecution, execution_id)
     assert existing is not None
 
     duplicate = ImportExecution(

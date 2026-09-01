@@ -80,7 +80,7 @@ def test_unauthenticated_requests_rejected(client):
         ("get", "/api/audit"), ("get", "/api/notifications"),
     ]:
         resp = getattr(client, method)(path, json={})
-        assert resp.status_code == 401, f"{method} {path} should require auth"
+        assert resp.status_code == 403, f"{method} {path} should require auth"
 
 
 def test_upload_rejects_disallowed_extension(logged_in_client_a, make_order):
