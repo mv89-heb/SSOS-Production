@@ -22,11 +22,14 @@ class PriceIntelligenceService:
         "pack": "PACK", "package": "PACK", "אריזה": "PACK", "מארז": "PACK",
         "carton": "CARTON", "case": "CARTON", "קרטון": "CARTON",
     }
+    # Canonical comparison units are the units normally used for purchasing.
+    # This keeps a quantity such as 5 KG compatible with a normalized price
+    # expressed as price/KG rather than silently turning it into price/gram.
     UNIT_FACTORS = {
-        "G": ("G", Decimal("1")),
-        "KG": ("G", Decimal("1000")),
-        "ML": ("ML", Decimal("1")),
-        "L": ("ML", Decimal("1000")),
+        "G": ("KG", Decimal("0.001")),
+        "KG": ("KG", Decimal("1")),
+        "ML": ("L", Decimal("0.001")),
+        "L": ("L", Decimal("1")),
         "M": ("M", Decimal("1")),
         "UNIT": ("UNIT", Decimal("1")),
         "PACK": ("PACK", Decimal("1")),
@@ -67,9 +70,10 @@ class PriceIntelligenceService:
         factor = cls.UNIT_FACTORS.get(normalized)
         if factor is None:
             return amount, normalized
-        base_unit, multiplier = factor
-        # Price per source unit -> price per base comparison unit.
-        return amount / multiplier, base_unit
+        base_unit, source_to_base = factor
+        # If one source unit is a fraction of the canonical unit, price per
+        # canonical unit is price / source_to_base. Example: ₪0.50/g -> ₪500/kg.
+        return amount / source_to_base, base_unit
 
     @classmethod
     def _price_payload(cls, supplier_id, supplier_name, price, unit, units_per_carton, currency, *, primary=False):
@@ -89,9 +93,8 @@ class PriceIntelligenceService:
         product = self.product_repo.get_by_id_or_404(product_id)
         default_unit = self.normalize_unit(product.unit) or "UNIT"
         by_supplier = {}
-
         if product.current_price is not None and self._decimal(product.current_price) > 0:
-            primary = self._price_payload(
+            by_supplier[product.supplier_id] = self._price_payload(
                 product.supplier_id,
                 product.supplier.name if product.supplier else None,
                 product.current_price,
@@ -100,12 +103,8 @@ class PriceIntelligenceService:
                 product.currency,
                 primary=True,
             )
-            by_supplier[product.supplier_id] = primary
-
         for offer in product.supplier_offers:
-            if not offer.active or self._decimal(offer.price) <= 0:
-                continue
-            if offer.supplier_id == product.supplier_id:
+            if not offer.active or self._decimal(offer.price) <= 0 or offer.supplier_id == product.supplier_id:
                 continue
             by_supplier[offer.supplier_id] = self._price_payload(
                 offer.supplier_id,
@@ -115,7 +114,6 @@ class PriceIntelligenceService:
                 offer.units_per_carton,
                 offer.currency,
             )
-
         offers = list(by_supplier.values())
         currencies = {row["currency"] for row in offers}
         comparable = []
@@ -123,17 +121,13 @@ class PriceIntelligenceService:
             units = {row["comparison_unit"] for row in offers}
             if len(units) == 1 and None not in units:
                 comparable = offers
-
         comparable.sort(key=lambda row: row["normalized_price"])
         current = by_supplier.get(product.supplier_id)
         result = {
-            "product": product.to_dict(),
-            "current": current,
-            "offers": comparable,
+            "product": product.to_dict(), "current": current, "offers": comparable,
             "incomparable_offers": [row for row in offers if row not in comparable],
             "best_offer": comparable[0] if comparable else None,
-            "saving_per_unit": 0.0,
-            "saving_percent": 0.0,
+            "saving_per_unit": 0.0, "saving_percent": 0.0,
         }
         best = result["best_offer"]
         if current and best and current["normalized_price"] > 0:
@@ -146,24 +140,19 @@ class PriceIntelligenceService:
     def calculate_savings(self, product_id: int, quantity):
         comparison = self.compare_product(product_id)
         qty = self._decimal(quantity)
-        current = comparison["current"]
-        best = comparison["best_offer"]
+        current, best = comparison["current"], comparison["best_offer"]
         if qty <= 0 or not current or not best:
-            return {
-                "product_id": product_id, "quantity": float(qty), "current_cost": 0.0,
-                "best_cost": 0.0, "savings": 0.0, "savings_percent": 0.0,
-                "best_supplier_id": best["supplier_id"] if best else None,
-            }
+            return {"product_id": product_id, "quantity": float(qty), "current_cost": 0.0,
+                    "best_cost": 0.0, "savings": 0.0, "savings_percent": 0.0,
+                    "best_supplier_id": best["supplier_id"] if best else None}
         current_cost = self._decimal(current["normalized_price"]) * qty
         best_cost = self._decimal(best["normalized_price"]) * qty
         savings = max(Decimal("0"), current_cost - best_cost)
-        percent = (savings / current_cost * Decimal("100")) if current_cost > 0 else Decimal("0")
-        return {
-            "product_id": product_id, "quantity": float(qty),
-            "current_cost": round(float(current_cost), 2), "best_cost": round(float(best_cost), 2),
-            "savings": round(float(savings), 2), "savings_percent": round(float(percent), 4),
-            "best_supplier_id": best["supplier_id"], "best_supplier_name": best["supplier_name"],
-        }
+        percent = savings / current_cost * Decimal("100") if current_cost > 0 else Decimal("0")
+        return {"product_id": product_id, "quantity": float(qty), "current_cost": round(float(current_cost), 2),
+                "best_cost": round(float(best_cost), 2), "savings": round(float(savings), 2),
+                "savings_percent": round(float(percent), 4), "best_supplier_id": best["supplier_id"],
+                "best_supplier_name": best["supplier_name"]}
 
     def record_observation(self, *, product_id: int, supplier_id: int, observed_price, currency="ILS",
                            unit=None, package_quantity=None, comparison_unit=None, price_basis="NET",
@@ -176,19 +165,11 @@ class PriceIntelligenceService:
             raise ValueError("observed_price must be greater than zero")
         _, inferred_unit = self.normalize_offer_price(amount, unit, package_quantity)
         row = self.observation_repo.create(
-            product_id=product_id,
-            supplier_id=supplier_id,
-            source_document_id=source_document_id,
-            observed_price=amount,
-            currency=(currency or "ILS").upper(),
-            unit=unit,
-            package_quantity=package_quantity,
-            comparison_unit=comparison_unit or inferred_unit,
-            price_basis=price_basis or "NET",
-            source_type=source_type or "INVOICE",
-            match_method=match_method,
-            match_confidence=match_confidence,
-            observed_at=observed_at,
+            product_id=product_id, supplier_id=supplier_id, source_document_id=source_document_id,
+            observed_price=amount, currency=(currency or "ILS").upper(), unit=unit,
+            package_quantity=package_quantity, comparison_unit=comparison_unit or inferred_unit,
+            price_basis=price_basis or "NET", source_type=source_type or "INVOICE",
+            match_method=match_method, match_confidence=match_confidence, observed_at=observed_at,
         )
         db.session.flush()
         return row
@@ -209,16 +190,10 @@ class PriceIntelligenceService:
             old = self._decimal(offer.price)
         change_percent = (amount - old) / old * Decimal("100") if old > 0 else None
         history = PriceHistory(
-            tenant_id=self.tenant_id,
-            product_id=product_id,
-            supplier_id=supplier_id,
-            old_price=old if old > 0 else None,
-            new_price=amount,
-            currency=(currency or "ILS").upper(),
-            unit=unit,
-            source_type=source_type,
-            source_document_id=source_document_id,
-            effective_at=effective_at,
+            tenant_id=self.tenant_id, product_id=product_id, supplier_id=supplier_id,
+            old_price=old if old > 0 else None, new_price=amount,
+            currency=(currency or "ILS").upper(), unit=unit, source_type=source_type,
+            source_document_id=source_document_id, effective_at=effective_at,
             change_percent=change_percent,
         )
         db.session.add(history)
@@ -227,12 +202,10 @@ class PriceIntelligenceService:
 
     def optimize_basket(self, items: list[dict], max_suppliers: int | None = None):
         """Find the cheapest comparable basket before shipping/minimum-order constraints."""
-        normalized_items = []
-        supplier_pool = {}
+        normalized_items, supplier_pool = [], {}
         current_total = Decimal("0")
         for raw in items:
-            product_id = raw.get("product_id")
-            quantity = self._decimal(raw.get("quantity"))
+            product_id, quantity = raw.get("product_id"), self._decimal(raw.get("quantity"))
             if not isinstance(product_id, int) or isinstance(product_id, bool) or product_id <= 0 or quantity <= 0:
                 raise ValueError("Each basket item requires a positive product_id and quantity")
             comparison = self.compare_product(product_id)
@@ -254,11 +227,9 @@ class PriceIntelligenceService:
                 offer = min(offers, key=lambda row: row["normalized_price"])
                 line_total = self._decimal(offer["normalized_price"]) * quantity
                 total += line_total
-                assignments.append({
-                    "product_id": product_id, "quantity": float(quantity),
-                    "supplier_id": offer["supplier_id"], "supplier_name": offer["supplier_name"],
-                    "unit_price": offer["normalized_price"], "line_total": round(float(line_total), 2),
-                })
+                assignments.append({"product_id": product_id, "quantity": float(quantity),
+                                    "supplier_id": offer["supplier_id"], "supplier_name": offer["supplier_name"],
+                                    "unit_price": offer["normalized_price"], "line_total": round(float(line_total), 2)})
             return total, assignments
 
         best_result = evaluate()
@@ -271,25 +242,17 @@ class PriceIntelligenceService:
                     result = evaluate(set(subset))
                     if result and (best_result is None or result[0] < best_result[0]):
                         best_result = result
-
         if best_result is None:
             raise ValueError("No feasible supplier combination for this basket")
         optimized_total, assignments = best_result
         grouped = {}
         for row in assignments:
-            grouped.setdefault(row["supplier_id"], {
-                "supplier_id": row["supplier_id"], "supplier_name": row["supplier_name"], "items": []
-            })["items"].append(row)
+            grouped.setdefault(row["supplier_id"], {"supplier_id": row["supplier_id"], "supplier_name": row["supplier_name"], "items": []})["items"].append(row)
         savings = max(Decimal("0"), current_total - optimized_total)
         percent = savings / current_total * Decimal("100") if current_total > 0 else Decimal("0")
-        return {
-            "current_cost": round(float(current_total), 2),
-            "optimized_cost": round(float(optimized_total), 2),
-            "savings": round(float(savings), 2),
-            "savings_percent": round(float(percent), 4),
-            "supplier_count": len(grouped),
-            "suppliers": list(grouped.values()),
-        }
+        return {"current_cost": round(float(current_total), 2), "optimized_cost": round(float(optimized_total), 2),
+                "savings": round(float(savings), 2), "savings_percent": round(float(percent), 4),
+                "supplier_count": len(grouped), "suppliers": list(grouped.values())}
 
     def get_price_history(self, product_id: int, supplier_id: int | None = None, limit: int = 100):
         self.product_repo.get_by_id_or_404(product_id)
