@@ -84,6 +84,7 @@ def _register_blueprints(app):
     from app.routes.bulk_price_update import bulk_price_update_bp
     from app.routes.users import users_bp
     from app.routes.admin import admin_bp
+    from app.routes.price_intelligence import price_intelligence_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
@@ -96,6 +97,7 @@ def _register_blueprints(app):
     app.register_blueprint(bulk_price_update_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(price_intelligence_bp)
     csrf.exempt(health_bp)
 
 
