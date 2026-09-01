@@ -16,9 +16,10 @@ def _xlsx(rows):
 
 
 def _mapping(client):
+    workbook = io.BytesIO(_xlsx([["מוצר", "מחיר"], ["X", "1"]]))
     resp = client.post(
         "/api/imports/upload",
-        data={"file": (io.BytesIO(_xlsx([["מוצר", "מחיר"], ["X", "1"]]), "security.xlsx", XLSX_MIME)},
+        data={"file": (workbook, "security.xlsx", XLSX_MIME)},
         content_type="multipart/form-data",
     )
     assert resp.status_code == 201, resp.get_json()
