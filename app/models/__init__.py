@@ -5,6 +5,7 @@ from app.models.product import Product
 from app.models.supplier_offer import SupplierProductOffer
 from app.models.price_history import PriceHistory
 from app.models.price_observation import PriceObservation
+from app.models.document_analysis import DocumentAnalysis
 from app.models.product_classification_feedback import ProductClassificationFeedback
 from app.models.order import Order
 from app.models.audit import AuditLog
@@ -18,6 +19,7 @@ __all__ = [
     "SupplierProductOffer",
     "PriceHistory",
     "PriceObservation",
+    "DocumentAnalysis",
     "ProductClassificationFeedback",
     "Order",
     "AuditLog",
