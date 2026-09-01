@@ -52,6 +52,18 @@ def product_history(product_id):
         return _handle(exc)
 
 
+@price_intelligence_bp.route("/products/<int:product_id>/observations", methods=["GET"])
+@login_required
+def product_observations(product_id):
+    try:
+        supplier_id = request.args.get("supplier_id", type=int)
+        limit = max(1, min(request.args.get("limit", default=100, type=int), 500))
+        observations = PriceIntelligenceService(current_user.tenant_id).get_price_observations(product_id, supplier_id, limit)
+        return jsonify({"success": True, "observations": observations})
+    except HTTPException as exc:
+        return _handle(exc)
+
+
 @price_intelligence_bp.route("/changes", methods=["GET"])
 @login_required
 def price_changes():
