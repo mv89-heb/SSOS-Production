@@ -49,15 +49,22 @@ class AIService:
         ai_enabled = bool(config.get("AI_ENABLED", False))
         provider_name = (config.get("AI_PROVIDER") or "gemini").strip().lower()
 
-        if not ai_enabled:
+        if not ai_enabled or provider_name != "gemini":
             return cls()
 
-        if provider_name == "gemini":
-            from app.services.gemini_provider import GeminiProvider
+        # Missing/disabled provider credentials must not make application
+        # startup or normal business operations fail.
+        if not bool(config.get("GEMINI_ENABLED", False)):
+            return cls()
+        if not (config.get("GEMINI_API_KEY") or "").strip():
+            return cls()
 
+        from app.services.gemini_provider import GeminiProvider
+
+        try:
             return cls(GeminiProvider.from_config(config))
-
-        return cls()
+        except (ValueError, ImportError):
+            return cls()
 
     def is_available(self) -> bool:
         return not isinstance(self.provider, UnavailableAIProvider)
