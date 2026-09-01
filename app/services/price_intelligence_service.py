@@ -14,7 +14,7 @@ class PriceIntelligenceService:
     UNIT_ALIASES = {
         "unit": "UNIT", "units": "UNIT", "piece": "UNIT", "pieces": "UNIT",
         "יח": "UNIT", "יחידה": "UNIT", "יחידות": "UNIT", "פריט": "UNIT",
-        "kg": "KG", "kgs": "KG", "קג": "KG", "ק"ג": "KG", "קילו": "KG", "קילוגרם": "KG",
+        "kg": "KG", "kgs": "KG", "קג": "KG", 'ק"ג': "KG", "קילו": "KG", "קילוגרם": "KG",
         "g": "G", "גרם": "G",
         "liter": "L", "litre": "L", "l": "L", "ליטר": "L", "ליטרים": "L",
         "ml": "ML", "מיליליטר": "ML",
