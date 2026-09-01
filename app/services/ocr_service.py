@@ -39,7 +39,14 @@ class TesseractOCRProvider(OCRProvider):
         except Exception as exc:
             raise OCRProviderError(f"Could not open image for OCR: {exc}") from exc
 
-        return pytesseract.image_to_string(image)
+        try:
+            return pytesseract.image_to_string(image)
+        except Exception as exc:
+            if exc.__class__.__name__ == "TesseractNotFoundError":
+                raise OCRProviderError(
+                    "Tesseract is not installed; document upload succeeded but OCR is unavailable."
+                ) from exc
+            raise
 
     @staticmethod
     def _extract_from_pdf(file_path: str, pytesseract) -> str:
@@ -50,8 +57,15 @@ class TesseractOCRProvider(OCRProvider):
                 "pdf2image is required for PDF OCR; add it to requirements.txt"
             ) from exc
 
-        pages = convert_from_path(file_path)
-        return "\n".join(pytesseract.image_to_string(page) for page in pages)
+        try:
+            pages = convert_from_path(file_path)
+            return "\n".join(pytesseract.image_to_string(page) for page in pages)
+        except Exception as exc:
+            if exc.__class__.__name__ == "TesseractNotFoundError":
+                raise OCRProviderError(
+                    "Tesseract is not installed; document upload succeeded but OCR is unavailable."
+                ) from exc
+            raise
 
 
 class NullOCRProvider(OCRProvider):
