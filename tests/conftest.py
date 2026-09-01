@@ -1,4 +1,5 @@
 import pytest
+from flask import g
 
 from app import create_app
 from app.extensions import db as _db
@@ -7,6 +8,11 @@ from app.extensions import db as _db
 @pytest.fixture()
 def app():
     application = create_app("testing")
+
+    @application.before_request
+    def clear_cached_login_user():
+        g.pop("_login_user", None)
+
     with application.app_context():
         _db.create_all()
 
@@ -24,9 +30,6 @@ def client(app):
 
 @pytest.fixture()
 def db(app):
-    # Some legacy tests intentionally exercise ORM operations directly.
-    # Keep the context scoped to the fixture so those operations have a
-    # valid Flask application context without changing request isolation.
     with app.app_context():
         yield _db
 
@@ -95,10 +98,6 @@ def make_order():
         p = client.post("/api/catalog/products", json={
             "supplier_id": supplier_id, "name": product_name, "sku": sku, "current_price": price,
         })
-        # SKU is a tenant-level product identity. A number of legacy lifecycle
-        # tests create separate suppliers with the same helper defaults, so
-        # retry with a deterministic suffix rather than masking the catalog
-        # uniqueness rule.
         if p.status_code != 201:
             retry_sku = f"{sku}-{supplier_id}"
             p = client.post("/api/catalog/products", json={
