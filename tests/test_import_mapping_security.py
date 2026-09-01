@@ -18,9 +18,10 @@ def _xlsx(rows):
 def _mapping(client):
     resp = client.post(
         "/api/imports/upload",
-        data={"file": (io.BytesIO(_xlsx([["מוצר", "מחיר"], ["X", "1"]]), "security.xlsx", XLSX_MIME))},
+        data={"file": (io.BytesIO(_xlsx([["מוצר", "מחיר"], ["X", "1"]]), "security.xlsx")},
         content_type="multipart/form-data",
     )
+    assert resp.status_code == 201, resp.get_json()
     session_id = resp.get_json()["session"]["id"]
     client.post(f"/api/imports/{session_id}/analyze")
     mapping = client.get(f"/api/imports/{session_id}/mapping").get_json()["mapping"]
