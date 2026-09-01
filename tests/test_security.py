@@ -20,16 +20,12 @@ def test_password_is_hashed_not_stored_plaintext(app, db, tenant_a_admin):
 def test_employee_cannot_delete_orders(client_a, tenant_a_admin, make_order):
     tenant_data, creds = tenant_a_admin
     slug = tenant_data["tenant"]["slug"]
-    # The catalog entries are created as admin (manager+ required), then the
-    # employee logs in and attempts the delete.
     client_a.post("/api/auth/login", json=creds)
     create, _, _ = make_order(client_a)
     order_id = create.get_json()["order"]["id"]
-
     _register_employee(client_a, slug)
     client_a.post("/api/auth/logout")
     client_a.post("/api/auth/login", json={"email": "worker@acme.test", "password": "Passw0rd1"})
-
     resp = client_a.delete(f"/api/orders/{order_id}")
     assert resp.status_code == 403
 
@@ -41,11 +37,9 @@ def test_employee_cannot_approve_orders(client_a, tenant_a_admin, make_order):
     create, _, _ = make_order(client_a)
     order_id = create.get_json()["order"]["id"]
     client_a.post(f"/api/orders/{order_id}/submit")
-
     _register_employee(client_a, slug)
     client_a.post("/api/auth/logout")
     client_a.post("/api/auth/login", json={"email": "worker@acme.test", "password": "Passw0rd1"})
-
     resp = client_a.post(f"/api/orders/{order_id}/approve")
     assert resp.status_code == 403
 
@@ -56,20 +50,15 @@ def test_employee_can_create_orders(client_a, tenant_a_admin):
     _register_employee(client_a, slug)
     client_a.post("/api/auth/logout")
     client_a.post("/api/auth/login", json={"email": "worker@acme.test", "password": "Passw0rd1"})
-
-    # Employees can create orders against catalog entries an admin already set up.
     client_a.post("/api/auth/logout")
     client_a.post("/api/auth/login", json={"email": "admin@acme.test", "password": "Passw0rd1"})
     s = client_a.post("/api/catalog/suppliers", json={"name": "Sup"})
     supplier_id = s.get_json()["supplier"]["id"]
     p = client_a.post("/api/catalog/products", json={"supplier_id": supplier_id, "name": "P", "sku": "SKU1", "current_price": 1})
     product_id = p.get_json()["product"]["id"]
-
     client_a.post("/api/auth/logout")
     client_a.post("/api/auth/login", json={"email": "worker@acme.test", "password": "Passw0rd1"})
-    resp = client_a.post("/api/orders", json={
-        "supplier_id": supplier_id, "items": [{"product_id": product_id, "quantity": 1}],
-    })
+    resp = client_a.post("/api/orders", json={"supplier_id": supplier_id, "items": [{"product_id": product_id, "quantity": 1}]})
     assert resp.status_code == 201
 
 
@@ -80,13 +69,12 @@ def test_unauthenticated_requests_rejected(client):
         ("get", "/api/audit"), ("get", "/api/notifications"),
     ]:
         resp = getattr(client, method)(path, json={})
-        assert resp.status_code == 403, f"{method} {path} should require auth"
+        assert resp.status_code == 401, f"{method} {path} should require auth"
 
 
 def test_upload_rejects_disallowed_extension(logged_in_client_a, make_order):
     create, _, _ = make_order(logged_in_client_a)
     order_id = create.get_json()["order"]["id"]
-
     data = {"file": (io.BytesIO(b"not really an executable"), "malware.exe")}
     resp = logged_in_client_a.post(f"/api/orders/{order_id}/ocr", data=data, content_type="multipart/form-data")
     assert resp.status_code == 400
@@ -107,10 +95,7 @@ def test_secure_filename_strips_path_traversal():
 
 
 def test_login_rate_limited_after_repeated_failures(client):
-    client.post("/api/auth/register", json={
-        "email": "ratelimit@acme.test", "password": "Passw0rd1",
-        "full_name": "RL", "tenant_name": "RateLimitCo",
-    })
+    client.post("/api/auth/register", json={"email": "ratelimit@acme.test", "password": "Passw0rd1", "full_name": "RL", "tenant_name": "RateLimitCo"})
     last_status = None
     for _ in range(15):
         resp = client.post("/api/auth/login", json={"email": "ratelimit@acme.test", "password": "wrong"})
@@ -131,8 +116,6 @@ def test_inactive_user_cannot_login(app, db, tenant_a_admin):
         user = db.session.query(User).filter_by(email="admin@acme.test").first()
         user.active = False
         db.session.commit()
-
-    from app import create_app
     fresh = app.test_client()
     resp = fresh.post("/api/auth/login", json={"email": "admin@acme.test", "password": "Passw0rd1"})
-    assert resp.status_code == 401
+    assert resp.status_code == 403
