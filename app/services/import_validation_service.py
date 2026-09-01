@@ -241,42 +241,25 @@ class ImportValidationService:
                 offers=[],
             ), issues
 
-        # A missing unit is a warning only. Price-list files commonly omit it.
         if not unit:
             add_issue(SEVERITY_WARNING, "missing_unit", f'Product "{product_name}" has no unit.', "unit")
         elif unit in UNIT_SYNONYMS:
-            add_issue(
-                SEVERITY_WARNING,
-                "unit_normalization_suggestion",
-                f'Unit "{unit}" could be normalized to "{UNIT_SYNONYMS[unit]}".',
-                "unit",
-            )
+            add_issue(SEVERITY_WARNING, "unit_normalization_suggestion", f'Unit "{unit}" could be normalized to "{UNIT_SYNONYMS[unit]}".', "unit")
         elif known_units and unit not in known_units and not any(_names_similar(unit, u) for u in known_units):
             add_issue(SEVERITY_WARNING, "new_unit", f'"{unit}" is a new unit not seen elsewhere in the catalog.', "unit")
 
         if barcode:
             if barcode in seen_in_file_by_barcode:
-                add_issue(
-                    SEVERITY_WARNING,
-                    "duplicate_in_file",
-                    f"Barcode {barcode} also appears on row {seen_in_file_by_barcode[barcode]}.",
-                    "barcode",
-                )
+                add_issue(SEVERITY_WARNING, "duplicate_in_file", f"Barcode {barcode} also appears on row {seen_in_file_by_barcode[barcode]}.", "barcode")
             else:
                 seen_in_file_by_barcode[barcode] = row.row_number
 
         name_key = product_name.strip().lower()
         if name_key in seen_in_file_by_name:
-            add_issue(
-                SEVERITY_WARNING,
-                "duplicate_in_file",
-                f'Product name "{product_name}" also appears on row {seen_in_file_by_name[name_key]}.',
-                "product_name",
-            )
+            add_issue(SEVERITY_WARNING, "duplicate_in_file", f'Product name "{product_name}" also appears on row {seen_in_file_by_name[name_key]}.', "product_name")
         else:
             seen_in_file_by_name[name_key] = row.row_number
 
-        # WIDE format: one or more supplier-offer columns.
         offer_entries = []
         for idx, col in columns_by_index.items():
             if col.final_target != TARGET_SUPPLIER_OFFER or idx >= len(values):
@@ -287,23 +270,12 @@ class ImportValidationService:
             price, price_error = _parse_price(raw_price)
             supplier_name = col.final_supplier_name
             if not supplier_name:
-                add_issue(
-                    SEVERITY_ERROR,
-                    "missing_supplier_name",
-                    f'Column "{col.column_header}" is mapped as a supplier offer but has no supplier assigned.',
-                    "supplier",
-                )
+                add_issue(SEVERITY_ERROR, "missing_supplier_name", f'Column "{col.column_header}" is mapped as a supplier offer but has no supplier assigned.', "supplier")
                 continue
             if price_error:
                 add_issue(SEVERITY_ERROR, "invalid_price", price_error, "price")
                 continue
-            offer_entries.append({
-                "column_index": idx,
-                "supplier_id": col.final_supplier_id,
-                "supplier_name": supplier_name,
-                "price": price,
-                "price_type": col.final_price_type,
-            })
+            offer_entries.append({"column_index": idx, "supplier_id": col.final_supplier_id, "supplier_name": supplier_name, "price": price, "price_type": col.final_price_type})
 
         best_by_supplier = {}
         for entry in offer_entries:
@@ -316,20 +288,26 @@ class ImportValidationService:
         primary_supplier_name = value_for(TARGET_SUPPLIER_NAME)
         primary_supplier_id = None
 
-        # TALL format: supplier is a row-level value, not a single workbook-level value.
         if primary_supplier_name:
-            primary_supplier_id = self._resolve_supplier(
-                primary_supplier_name, supplier_by_name, pending_new_suppliers
-            )
+            primary_supplier_id = self._resolve_supplier(primary_supplier_name, supplier_by_name, pending_new_suppliers)
             if primary_supplier_id:
-                supplier_obj = next(
-                    (s for s in supplier_by_name.values() if s.id == primary_supplier_id), None
-                )
+                supplier_obj = next((s for s in supplier_by_name.values() if s.id == primary_supplier_id), None)
                 if supplier_obj:
                     primary_supplier_name = supplier_obj.name
         elif not offer_entries and session.supplier_id and session.supplier:
             primary_supplier_name = session.supplier.name
             primary_supplier_id = session.supplier_id
+        elif not offer_entries:
+            # In TALL spreadsheets the supplier is often encoded in the
+            # price-column mapping metadata rather than as a row value.
+            mapped_supplier_names = {
+                _clean(col.final_supplier_name)
+                for col in columns_by_index.values()
+                if col.final_target in _PRIMARY_PRICE_TARGETS and _clean(col.final_supplier_name)
+            }
+            if len(mapped_supplier_names) == 1:
+                primary_supplier_name = next(iter(mapped_supplier_names))
+                primary_supplier_id = self._resolve_supplier(primary_supplier_name, supplier_by_name, pending_new_suppliers)
 
         primary_price = None
         for target in _PRIMARY_PRICE_TARGETS:
@@ -346,9 +324,7 @@ class ImportValidationService:
             primary_entry = offer_entries[0]
             primary_price = primary_entry["price"]
             primary_supplier_name = primary_entry["supplier_name"]
-            primary_supplier_id = primary_entry["supplier_id"] or self._resolve_supplier(
-                primary_supplier_name, supplier_by_name, pending_new_suppliers
-            )
+            primary_supplier_id = primary_entry["supplier_id"] or self._resolve_supplier(primary_supplier_name, supplier_by_name, pending_new_suppliers)
 
         if not primary_supplier_name:
             add_issue(SEVERITY_ERROR, "missing_supplier", f'Product "{product_name}" has no supplier.', "supplier")
@@ -359,8 +335,6 @@ class ImportValidationService:
         elif primary_price < 0:
             add_issue(SEVERITY_ERROR, "negative_price", f'Product "{product_name}" has a negative price.', "price")
 
-        # Match by strongest identifiers first. For TALL files, supplier is part
-        # of the identity when more than one supplier can sell the same product.
         matched_product = None
         if barcode and barcode in product_by_barcode:
             candidate = product_by_barcode[barcode]
@@ -376,23 +350,11 @@ class ImportValidationService:
                 matched_product = candidate
 
         if matched_product is None and name_key in product_by_name and primary_supplier_id is not None:
-            # Same product name exists under another supplier. Keep it as a new
-            # supplier-specific product rather than changing the other supplier's price.
-            add_issue(
-                SEVERITY_WARNING,
-                "same_product_other_supplier",
-                f'"{product_name}" already exists for another supplier; a supplier-specific listing will be created.',
-                "supplier",
-            )
+            add_issue(SEVERITY_WARNING, "same_product_other_supplier", f'"{product_name}" already exists for another supplier; a supplier-specific listing will be created.', "supplier")
         elif matched_product is None:
             for existing_name, existing_product in product_by_name.items():
                 if _names_similar(name_key, existing_name):
-                    add_issue(
-                        SEVERITY_WARNING,
-                        "similar_product_name",
-                        f'"{product_name}" is similar to existing product "{existing_product.name}" — review before creating a duplicate.',
-                        "product_name",
-                    )
+                    add_issue(SEVERITY_WARNING, "similar_product_name", f'"{product_name}" is similar to existing product "{existing_product.name}" — review before creating a duplicate.', "product_name")
                     break
 
         old_price = Decimal(str(matched_product.current_price)) if matched_product is not None and matched_product.current_price is not None else None
@@ -405,62 +367,36 @@ class ImportValidationService:
                 product_action = ACTION_UPDATE
                 if old_price not in (None, 0) and abs(primary_price - old_price) / old_price >= _UNUSUAL_PRICE_CHANGE_RATIO:
                     pct = ((primary_price - old_price) / old_price) * 100
-                    add_issue(
-                        SEVERITY_WARNING,
-                        "unusual_price_change",
-                        f'Price for "{product_name}" would change from {old_price} to {primary_price} ({"+" if pct > 0 else ""}{pct:.0f}%).',
-                        "price",
-                    )
+                    add_issue(SEVERITY_WARNING, "unusual_price_change", f'Price for "{product_name}" would change from {old_price} to {primary_price} ({"+" if pct > 0 else ""}{pct:.0f}%).', "price")
             else:
                 product_action = ACTION_SKIP
         else:
             product_action = ACTION_ERROR if has_blocking_error else ACTION_CREATE
 
-        # WIDE offers: retain every supplier price, while execution excludes the
-        # row's primary supplier+price from SupplierProductOffer creation.
         resolved_offers = []
         for entry in offer_entries:
-            supplier_id = entry["supplier_id"] or self._resolve_supplier(
-                entry["supplier_name"], supplier_by_name, pending_new_suppliers
-            )
+            supplier_id = entry["supplier_id"] or self._resolve_supplier(entry["supplier_name"], supplier_by_name, pending_new_suppliers)
             resolved_offers.append({
-                "supplier_name": entry["supplier_name"],
-                "matched_supplier_id": supplier_id,
-                "price": float(entry["price"]),
-                "price_type": entry["price_type"],
+                "supplier_name": entry["supplier_name"], "matched_supplier_id": supplier_id,
+                "price": float(entry["price"]), "price_type": entry["price_type"],
                 "action": ACTION_CREATE if matched_product is None else ACTION_UPDATE,
             })
 
-        # TALL price lists have a single price column plus a row-level supplier.
-        # Represent that price as the row's primary offer too. This is the missing
-        # bridge that previously made Step 4 show 0 price records even though the
-        # file had hundreds of prices. The execution layer deliberately skips the
-        # primary entry as a separate SupplierProductOffer.
         if not offer_entries and primary_supplier_name and primary_price is not None:
             resolved_offers.append({
-                "supplier_name": primary_supplier_name,
-                "matched_supplier_id": primary_supplier_id,
-                "price": float(primary_price),
-                "price_type": "regular",
+                "supplier_name": primary_supplier_name, "matched_supplier_id": primary_supplier_id,
+                "price": float(primary_price), "price_type": "regular",
                 "action": ACTION_CREATE if matched_product is None else ACTION_UPDATE,
                 "is_primary": True,
             })
 
         return ImportPreview(
-            row_number=row.row_number,
-            product_action=product_action,
-            product_name=product_name,
-            matched_product_id=matched_product.id if matched_product else None,
-            unit=unit,
+            row_number=row.row_number, product_action=product_action, product_name=product_name,
+            matched_product_id=matched_product.id if matched_product else None, unit=unit,
             category=category,
-            supplier_action=(
-                ACTION_EXISTING if primary_supplier_id
-                else (ACTION_CREATE if primary_supplier_name else None)
-            ),
-            supplier_name=primary_supplier_name,
-            matched_supplier_id=primary_supplier_id,
-            price=primary_price,
-            old_price=old_price if product_action == ACTION_UPDATE else None,
+            supplier_action=(ACTION_EXISTING if primary_supplier_id else (ACTION_CREATE if primary_supplier_name else None)),
+            supplier_name=primary_supplier_name, matched_supplier_id=primary_supplier_id,
+            price=primary_price, old_price=old_price if product_action == ACTION_UPDATE else None,
             offers=resolved_offers,
             has_errors=any(i["severity"] == SEVERITY_ERROR for i in issues),
             has_warnings=any(i["severity"] == SEVERITY_WARNING for i in issues),
@@ -471,11 +407,9 @@ class ImportValidationService:
         normalized = _normalize_supplier(name)
         if not normalized:
             return None
-
         exact = supplier_by_name.get(normalized)
         if exact:
             return exact.id
-
         candidates = []
         source_tokens = set(normalized.split())
         for canonical, supplier in supplier_by_name.items():
@@ -487,13 +421,11 @@ class ImportValidationService:
                 overlap = len(source_tokens & canonical_tokens)
                 if overlap >= 1 and overlap / len(source_tokens) >= 0.66:
                     candidates.append(supplier)
-
         unique = {s.id: s for s in candidates}
         if len(unique) == 1:
             return next(iter(unique.values())).id
         if len(unique) > 1:
             return None
-
         fuzzy = []
         for canonical, supplier in supplier_by_name.items():
             ratio = difflib.SequenceMatcher(None, normalized, canonical).ratio()
@@ -502,6 +434,5 @@ class ImportValidationService:
         fuzzy.sort(key=lambda item: item[0], reverse=True)
         if fuzzy and (len(fuzzy) == 1 or fuzzy[0][0] - fuzzy[1][0] >= 0.03):
             return fuzzy[0][1].id
-
         pending_new_suppliers.setdefault(normalized, name.strip())
         return None
