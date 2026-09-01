@@ -5,13 +5,14 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle } from "lucide-react";
+import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3 } from "lucide-react";
 
 const ORGANIZATION_NAME = "ישיבת אוהבי ירושלים - ראשית";
 const navigation = [
   { name: "לוח בקרה", href: "/dashboard", icon: LayoutDashboard },
   { name: "ניהול ספקים", href: "/dashboard/suppliers", icon: Users },
   { name: "קטלוג מוצרים", href: "/dashboard/catalog", icon: Package },
+  { name: "השוואת ספקים", href: "/dashboard/price-intelligence", icon: BarChart3 },
   { name: "הזמנות רכש", href: "/dashboard/orders", icon: ShoppingCart },
   { name: "לוג ביקורת", href: "/dashboard/audit", icon: History },
   { name: "הגדרות מערכת", href: "/dashboard/settings", icon: Settings },
