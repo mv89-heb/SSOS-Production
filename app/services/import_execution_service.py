@@ -54,22 +54,20 @@ class ImportExecutionService:
         return self.execution_repo.get_latest_by_session(session_id)
 
     def _lock_session(self, session_id: int):
-        stmt = (
-            select(ImportSession)
-            .where(ImportSession.id == session_id, ImportSession.tenant_id == self.tenant_id)
-            .with_for_update()
-        )
+        stmt = select(ImportSession).where(
+            ImportSession.id == session_id,
+            ImportSession.tenant_id == self.tenant_id,
+        ).with_for_update()
         session = db.session.execute(stmt).scalar_one_or_none()
         if session is None:
             raise NotFound("Import session not found")
         return session
 
     def _lock_execution(self, execution_id: int):
-        stmt = (
-            select(ImportExecution)
-            .where(ImportExecution.id == execution_id, ImportExecution.tenant_id == self.tenant_id)
-            .with_for_update()
-        )
+        stmt = select(ImportExecution).where(
+            ImportExecution.id == execution_id,
+            ImportExecution.tenant_id == self.tenant_id,
+        ).with_for_update()
         execution = db.session.execute(stmt).scalar_one_or_none()
         if execution is None:
             raise NotFound("Import execution not found")
@@ -102,16 +100,11 @@ class ImportExecutionService:
         if not rows:
             raise ImportExecutionError("Validation produced no importable rows.")
 
-        # Validation errors are row-level errors. They are intentionally skipped,
-        # not allowed to abort an otherwise valid supplier price-list import.
         skipped_rows = [r.row_number for r in rows if r.has_errors]
         importable_rows = [
             r for r in rows
             if not r.has_errors and r.product_action in (ACTION_CREATE, ACTION_UPDATE)
         ]
-
-        if not importable_rows:
-            raise ImportExecutionError("Validation produced no error-free importable rows.")
 
         snapshot_suppliers = len(self.supplier_repo.get_all_for_matching())
         snapshot_products = len(self.product_repo.get_all_for_matching())
@@ -177,10 +170,6 @@ class ImportExecutionService:
                     })
                     products_updated += 1
 
-                # WIDE: extra supplier offers are created here.
-                # TALL: the validation layer puts the row's own supplier+price
-                # into offers with is_primary=True; that entry is skipped here
-                # because Product.current_price already stores the primary price.
                 for offer in row.offers or []:
                     if not isinstance(offer, dict):
                         raise ImportExecutionError(f"Row {row.row_number}: malformed supplier offer data.")

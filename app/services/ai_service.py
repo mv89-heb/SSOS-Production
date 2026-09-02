@@ -1,8 +1,8 @@
 """Provider-agnostic optional AI service for SSOS.
 
 The application must never depend on an AI provider being available. This
-module exposes a small interface that returns a deterministic unavailable
-result when AI is disabled or not configured.
+module exposes text and structured-document operations that return a
+predictable unavailable result when AI is disabled or not configured.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ class AIResult:
     error: str | None = None
     provider: str | None = None
     model: str | None = None
+    data: Any = None
 
 
 class AIProvider(Protocol):
@@ -26,16 +27,20 @@ class AIProvider(Protocol):
     def generate_text(self, prompt: str, *, system_instruction: str | None = None) -> AIResult:
         ...
 
+    def generate_structured_from_file(self, file_path: str, schema: dict, *,
+                                      system_instruction: str | None = None) -> AIResult:
+        ...
+
 
 class UnavailableAIProvider:
     name = "none"
 
     def generate_text(self, prompt: str, *, system_instruction: str | None = None) -> AIResult:
-        return AIResult(
-            success=False,
-            error="ai_unavailable",
-            provider=self.name,
-        )
+        return AIResult(success=False, error="ai_unavailable", provider=self.name)
+
+    def generate_structured_from_file(self, file_path: str, schema: dict, *,
+                                      system_instruction: str | None = None) -> AIResult:
+        return AIResult(success=False, error="ai_unavailable", provider=self.name)
 
 
 class AIService:
@@ -48,19 +53,13 @@ class AIService:
     def from_config(cls, config: Any) -> "AIService":
         ai_enabled = bool(config.get("AI_ENABLED", False))
         provider_name = (config.get("AI_PROVIDER") or "gemini").strip().lower()
-
         if not ai_enabled or provider_name != "gemini":
             return cls()
-
-        # Missing/disabled provider credentials must not make application
-        # startup or normal business operations fail.
         if not bool(config.get("GEMINI_ENABLED", False)):
             return cls()
         if not (config.get("GEMINI_API_KEY") or "").strip():
             return cls()
-
         from app.services.gemini_provider import GeminiProvider
-
         try:
             return cls(GeminiProvider.from_config(config))
         except (ValueError, ImportError):
@@ -72,7 +71,12 @@ class AIService:
     def generate_text(self, prompt: str, *, system_instruction: str | None = None) -> AIResult:
         if not prompt or not prompt.strip():
             return AIResult(success=False, error="empty_prompt", provider=self.provider.name)
-        return self.provider.generate_text(
-            prompt.strip(),
-            system_instruction=system_instruction,
+        return self.provider.generate_text(prompt.strip(), system_instruction=system_instruction)
+
+    def generate_structured_from_file(self, file_path: str, schema: dict, *,
+                                      system_instruction: str | None = None) -> AIResult:
+        if not file_path or not schema:
+            return AIResult(success=False, error="invalid_ai_request", provider=self.provider.name)
+        return self.provider.generate_structured_from_file(
+            file_path, schema, system_instruction=system_instruction,
         )

@@ -22,7 +22,6 @@ def test_audit_entries_are_hash_chained(logged_in_client_a, make_order):
     make_order(logged_in_client_a, supplier_name="Supplier X")
     make_order(logged_in_client_a, supplier_name="Supplier Z")
     logs = logged_in_client_a.get("/api/audit").get_json()["logs"]
-    # logs are returned newest-first; verify adjacent linkage
     ordered = sorted(logs, key=lambda x: x["id"])
     for i in range(1, len(ordered)):
         assert ordered[i]["previous_hash"] == ordered[i - 1]["hash_chain"]
@@ -35,7 +34,6 @@ def test_tampering_audit_log_breaks_verification(app, logged_in_client_a, db, ma
     with app.app_context():
         log = db.session.query(AuditLog).order_by(AuditLog.id.desc()).first()
         log_id = log.id
-        # Bypass the ORM event listener to simulate direct tampering (e.g. a rogue DBA)
         db.session.execute(
             db.update(AuditLog).where(AuditLog.id == log_id).values(title="TAMPERED")
         )
@@ -47,12 +45,12 @@ def test_tampering_audit_log_breaks_verification(app, logged_in_client_a, db, ma
     assert body["first_broken_log_id"] == log_id
 
 
-def test_audit_update_via_orm_is_blocked(app, db):
-    from app.models.audit import AuditLog
+def test_audit_update_via_orm_is_blocked(app, db, tenant_a_admin):
     from app.services.audit_service import AuditService
 
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
     with app.app_context():
-        log = AuditService.log_event(tenant_id=1, user_id=None, action="test.action", title="t")
+        log = AuditService.log_event(tenant_id=tenant_id, user_id=None, action="test.action", title="t")
         log.title = "changed"
         try:
             db.session.commit()
@@ -63,11 +61,12 @@ def test_audit_update_via_orm_is_blocked(app, db):
         assert raised
 
 
-def test_audit_delete_via_orm_is_blocked(app, db):
+def test_audit_delete_via_orm_is_blocked(app, db, tenant_a_admin):
     from app.services.audit_service import AuditService
 
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
     with app.app_context():
-        log = AuditService.log_event(tenant_id=1, user_id=None, action="test.action2", title="t")
+        log = AuditService.log_event(tenant_id=tenant_id, user_id=None, action="test.action2", title="t")
         db.session.delete(log)
         try:
             db.session.commit()
@@ -87,7 +86,7 @@ def test_audit_requires_manager_role(logged_in_client_a, client_a, tenant_a_admi
     })
     assert reg.status_code == 201
 
-    worker_client = client_a  # reuse app but log in fresh as worker
+    worker_client = client_a
     worker_client.post("/api/auth/logout")
     login = worker_client.post("/api/auth/login", json={"email": "worker@acme.test", "password": "Passw0rd1"})
     assert login.status_code == 200

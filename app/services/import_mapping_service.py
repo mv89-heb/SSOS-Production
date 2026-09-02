@@ -149,10 +149,6 @@ class ImportMappingService:
                 for col in columns_data
             ]
         )
-
-        # A newly-created mapping must use the exact same supplier-resolution
-        # path as an existing mapping. This prevents supplier detection from
-        # living on a separate logical track from column mapping.
         self._auto_link_supplier_columns(mapping, session, known_suppliers)
 
         AuditService.log_event(
@@ -178,34 +174,25 @@ class ImportMappingService:
         ]
 
     def _find_supplier_match(self, value, known_suppliers: dict):
-        """Resolve a supplier using exact or unambiguous partial-name matching."""
         normalized_value = _normalize_supplier_value(value)
         if not normalized_value:
             return None
-
         exact = known_suppliers.get(normalized_value)
         if exact:
             return exact
-
         matches = []
         for normalized_name, supplier_data in known_suppliers.items():
             if not normalized_name:
                 continue
             if normalized_value in normalized_name or normalized_name in normalized_value:
                 matches.append(supplier_data)
-
-        unique_matches = {
-            supplier_id: supplier_name
-            for supplier_id, supplier_name in matches
-        }
+        unique_matches = {supplier_id: supplier_name for supplier_id, supplier_name in matches}
         if len(unique_matches) != 1:
             return None
-
         supplier_id, supplier_name = next(iter(unique_matches.items()))
         return supplier_id, supplier_name
 
     def _supplier_match_from_rows(self, session, column_index: int, known_suppliers: dict):
-        """Return a supplier only when the supplier column contains a strong, unambiguous match."""
         counts = Counter()
         total_non_empty = 0
         for row in getattr(session, "rows", []) or []:
@@ -217,35 +204,25 @@ class ImportMappingService:
             if not normalized:
                 continue
             total_non_empty += 1
-
             match = self._find_supplier_match(raw_value, known_suppliers)
             if match:
                 supplier_id, supplier_name = match
                 counts[(supplier_id, supplier_name)] += 1
-
         if not counts or total_non_empty < 1:
             return None
-
         winner, winner_count = counts.most_common(1)[0]
         share = winner_count / total_non_empty
         if winner_count < 2 or share < 0.80:
             return None
-
         supplier_id, supplier_name = winner
         return supplier_id, supplier_name, share
 
     def _auto_link_supplier_columns(self, mapping, session, known_suppliers):
-        """Resolve SUPPLIER columns and synchronize mapping/session state."""
         columns = self.column_repo.get_by_mapping(mapping.id)
         changed = False
-
         for col in columns:
             if col.final_target != TARGET_SUPPLIER_NAME and col.suggested_target != TARGET_SUPPLIER_NAME:
                 continue
-
-            # A previously resolved supplier is already authoritative. Repair
-            # its review flag if an older mapping was persisted in an
-            # inconsistent state.
             if col.final_supplier_id is not None:
                 if not col.user_reviewed:
                     col.user_reviewed = True
@@ -254,28 +231,19 @@ class ImportMappingService:
                     session.supplier_id = col.final_supplier_id
                     changed = True
                 continue
-
             match = self._supplier_match_from_rows(session, col.column_index, known_suppliers)
             if not match:
                 continue
-
             supplier_id, supplier_name, share = match
-
             col.suggested_supplier_id = supplier_id
             col.suggested_supplier_name = supplier_name
             col.final_target = TARGET_SUPPLIER_NAME
             col.final_supplier_id = supplier_id
             col.final_supplier_name = supplier_name
-
-            # CRITICAL: automatic backend resolution is a complete mapping
-            # decision. Without this flag the approval endpoint still sees the
-            # column as unreviewed and returns HTTP 409.
             col.user_reviewed = True
             changed = True
-
             if session.supplier_id is None:
                 session.supplier_id = supplier_id
-
             AuditService.log_event(
                 self.tenant_id,
                 self.user_id,
@@ -290,21 +258,18 @@ class ImportMappingService:
                     "auto_reviewed": True,
                 },
             )
-
         return changed
 
     def _build_suggested_column(self, mapping_id: int, col: dict, known_suppliers: dict, session=None):
         header = str(col.get("header") or "").strip()
         if not header:
             raise BadRequest("Import mapping contains a column with an empty header")
-
         detected_type = col.get("detected_type", "UNKNOWN")
         group_label = col.get("group_label")
         supplier_id = None
         supplier_name = None
         price_type = None
         auto_supplier_resolved = False
-
         if group_label and detected_type in _PRICE_LIKE_ANALYSIS_TYPES:
             target = TARGET_SUPPLIER_OFFER
             price_type = _ANALYSIS_TYPE_TO_PRICE_TYPE[detected_type]
@@ -325,7 +290,6 @@ class ImportMappingService:
                     auto_supplier_resolved = True
         else:
             target = _ANALYSIS_TYPE_TO_TARGET.get(detected_type, TARGET_IGNORE)
-
         return self.column_repo.model(
             tenant_id=self.tenant_id,
             import_mapping_id=mapping_id,
@@ -350,19 +314,12 @@ class ImportMappingService:
             raise BadRequest("decisions must be an array")
         if len(decisions) > 1000:
             raise BadRequest("Too many mapping decisions")
-
         mapping = self.mapping_repo.get_by_id_or_404(mapping_id)
         if mapping.status == MAPPING_STATUS_APPROVED:
-            raise Conflict(
-                "Approved mappings cannot be edited. Create a new import mapping instead."
-            )
-
-        columns_by_index = {
-            c.column_index: c for c in self.column_repo.get_by_mapping(mapping_id)
-        }
+            raise Conflict("Approved mappings cannot be edited. Create a new import mapping instead.")
+        columns_by_index = {c.column_index: c for c in self.column_repo.get_by_mapping(mapping_id)}
         seen_indexes = set()
         validated = []
-
         for decision in decisions:
             if not isinstance(decision, dict):
                 raise BadRequest("Each mapping decision must be an object")
@@ -374,7 +331,6 @@ class ImportMappingService:
             seen_indexes.add(column_index)
             if column_index not in columns_by_index:
                 raise BadRequest(f"No column at index {column_index} in this mapping")
-
             target = decision.get("target")
             if target is not None and target not in VALID_TARGETS:
                 raise BadRequest(f"Invalid target: {target}")
@@ -385,22 +341,18 @@ class ImportMappingService:
                 col = columns_by_index[column_index]
                 if not (price_type or col.final_price_type):
                     raise BadRequest("price_type is required when target is SUPPLIER_OFFER")
-
             supplier_id = decision.get("supplier_id")
             if supplier_id is not None:
                 if not _is_positive_int(supplier_id):
                     raise BadRequest("supplier_id must be a positive integer")
                 self.supplier_repo.get_by_id_or_404(supplier_id)
-
             supplier_name = decision.get("supplier_name")
             if supplier_name is not None:
                 if not isinstance(supplier_name, str) or not supplier_name.strip():
                     raise BadRequest("supplier_name must be a non-empty string")
                 if len(supplier_name.strip()) > 255:
                     raise BadRequest("supplier_name is too long")
-
             validated.append((columns_by_index[column_index], decision))
-
         for col, decision in validated:
             if "target" in decision and decision["target"] is not None:
                 col.final_target = decision["target"]
@@ -418,7 +370,6 @@ class ImportMappingService:
             if "price_type" in decision and decision["price_type"] is not None:
                 col.final_price_type = decision["price_type"]
             col.user_reviewed = True
-
         AuditService.log_event(
             self.tenant_id,
             self.user_id,
@@ -431,17 +382,12 @@ class ImportMappingService:
     def approve_mapping(self, mapping_id: int):
         if not _is_positive_int(mapping_id):
             raise BadRequest("Invalid mapping id")
-
         mapping = self.mapping_repo.get_by_id_or_404(mapping_id)
         if mapping.status == MAPPING_STATUS_APPROVED:
             raise Conflict("This mapping is already approved")
-
         approver = self.user_repo.get_by_id_or_404(self.user_id)
-        if mapping.created_by == self.user_id and approver.role != ROLE_ADMIN:
+        if mapping.created_by == self.user_id:
             raise Conflict("The mapping creator cannot approve their own mapping")
-
-        # Accept engine suggestions at approval time when they are complete.
-        # This remains fail-closed for unresolved supplier mappings.
         for col in mapping.columns:
             if col.user_reviewed or col.final_target == TARGET_IGNORE:
                 continue
@@ -449,9 +395,9 @@ class ImportMappingService:
                 continue
             if col.final_target == TARGET_SUPPLIER_NAME and col.final_supplier_id is None:
                 continue
-            if col.final_target == TARGET_SUPPLIER_OFFER and col.final_supplier_id is None:
+            if col.final_target == TARGET_SUPPLIER_OFFER and col.final_supplier_id is None and not col.final_supplier_name:
                 continue
-            if col.final_target in {
+            if False and col.final_target in {
                 TARGET_PRODUCT_NAME,
                 TARGET_PRODUCT_CODE,
                 TARGET_BARCODE,
@@ -465,21 +411,15 @@ class ImportMappingService:
                 TARGET_SUPPLIER_OFFER,
             }:
                 col.user_reviewed = True
-
-        unreviewed = [
-            c for c in mapping.columns
-            if not c.user_reviewed and c.final_target != TARGET_IGNORE
-        ]
+        unreviewed = [c for c in mapping.columns if not c.user_reviewed and c.final_target != TARGET_IGNORE]
         if unreviewed:
             raise Conflict(
                 "Every non-ignored mapping column must be reviewed before approval: "
                 + ", ".join(c.column_header for c in unreviewed[:10])
             )
-
         mapping.status = MAPPING_STATUS_APPROVED
         mapping.approved_by = self.user_id
         mapping.approved_at = datetime.now(timezone.utc)
-
         AuditService.log_event(
             self.tenant_id,
             self.user_id,
@@ -509,7 +449,6 @@ class ImportMappingService:
             if not _is_positive_int(supplier_id):
                 raise BadRequest("supplier_id must be a positive integer")
             self.supplier_repo.get_by_id_or_404(supplier_id)
-
         column_mapping = {
             _template_key(c.column_index, c.column_header): {
                 "column_index": c.column_index,
@@ -521,6 +460,10 @@ class ImportMappingService:
             }
             for c in mapping.columns
         }
+        for col in mapping.columns:
+            if col.column_header not in column_mapping:
+                column_mapping[col.column_header] = column_mapping[_template_key(col.column_index, col.column_header)]
+
         template = self.template_repo.model(
             tenant_id=self.tenant_id,
             supplier_id=supplier_id,
@@ -543,13 +486,10 @@ class ImportMappingService:
         return self.template_repo.list_all()
 
     def _validate_template_scope(self, mapping, template):
-        """Prevent a reusable template from silently switching suppliers."""
         session_supplier_id = mapping.session.supplier_id if mapping.session is not None else None
         template_supplier_id = template.supplier_id
-
         if session_supplier_id is not None and template_supplier_id is not None and session_supplier_id != template_supplier_id:
             raise Conflict("This template belongs to a different supplier and cannot be applied to this import.")
-
         embedded_supplier_ids = set()
         for entry in (template.column_mapping or {}).values():
             if not isinstance(entry, dict):
@@ -560,12 +500,10 @@ class ImportMappingService:
                     raise Conflict("Template contains an invalid supplier_id")
                 self.supplier_repo.get_by_id_or_404(supplier_id)
                 embedded_supplier_ids.add(supplier_id)
-
         if template_supplier_id is not None:
             self.supplier_repo.get_by_id_or_404(template_supplier_id)
             if any(supplier_id != template_supplier_id for supplier_id in embedded_supplier_ids):
                 raise Conflict("Template contains supplier mappings that do not match its supplier.")
-
         if session_supplier_id is not None:
             if any(supplier_id != session_supplier_id for supplier_id in embedded_supplier_ids):
                 raise Conflict("Template contains supplier mappings for a different supplier than this import.")
@@ -579,10 +517,7 @@ class ImportMappingService:
         legacy = mapping.get(col.column_header)
         if legacy is None:
             return None
-        matching = [
-            value for key, value in mapping.items()
-            if isinstance(key, str) and key == col.column_header and isinstance(value, dict)
-        ]
+        matching = [value for key, value in mapping.items() if isinstance(key, str) and key == col.column_header and isinstance(value, dict)]
         return legacy if len(matching) == 1 else None
 
     def apply_template(self, mapping_id: int, template_id: int):
@@ -594,9 +529,7 @@ class ImportMappingService:
         template = self.template_repo.get_by_id_or_404(template_id)
         if not isinstance(template.column_mapping, dict):
             raise Conflict("The saved mapping template is invalid")
-
         self._validate_template_scope(mapping, template)
-
         applied_count = 0
         for col in mapping.columns:
             entry = self._template_entry_for_column(template, col)
@@ -618,17 +551,14 @@ class ImportMappingService:
                 supplier_name = supplier.name
             else:
                 supplier_name = entry.get("supplier_name")
-
             if target == TARGET_SUPPLIER_OFFER and not price_type:
                 raise Conflict(f"Template is missing price_type for {col.column_header}")
-
             col.final_target = target
             col.final_supplier_id = supplier_id
             col.final_supplier_name = supplier_name
             col.final_price_type = price_type
             col.user_reviewed = True
             applied_count += 1
-
         AuditService.log_event(
             self.tenant_id,
             self.user_id,

@@ -34,7 +34,6 @@ def _install_import_analysis_patches():
     """Install small compatibility enrichments before import routes are loaded."""
     from app.services.import_supplier_detection import install_supplier_detection_patch
     from app.services.import_validation_integrity import install_import_validation_integrity_patch
-
     install_supplier_detection_patch()
     install_import_validation_integrity_patch()
 
@@ -84,6 +83,8 @@ def _register_blueprints(app):
     from app.routes.bulk_price_update import bulk_price_update_bp
     from app.routes.users import users_bp
     from app.routes.admin import admin_bp
+    from app.routes.price_intelligence import price_intelligence_bp
+    from app.routes.document_intelligence import document_intelligence_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
@@ -96,6 +97,8 @@ def _register_blueprints(app):
     app.register_blueprint(bulk_price_update_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(price_intelligence_bp)
+    app.register_blueprint(document_intelligence_bp)
     csrf.exempt(health_bp)
 
 

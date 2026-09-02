@@ -35,14 +35,7 @@ def _upload_analyze_and_map(client, data, **kwargs):
 
 def _create_second_manager(db, tenant_id, email="mapping-approver@acme.test"):
     from app.models.user import User, ROLE_MANAGER
-
-    manager = User(
-        tenant_id=tenant_id,
-        email=email,
-        full_name="Second Mapping Manager",
-        role=ROLE_MANAGER,
-        active=True,
-    )
+    manager = User(tenant_id=tenant_id, email=email, full_name="Second Mapping Manager", role=ROLE_MANAGER, active=True)
     manager.set_password("Passw0rd1")
     db.session.add(manager)
     db.session.commit()
@@ -50,20 +43,12 @@ def _create_second_manager(db, tenant_id, email="mapping-approver@acme.test"):
 
 
 def _login_second_manager(client, email):
-    response = client.post(
-        "/api/auth/login",
-        json={"email": email, "password": "Passw0rd1"},
-    )
+    response = client.post("/api/auth/login", json={"email": email, "password": "Passw0rd1"})
     assert response.status_code == 200
 
 
-# --- Tall format --------------------------------------------------------
-
 def test_tall_format_mapping_suggestions(logged_in_client_a):
-    data = _xlsx_bytes([
-        ["מוצר", "יחידה", "מחיר"],
-        ["חלה קלועה", "יחידה", "6.54"],
-    ])
+    data = _xlsx_bytes([["מוצר", "יחידה", "מחיר"], ["חלה קלועה", "יחידה", "6.54"]])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data)
     assert resp.status_code == 200
     cols = {c["column_header"]: c for c in resp.get_json()["mapping"]["columns"]}
@@ -73,38 +58,24 @@ def test_tall_format_mapping_suggestions(logged_in_client_a):
     assert cols["מחיר"]["suggested_supplier_id"] is None
 
 
-# --- Wide format ---------------------------------------------------------
-
 def test_wide_format_mapping_suggests_supplier_offer(logged_in_client_a):
     logged_in_client_a.post("/api/catalog/suppliers", json={"name": "עמית"})
-    data = _xlsx_bytes(
-        [
-            [None, "גידרון", None, None, "עמית", "ווגשל"],
-            ["מוצר", "יחידה", 'לפני מע"מ', "הנחה", 'לפני מע"מ', 'לפני מע"מ'],
-            ["בורקס גבינה", "קילו", 20.85, 14.6, 12.8, 14.64],
-        ],
-        merges=["B1:D1"],
-    )
+    data = _xlsx_bytes([[None, "גידרון", None, None, "עמית", "ווגשל"], ["מוצר", "יחידה", 'לפני מע"מ', "הנחה", 'לפני מע"מ', 'לפני מע"מ'], ["בורקס גבינה", "קילו", 20.85, 14.6, 12.8, 14.64]], merges=["B1:D1"])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data)
     cols = resp.get_json()["mapping"]["columns"]
     by_header = {c["column_header"]: c for c in cols}
-
     gidron_col = by_header['לפני מע"מ']
     assert gidron_col["suggested_target"] == "SUPPLIER_OFFER"
     assert gidron_col["suggested_supplier_name"] == "גידרון"
     assert gidron_col["suggested_price_type"] == "before_vat"
-
     amit_col = by_header['לפני מע"מ (2)']
     assert amit_col["suggested_target"] == "SUPPLIER_OFFER"
     assert amit_col["suggested_supplier_name"] == "עמית"
     assert amit_col["suggested_supplier_id"] is not None
-
     discount_col = by_header["הנחה"]
     assert discount_col["suggested_target"] == "SUPPLIER_OFFER"
     assert discount_col["suggested_price_type"] == "discount"
 
-
-# --- Manual override -------------------------------------------------------
 
 def test_manual_override_changes_target_and_marks_reviewed(logged_in_client_a):
     data = _xlsx_bytes([["מוצר", "הערה"], ["X", "note"]])
@@ -112,10 +83,7 @@ def test_manual_override_changes_target_and_marks_reviewed(logged_in_client_a):
     note_col = next(c for c in resp.get_json()["mapping"]["columns"] if c["column_header"] == "הערה")
     assert note_col["suggested_target"] == "IGNORE"
     assert note_col["user_reviewed"] is False
-
-    update = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={
-        "decisions": [{"column_index": note_col["column_index"], "target": "CATEGORY"}]
-    })
+    update = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={"decisions": [{"column_index": note_col["column_index"], "target": "CATEGORY"}]})
     assert update.status_code == 200
     updated = next(c for c in update.get_json()["mapping"]["columns"] if c["column_header"] == "הערה")
     assert updated["final_target"] == "CATEGORY"
@@ -125,20 +93,11 @@ def test_manual_override_changes_target_and_marks_reviewed(logged_in_client_a):
 
 def test_override_supplier_name_without_id_clears_stale_supplier_id(logged_in_client_a):
     logged_in_client_a.post("/api/catalog/suppliers", json={"name": "עמית"})
-    data = _xlsx_bytes(
-        [[None, "עמית"], ["מוצר", 'לפני מע"מ'], ["X", "10"]],
-        merges=["A1:A1"],
-    )
+    data = _xlsx_bytes([[None, "עמית"], ["מוצר", 'לפני מע"מ'], ["X", "10"]], merges=["A1:A1"])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data)
     col = next(c for c in resp.get_json()["mapping"]["columns"] if c["column_header"] == 'לפני מע"מ')
     assert col["suggested_supplier_id"] is not None
-
-    update = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={
-        "decisions": [{
-            "column_index": col["column_index"], "target": "SUPPLIER_OFFER",
-            "supplier_name": "עמית ידני", "price_type": "before_vat",
-        }]
-    })
+    update = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={"decisions": [{"column_index": col["column_index"], "target": "SUPPLIER_OFFER", "supplier_name": "עמית ידני", "price_type": "before_vat"}]})
     updated = next(c for c in update.get_json()["mapping"]["columns"] if c["column_header"] == 'לפני מע"מ')
     assert updated["final_supplier_id"] is None
     assert updated["final_supplier_name"] == "עמית ידני"
@@ -148,9 +107,7 @@ def test_override_rejects_invalid_target(logged_in_client_a):
     data = _xlsx_bytes([["מוצר", "מחיר"], ["X", "1"]])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data)
     col = resp.get_json()["mapping"]["columns"][0]
-    update = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={
-        "decisions": [{"column_index": col["column_index"], "target": "NOT_A_REAL_TARGET"}]
-    })
+    update = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={"decisions": [{"column_index": col["column_index"], "target": "NOT_A_REAL_TARGET"}]})
     assert update.status_code in (400, 422)
 
 
@@ -158,48 +115,30 @@ def test_supplier_offer_requires_price_type(logged_in_client_a):
     data = _xlsx_bytes([["מוצר", "עמודה"], ["X", "5"]])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data)
     col = next(c for c in resp.get_json()["mapping"]["columns"] if c["column_header"] == "עמודה")
-    update = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={
-        "decisions": [{"column_index": col["column_index"], "target": "SUPPLIER_OFFER", "supplier_name": "X"}]
-    })
+    update = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={"decisions": [{"column_index": col["column_index"], "target": "SUPPLIER_OFFER", "supplier_name": "X"}]})
     assert update.status_code in (400, 422)
 
 
 def test_override_rejects_cross_tenant_supplier_id(logged_in_client_a, logged_in_client_b):
-    foreign_supplier_id = logged_in_client_b.post(
-        "/api/catalog/suppliers", json={"name": "Foreign"}
-    ).get_json()["supplier"]["id"]
+    foreign_supplier_id = logged_in_client_b.post("/api/catalog/suppliers", json={"name": "Foreign"}).get_json()["supplier"]["id"]
     data = _xlsx_bytes([["מוצר", "מחיר"], ["X", "1"]])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data)
     col = next(c for c in resp.get_json()["mapping"]["columns"] if c["column_header"] == "מחיר")
-    update = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={
-        "decisions": [{
-            "column_index": col["column_index"], "target": "SUPPLIER_OFFER",
-            "supplier_id": foreign_supplier_id, "price_type": "regular",
-        }]
-    })
+    update = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={"decisions": [{"column_index": col["column_index"], "target": "SUPPLIER_OFFER", "supplier_id": foreign_supplier_id, "price_type": "regular"}]})
     assert update.status_code == 404
 
 
-# --- Approve ---------------------------------------------------------------
-
-def test_approve_mapping_requires_second_user_and_reviewed_columns(
-    logged_in_client_a, client_b, db
-):
+def test_approve_mapping_requires_second_user_and_reviewed_columns(logged_in_client_a, client_b, db):
     data = _xlsx_bytes([["מוצר", "מחיר"], ["X", "1"]])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data)
     tenant_id = logged_in_client_a.get("/api/auth/me").get_json()["user"]["tenant_id"]
     email = _create_second_manager(db, tenant_id)
     _login_second_manager(client_b, email)
-
     self_approval = logged_in_client_a.post(f"/api/imports/{session_id}/mapping/approve")
     assert self_approval.status_code == 409
-
     for col in resp.get_json()["mapping"]["columns"]:
-        review = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={
-            "decisions": [{"column_index": col["column_index"], "target": col["final_target"]}]
-        })
+        review = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={"decisions": [{"column_index": col["column_index"], "target": col["final_target"]}]})
         assert review.status_code == 200
-
     approved = client_b.post(f"/api/imports/{session_id}/mapping/approve")
     assert approved.status_code == 200
     mapping = approved.get_json()["mapping"]
@@ -215,39 +154,26 @@ def test_approve_mapping_rejects_unreviewed_columns(logged_in_client_a, client_b
     tenant_id = logged_in_client_a.get("/api/auth/me").get_json()["user"]["tenant_id"]
     email = _create_second_manager(db, tenant_id, "mapping-approver-2@acme.test")
     _login_second_manager(client_b, email)
-
     blocked = client_b.post(f"/api/imports/{session_id}/mapping/approve")
     assert blocked.status_code == 409
 
 
-# --- Save / reload template --------------------------------------------------
-
 def test_save_and_reuse_template(logged_in_client_a):
     logged_in_client_a.post("/api/catalog/suppliers", json={"name": "עמית"})
-    data = _xlsx_bytes(
-        [[None, "עמית"], ["מוצר", 'לפני מע"מ'], ["X", "10"]],
-        merges=["A1:A1"],
-    )
+    data = _xlsx_bytes([[None, "עמית"], ["מוצר", 'לפני מע"מ'], ["X", "10"]], merges=["A1:A1"])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data)
-
     save_resp = logged_in_client_a.post(f"/api/imports/{session_id}/mapping/templates", json={"name": "Amit Template"})
     assert save_resp.status_code == 201
     template = save_resp.get_json()["template"]
     assert template["name"] == "Amit Template"
     assert 'לפני מע"מ' in template["column_mapping"]
-
     session_id_2, resp_2 = _upload_analyze_and_map(logged_in_client_a, data, filename="test.xlsx")
     templates_list = logged_in_client_a.get(f"/api/imports/{session_id_2}/mapping/templates")
     assert templates_list.status_code == 200
     assert any(t["id"] == template["id"] for t in templates_list.get_json()["templates"])
-
-    apply_resp = logged_in_client_a.post(
-        f"/api/imports/{session_id_2}/mapping/templates/{template['id']}/apply"
-    )
+    apply_resp = logged_in_client_a.post(f"/api/imports/{session_id_2}/mapping/templates/{template['id']}/apply")
     assert apply_resp.status_code == 200
-    applied_col = next(
-        c for c in apply_resp.get_json()["mapping"]["columns"] if c["column_header"] == 'לפני מע"מ'
-    )
+    applied_col = next(c for c in apply_resp.get_json()["mapping"]["columns"] if c["column_header"] == 'לפני מע"מ')
     assert applied_col["final_target"] == "SUPPLIER_OFFER"
     assert applied_col["user_reviewed"] is True
 
@@ -256,19 +182,13 @@ def test_matching_templates_surfaced_on_get_mapping(logged_in_client_a):
     data = _xlsx_bytes([["מוצר", "מחיר"], ["X", "1"]])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data, filename="repeat.xlsx")
     logged_in_client_a.post(f"/api/imports/{session_id}/mapping/templates", json={"name": "Repeat Template"})
-
     session_id_2, resp_2 = _upload_analyze_and_map(logged_in_client_a, data, filename="repeat.xlsx")
     body = logged_in_client_a.get(f"/api/imports/{session_id_2}/mapping").get_json()
     assert any(t["name"] == "Repeat Template" for t in body["matching_templates"])
 
 
-# --- Product / supplier field mapping vocabulary ----------------------------
-
 def test_product_and_barcode_fields_mapped(logged_in_client_a):
-    data = _xlsx_bytes([
-        ["ברקוד", "מוצר", 'מק"ט', "קטגוריה"],
-        ["7290000111222", "קולה", "COLA-1", "משקאות"],
-    ])
+    data = _xlsx_bytes([["ברקוד", "מוצר", 'מק"ט', "קטגוריה"], ["7290000111222", "קולה", "COLA-1", "משקאות"]])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data)
     cols = {c["column_header"]: c["suggested_target"] for c in resp.get_json()["mapping"]["columns"]}
     assert cols["ברקוד"] == "BARCODE"
@@ -276,8 +196,6 @@ def test_product_and_barcode_fields_mapped(logged_in_client_a):
     assert cols['מק"ט'] == "PRODUCT_CODE"
     assert cols["קטגוריה"] == "CATEGORY"
 
-
-# --- Idempotency: GET twice doesn't regenerate/duplicate --------------------
 
 def test_get_mapping_twice_returns_same_mapping_not_duplicate(logged_in_client_a):
     data = _xlsx_bytes([["מוצר", "מחיר"], ["X", "1"]])
@@ -290,37 +208,26 @@ def test_get_mapping_preserves_prior_decisions(logged_in_client_a):
     data = _xlsx_bytes([["מוצר", "מחיר"], ["X", "1"]])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data)
     col = resp.get_json()["mapping"]["columns"][0]
-    logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={
-        "decisions": [{"column_index": col["column_index"], "target": "IGNORE"}]
-    })
+    logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={"decisions": [{"column_index": col["column_index"], "target": "IGNORE"}]})
     reget = logged_in_client_a.get(f"/api/imports/{session_id}/mapping")
     reloaded_col = reget.get_json()["mapping"]["columns"][0]
     assert reloaded_col["final_target"] == "IGNORE"
     assert reloaded_col["user_reviewed"] is True
 
 
-# --- Hard guarantee: mapping never touches catalog tables --------------------
-
 def test_mapping_never_touches_catalog_tables(logged_in_client_a, client_b, db):
     before_products = logged_in_client_a.get("/api/catalog/products").get_json()["products"]
     before_suppliers = logged_in_client_a.get("/api/catalog/suppliers").get_json()["suppliers"]
-
-    data = _xlsx_bytes(
-        [[None, "גידרון", "עמית"], ["מוצר", 'לפני מע"מ', 'לפני מע"מ'], ["בורקס גבינה", "20.85", "12.8"]],
-        merges=["B1:B1"],
-    )
+    data = _xlsx_bytes([[None, "גידרון", "עמית"], ["מוצר", 'לפני מע"מ', 'לפני מע"מ'], ["בורקס גבינה", "20.85", "12.8"]], merges=["B1:B1"])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data)
     tenant_id = logged_in_client_a.get("/api/auth/me").get_json()["user"]["tenant_id"]
     email = _create_second_manager(db, tenant_id, "mapping-approver-3@acme.test")
     _login_second_manager(client_b, email)
     for col in resp.get_json()["mapping"]["columns"]:
-        review = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={
-            "decisions": [{"column_index": col["column_index"], "target": col["final_target"]}]
-        })
+        review = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={"decisions": [{"column_index": col["column_index"], "target": col["final_target"]}]})
         assert review.status_code == 200
     assert client_b.post(f"/api/imports/{session_id}/mapping/approve").status_code == 200
     assert logged_in_client_a.post(f"/api/imports/{session_id}/mapping/templates", json={"name": "T"}).status_code == 201
-
     after_products = logged_in_client_a.get("/api/catalog/products").get_json()["products"]
     after_suppliers = logged_in_client_a.get("/api/catalog/suppliers").get_json()["suppliers"]
     assert after_products == before_products
@@ -331,43 +238,39 @@ def test_audit_log_records_mapping_lifecycle(logged_in_client_a, client_b, db):
     data = _xlsx_bytes([["מוצר", "מחיר"], ["X", "1"]])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data)
     col = resp.get_json()["mapping"]["columns"][0]
-    logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={
-        "decisions": [{"column_index": col["column_index"], "target": "IGNORE"}]
-    })
+    logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={"decisions": [{"column_index": col["column_index"], "target": "IGNORE"}]})
+    mapping_body = logged_in_client_a.get(f"/api/imports/{session_id}/mapping").get_json()["mapping"]
+    for remaining in mapping_body["columns"]:
+        if not remaining["user_reviewed"]:
+            review = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={"decisions": [{"column_index": remaining["column_index"], "target": remaining["final_target"]}]})
+            assert review.status_code == 200, review.get_json()
     tenant_id = logged_in_client_a.get("/api/auth/me").get_json()["user"]["tenant_id"]
     email = _create_second_manager(db, tenant_id, "mapping-approver-4@acme.test")
     _login_second_manager(client_b, email)
     assert client_b.post(f"/api/imports/{session_id}/mapping/approve").status_code == 200
-
     actions = [log["action"] for log in logged_in_client_a.get("/api/audit").get_json()["logs"]]
     assert "import.mapping_created" in actions
     assert "import.mapping_updated" in actions
     assert "import.mapping_approved" in actions
 
 
-# --- Permissions / tenant isolation ------------------------------------------
-
 def test_mapping_requires_manager_role(client_a, tenant_a_admin):
     from test_security import _register_employee
-
     tenant_data, creds = tenant_a_admin
     slug = tenant_data["tenant"]["slug"]
     client_a.post("/api/auth/login", json=creds)
     data = _xlsx_bytes([["מוצר", "מחיר"], ["X", "1"]])
     session_id = _upload(client_a, data).get_json()["session"]["id"]
     client_a.post(f"/api/imports/{session_id}/analyze")
-
     _register_employee(client_a, slug)
     client_a.post("/api/auth/logout")
     client_a.post("/api/auth/login", json={"email": "worker@acme.test", "password": "Passw0rd1"})
-
     assert client_a.get(f"/api/imports/{session_id}/mapping").status_code == 403
 
 
 def test_mapping_tenant_isolated(logged_in_client_a, logged_in_client_b):
     data = _xlsx_bytes([["מוצר", "מחיר"], ["X", "1"]])
     session_id, resp = _upload_analyze_and_map(logged_in_client_a, data)
-
     assert logged_in_client_b.get(f"/api/imports/{session_id}/mapping").status_code == 404
     assert logged_in_client_b.post(f"/api/imports/{session_id}/mapping", json={"decisions": []}).status_code == 404
     assert logged_in_client_b.post(f"/api/imports/{session_id}/mapping/approve").status_code == 404
