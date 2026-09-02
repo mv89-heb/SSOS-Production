@@ -57,3 +57,5 @@ jobs:
         run: npx tsc --noEmit
       - name: Build frontend
         run: npm run build
+
+# trigger repair workflow and CI on the current feature head
