@@ -5,7 +5,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3, FileSearch } from "lucide-react";
 
 const ORGANIZATION_NAME = "ישיבת אוהבי ירושלים - ראשית";
 const navigation = [
@@ -13,6 +13,7 @@ const navigation = [
   { name: "ניהול ספקים", href: "/dashboard/suppliers", icon: Users },
   { name: "קטלוג מוצרים", href: "/dashboard/catalog", icon: Package },
   { name: "השוואת ספקים", href: "/dashboard/price-intelligence", icon: BarChart3 },
+  { name: "ניתוח מסמכים עם Gemini", href: "/dashboard/document-intelligence", icon: FileSearch },
   { name: "הזמנות רכש", href: "/dashboard/orders", icon: ShoppingCart },
   { name: "לוג ביקורת", href: "/dashboard/audit", icon: History },
   { name: "הגדרות מערכת", href: "/dashboard/settings", icon: Settings },
@@ -38,23 +39,8 @@ export default function Sidebar() {
           const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
           const Icon = item.icon;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "group flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-semibold transition-all duration-200",
-                isActive
-                  ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
-                  : "text-slate-300 hover:bg-white/8 hover:text-white"
-              )}
-            >
-              <span className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors",
-                isActive ? "bg-white/15 text-white" : "bg-white/5 text-slate-400 group-hover:bg-white/10 group-hover:text-white"
-              )}>
-                <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
-              </span>
+            <Link key={item.href} href={item.href} aria-current={isActive ? "page" : undefined} className={cn("group flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-semibold transition-all duration-200", isActive ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30" : "text-slate-300 hover:bg-white/8 hover:text-white")}>
+              <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors", isActive ? "bg-white/15 text-white" : "bg-white/5 text-slate-400 group-hover:bg-white/10 group-hover:text-white")}><Icon className="h-[18px] w-[18px]" aria-hidden="true" /></span>
               <span className="flex-1">{item.name}</span>
               {isActive && <ChevronRight className="h-4 w-4 opacity-80" aria-hidden="true" />}
             </Link>
@@ -62,17 +48,10 @@ export default function Sidebar() {
         })}
       </nav>
       <div className="shrink-0 space-y-2 border-t border-white/10 p-4">
-        <Link href="/dashboard/help" className={cn(
-          "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition",
-          pathname.startsWith("/dashboard/help") ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/8 hover:text-white"
-        )}>
-          <HelpCircle className="h-5 w-5" />
-          <span>מרכז עזרה</span>
+        <Link href="/dashboard/help" className={cn("flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition", pathname.startsWith("/dashboard/help") ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/8 hover:text-white")}>
+          <HelpCircle className="h-5 w-5" /><span>מרכז עזרה</span>
         </Link>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-          <p className="text-xs font-bold text-white">{ORGANIZATION_NAME}</p>
-          <p className="mt-0.5 text-[11px] text-slate-400">מערכת ניהול רכש</p>
-        </div>
+        <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-xs font-bold text-white">{ORGANIZATION_NAME}</p><p className="mt-0.5 text-[11px] text-slate-400">מערכת ניהול רכש</p></div>
       </div>
     </aside>
   );
