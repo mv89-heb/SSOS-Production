@@ -36,7 +36,6 @@ def test_list_orders_filters_by_status(logged_in_client_a, make_order):
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
     logged_in_client_a.post(f"/api/orders/{order_id}/submit")
-
     submitted = logged_in_client_a.get("/api/orders?status=submitted")
     drafts = logged_in_client_a.get("/api/orders?status=draft")
     assert len(submitted.get_json()["orders"]) == 1
@@ -70,7 +69,6 @@ def test_update_draft_order_notes(logged_in_client_a, make_order):
 
 
 def test_update_order_rejects_status_field(logged_in_client_a, make_order):
-    """Status changes must go through the lifecycle endpoints, not PUT."""
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
     updated = logged_in_client_a.put(f"/api/orders/{order_id}", json={"status": "submitted"})
@@ -100,17 +98,14 @@ def test_full_lifecycle_requires_second_user_for_approval(logged_in_client_a, cl
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
     tenant_id = tenant_a_admin[0]["tenant"]["id"]
-
     assert logged_in_client_a.post(f"/api/orders/{order_id}/submit").status_code == 200
     self_approval = logged_in_client_a.post(f"/api/orders/{order_id}/approve")
     assert self_approval.status_code == 409
-
     from app.models.user import User, ROLE_MANAGER
     manager = User(tenant_id=tenant_id, email="manager@acme.test", full_name="Second Manager", role=ROLE_MANAGER, active=True)
     manager.set_password("Passw0rd1")
     db.session.add(manager)
     db.session.commit()
-
     login = client_b.post("/api/auth/login", json={"email": "manager@acme.test", "password": "Passw0rd1"})
     assert login.status_code == 200
     assert client_b.post(f"/api/orders/{order_id}/approve").status_code == 200
@@ -127,12 +122,20 @@ def test_approve_before_submit_rejected(logged_in_client_a, make_order):
     assert approved.status_code == 409
 
 
-def test_reject_stores_reason_and_cancels(logged_in_client_a, make_order):
+def test_reject_stores_reason_and_cancels(logged_in_client_a, client_b, make_order, db):
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
-    logged_in_client_a.post(f"/api/orders/{order_id}/submit")
-    rejected = logged_in_client_a.post(f"/api/orders/{order_id}/reject", json={"reason": "price too high"})
-    assert rejected.status_code == 409
+    assert logged_in_client_a.post(f"/api/orders/{order_id}/submit").status_code == 200
+    from app.models.user import User, ROLE_MANAGER
+    tenant_id = logged_in_client_a.get("/api/auth/me").get_json()["user"]["tenant_id"]
+    manager = User(tenant_id=tenant_id, email="reject-manager@acme.test", full_name="Reject Manager", role=ROLE_MANAGER, active=True)
+    manager.set_password("Passw0rd1")
+    db.session.add(manager)
+    db.session.commit()
+    login = client_b.post("/api/auth/login", json={"email": "reject-manager@acme.test", "password": "Passw0rd1"})
+    assert login.status_code == 200
+    rejected = client_b.post(f"/api/orders/{order_id}/reject", json={"reason": "price too high"})
+    assert rejected.status_code == 200, rejected.get_json()
     order = rejected.get_json()["order"]
     assert order["status"] == "cancelled"
     assert "price too high" in order["notes"]
@@ -142,20 +145,17 @@ def test_completed_order_cannot_be_edited(logged_in_client_a, client_b, make_ord
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
     logged_in_client_a.post(f"/api/orders/{order_id}/submit")
-
     from app.models.user import User, ROLE_MANAGER
     tenant_id = logged_in_client_a.get("/api/auth/me").get_json()["user"]["tenant_id"]
     manager = User(tenant_id=tenant_id, email="manager2@acme.test", full_name="Manager 2", role=ROLE_MANAGER, active=True)
     manager.set_password("Passw0rd1")
     db.session.add(manager)
     db.session.commit()
-
     login = client_b.post("/api/auth/login", json={"email": "manager2@acme.test", "password": "Passw0rd1"})
     assert login.status_code == 200
     assert client_b.post(f"/api/orders/{order_id}/approve").status_code == 200
     assert client_b.post(f"/api/orders/{order_id}/sent").status_code == 200
     assert client_b.post(f"/api/orders/{order_id}/complete").status_code == 200
-
     blocked = logged_in_client_a.put(f"/api/orders/{order_id}", json={"notes": "too late"})
     assert blocked.status_code == 409
 
@@ -187,7 +187,6 @@ def test_order_audit_events_created(logged_in_client_a, make_order):
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
     logged_in_client_a.post(f"/api/orders/{order_id}/submit")
-
     logs = logged_in_client_a.get("/api/audit").get_json()["logs"]
     actions = [log["action"] for log in logs]
     assert "order.created" in actions
