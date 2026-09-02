@@ -31,7 +31,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Repair stale test helpers
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feature/')
+        if: "${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feature/') }}"
         run: |
           python - <<'PY'
           from pathlib import Path
