@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   repair:
-    if: github.actor == 'mv89-heb'
+    if: "!contains(github.event.head_commit.message, 'align import and order helpers')"
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -188,5 +188,3 @@ def _full_pipeline(client, data, **kwargs):
           git commit -m "test: align import and order helpers with approval rules"
           git push origin HEAD:feature/price-intelligence-core
           gh workflow run ci.yml --ref feature/price-intelligence-core
-
-# retrigger repair after the previous failed CI attempt
