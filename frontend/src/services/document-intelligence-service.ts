@@ -1,12 +1,34 @@
 import { apiClient } from "./api-client";
 
+export interface ExtractedItem {
+  supplier_sku?: string;
+  barcode?: string;
+  description?: string;
+  quantity?: number;
+  unit?: string;
+  package_quantity?: number;
+  unit_price?: number;
+  discount?: number;
+  tax?: number;
+}
+
+export interface ExtractedData {
+  document_type?: string;
+  supplier?: { name?: string; customer_number?: string };
+  document_number?: string;
+  document_date?: string;
+  currency?: string;
+  totals?: { subtotal?: number; tax?: number; total?: number };
+  items?: ExtractedItem[];
+}
+
 export interface DocumentAnalysis {
   id: number;
   filename: string;
   mime_type: string;
   document_type: string | null;
   status: string;
-  extracted_data: any;
+  extracted_data: ExtractedData | null;
   error_message: string | null;
   provider: string | null;
   model: string | null;
