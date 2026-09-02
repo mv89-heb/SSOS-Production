@@ -43,7 +43,12 @@ def _approve_as_second_user(client):
 def _ready_to_commit(client, data, **kwargs):
     session_id = _upload(client, data, **kwargs).get_json()["session"]["id"]
     assert client.post(f"/api/imports/{session_id}/analyze").status_code == 200
-    client.get(f"/api/imports/{session_id}/mapping")
+    mapping = client.get(f"/api/imports/{session_id}/mapping").get_json()["mapping"]
+    for col in mapping["columns"]:
+        review = client.post(f"/api/imports/{session_id}/mapping", json={
+            "decisions": [{"column_index": col["column_index"], "target": col["final_target"]}]
+        })
+        assert review.status_code == 200, review.get_json()
     approver_client = _approve_as_second_user(client)
     approved = approver_client.post(f"/api/imports/{session_id}/mapping/approve")
     assert approved.status_code == 200, approved.get_json()
@@ -57,7 +62,10 @@ def test_commit_requires_validation(logged_in_client_a):
     data = _xlsx_bytes([["מוצר", "מחיר"], ["X", "1"]])
     session_id = _upload(logged_in_client_a, data, supplier_id=supplier_id).get_json()["session"]["id"]
     logged_in_client_a.post(f"/api/imports/{session_id}/analyze")
-    logged_in_client_a.get(f"/api/imports/{session_id}/mapping")
+    mapping = logged_in_client_a.get(f"/api/imports/{session_id}/mapping").get_json()["mapping"]
+    for col in mapping["columns"]:
+        review = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={"decisions": [{"column_index": col["column_index"], "target": col["final_target"]}]})
+        assert review.status_code == 200, review.get_json()
     approver_client = _approve_as_second_user(logged_in_client_a)
     assert approver_client.post(f"/api/imports/{session_id}/mapping/approve").status_code == 200
     resp = logged_in_client_a.post(f"/api/imports/{session_id}/commit")
