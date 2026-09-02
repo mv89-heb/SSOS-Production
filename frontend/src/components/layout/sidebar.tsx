@@ -13,7 +13,7 @@ const navigation = [
   { name: "ניהול ספקים", href: "/dashboard/suppliers", icon: Users },
   { name: "קטלוג מוצרים", href: "/dashboard/catalog", icon: Package },
   { name: "השוואת ספקים", href: "/dashboard/price-intelligence", icon: BarChart3 },
-  { name: "ניתוח מסמכים עם Gemini", href: "/dashboard/document-intelligence", icon: FileSearch },
+  { name: "ניתוח מסמכים עם Gemini", href: "/dashboard/gemini", icon: FileSearch },
   { name: "הזמנות רכש", href: "/dashboard/orders", icon: ShoppingCart },
   { name: "לוג ביקורת", href: "/dashboard/audit", icon: History },
   { name: "הגדרות מערכת", href: "/dashboard/settings", icon: Settings },
