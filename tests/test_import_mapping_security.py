@@ -20,7 +20,7 @@ def _mapping(client):
     resp = client.post("/api/imports/upload", data={"file": (workbook, "security.xlsx", XLSX_MIME)}, content_type="multipart/form-data")
     assert resp.status_code == 201, resp.get_json()
     session_id = resp.get_json()["session"]["id"]
-    client.post(f"/api/imports/{session_id}/analyze")
+    assert client.post(f"/api/imports/{session_id}/analyze").status_code == 200
     mapping = client.get(f"/api/imports/{session_id}/mapping").get_json()["mapping"]
     return session_id, mapping
 
@@ -48,6 +48,9 @@ def test_mapping_rejects_non_array_decisions(logged_in_client_a):
 
 def test_approved_mapping_cannot_be_edited(logged_in_client_a):
     session_id, mapping = _mapping(logged_in_client_a)
+    for column in mapping["columns"]:
+        review = logged_in_client_a.post(f"/api/imports/{session_id}/mapping", json={"decisions": [{"column_index": column["column_index"], "target": column["final_target"]}]})
+        assert review.status_code == 200, review.get_json()
     approver = _second_user(logged_in_client_a)
     approved = approver.post(f"/api/imports/{session_id}/mapping/approve")
     assert approved.status_code == 200, approved.get_json()
