@@ -126,14 +126,7 @@ class ProductMatchingService:
             if score >= 0.45:
                 scored.append((score, method, product))
         scored.sort(key=lambda row: (-row[0], row[2].id))
-        suggestions = [{
-            "product_id": product.id,
-            "product_name": product.name,
-            "supplier_id": product.supplier_id,
-            "supplier_name": product.supplier.name if product.supplier else None,
-            "confidence": round(score, 4),
-            "method": method,
-        } for score, method, product in scored[: max(1, limit)]]
+        suggestions = [{"product_id": product.id, "product_name": product.name, "supplier_id": product.supplier_id, "supplier_name": product.supplier.name if product.supplier else None, "confidence": round(score, 4), "method": method} for score, method, product in scored[: max(1, limit)]]
         best = suggestions[0] if suggestions else None
         if best is None:
             decision = "NO_MATCH"
@@ -143,6 +136,8 @@ class ProductMatchingService:
             decision = "REVIEW"
         else:
             decision = "LOW_CONFIDENCE"
+        if best is not None:
+            best["decision"] = decision
         return {"decision": decision, "best_match": best, "suggestions": suggestions}
 
     def _build_supplier_sections(self, data: dict) -> list[dict]:
@@ -175,7 +170,6 @@ class ProductMatchingService:
         enriched_sections = []
         flat_items = []
         matched_suppliers = []
-
         for section_index, section in enumerate(sections):
             supplier_data = section.get("supplier") or {}
             supplier_match = self.match_supplier(supplier_data)
@@ -194,7 +188,6 @@ class ProductMatchingService:
                 enriched["page_numbers"] = section["page_numbers"]
             enriched_sections.append(enriched)
             matched_suppliers.append(supplier_match)
-
         data["supplier_sections"] = enriched_sections
         data["items"] = flat_items
         if len(enriched_sections) == 1:
