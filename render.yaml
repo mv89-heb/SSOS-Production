@@ -8,10 +8,10 @@ services:
     plan: starter
     pythonVersion: "3.11.9"
     healthCheckPath: /health
-    # Run migrations during build as the authoritative fallback for Render
-    # services whose Dashboard does not expose Pre-Deploy Command. Runtime
-    # starts only after the database schema is upgraded successfully.
-    buildCommand: "pip install -r requirements.txt && python -m flask --app wsgi:app db upgrade"
+    # Database migrations belong in Render's pre-deploy phase so they run
+    # against the target database immediately before the new version starts.
+    # If the migration fails, Render keeps the last successful deployment live.
+    buildCommand: "pip install -r requirements.txt"
     preDeployCommand: "python -m flask --app wsgi:app db upgrade"
     startCommand: "gunicorn -w 4 -b 0.0.0.0:$PORT wsgi:app --timeout 120"
     envVars:
