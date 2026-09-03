@@ -26,7 +26,7 @@ def _safe_provider_error(exc: Exception) -> str:
 class GeminiProvider:
     name = "gemini"
 
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str, model: str = "gemini-3.6-flash"):
         if not api_key:
             raise ValueError("GEMINI_API_KEY is required when Gemini is enabled")
         from google import genai
@@ -38,7 +38,7 @@ class GeminiProvider:
     def from_config(cls, config: Any) -> "GeminiProvider":
         enabled = bool(config.get("GEMINI_ENABLED", False))
         api_key = (config.get("GEMINI_API_KEY") or "").strip()
-        model = (config.get("GEMINI_MODEL") or "gemini-2.5-flash").strip()
+        model = (config.get("GEMINI_MODEL") or "gemini-3.6-flash").strip()
         if not enabled or not api_key:
             raise ValueError("Gemini is not configured")
         return cls(api_key=api_key, model=model)
