@@ -15,6 +15,13 @@ def _csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _required_env(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
@@ -55,9 +62,9 @@ class BaseConfig:
 
     # Optional AI integration. The application remains fully functional when
     # Gemini is disabled or its API key is absent.
-    AI_ENABLED = os.environ.get("AI_ENABLED", "false").strip().lower() == "true"
+    AI_ENABLED = _env_bool("AI_ENABLED", False)
     AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini").strip().lower()
-    GEMINI_ENABLED = os.environ.get("GEMINI_ENABLED", "false").strip().lower() == "true"
+    GEMINI_ENABLED = _env_bool("GEMINI_ENABLED", False)
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
     GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
     GEMINI_TIMEOUT = float(os.environ.get("GEMINI_TIMEOUT", "30"))
@@ -76,6 +83,7 @@ class ProductionConfig(BaseConfig):
         secret_key = _required_env("SECRET_KEY")
         database_url = _normalize_db_url(_required_env("DATABASE_URL"))
         cors_origins = _csv_env("CORS_ORIGINS")
+        gemini_api_key = os.environ.get("GEMINI_API_KEY", "").strip()
 
         if not cors_origins:
             raise RuntimeError(
@@ -95,6 +103,17 @@ class ProductionConfig(BaseConfig):
         }
         app.config["SESSION_COOKIE_SECURE"] = True
         app.config["SESSION_COOKIE_SAMESITE"] = "None"
+
+        # Re-read AI settings when the Flask app is created. This makes the
+        # running Render environment the source of truth instead of relying
+        # only on BaseConfig class attributes. If a Gemini key exists but the
+        # optional enable flags were omitted, Gemini is enabled automatically.
+        app.config["GEMINI_API_KEY"] = gemini_api_key
+        app.config["AI_PROVIDER"] = os.environ.get("AI_PROVIDER", "gemini").strip().lower()
+        app.config["AI_ENABLED"] = _env_bool("AI_ENABLED", bool(gemini_api_key))
+        app.config["GEMINI_ENABLED"] = _env_bool("GEMINI_ENABLED", bool(gemini_api_key))
+        app.config["GEMINI_MODEL"] = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
+        app.config["GEMINI_TIMEOUT"] = float(os.environ.get("GEMINI_TIMEOUT", "30"))
 
 
 class DevelopmentConfig(BaseConfig):
