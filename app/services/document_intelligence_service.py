@@ -35,8 +35,8 @@ SYSTEM_INSTRUCTION = """You extract structured procurement data from supplier do
 
 
 class DocumentIntelligenceService:
-    ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
-    ALLOWED_MIMES = {"application/pdf", "image/png", "image/jpeg", "image/webp"}
+    ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".svg"}
+    ALLOWED_MIMES = {"application/pdf", "image/png", "image/jpeg", "image/webp", "image/svg+xml"}
 
     def __init__(self, tenant_id: int, user_id: int):
         self.tenant_id = tenant_id
@@ -54,8 +54,7 @@ class DocumentIntelligenceService:
 
     def _get(self, analysis_id: int):
         row = DocumentAnalysis.query.filter_by(tenant_id=self.tenant_id, id=analysis_id).first()
-        if row is None:
-            raise NotFound("Document analysis not found")
+        if row is None: raise NotFound("Document analysis not found")
         return row
 
     def analyze(self, analysis_id: int):
@@ -81,10 +80,8 @@ class DocumentIntelligenceService:
         PermissionService.require_role_at_least("manager")
         row = self._get(analysis_id)
         if row.status == "APPLIED": return row
-        if row.status != "ANALYZED" or not isinstance(row.extracted_data, dict):
-            raise BadRequest("Document must be successfully analyzed before apply")
-        if not isinstance(lines, list) or not lines:
-            raise BadRequest("lines must contain at least one reviewed mapping")
+        if row.status != "ANALYZED" or not isinstance(row.extracted_data, dict): raise BadRequest("Document must be successfully analyzed before apply")
+        if not isinstance(lines, list) or not lines: raise BadRequest("lines must contain at least one reviewed mapping")
         intelligence = PriceIntelligenceService(self.tenant_id)
         try:
             for item in lines:
@@ -100,28 +97,22 @@ class DocumentIntelligenceService:
                 except (TypeError, ValueError): raise BadRequest("Reviewed price must be numeric")
                 if price_value <= 0: raise BadRequest("Reviewed price must be greater than zero")
                 currency = (item.get("currency") or row.extracted_data.get("currency") or "ILS").upper()
-                intelligence.record_observation(product_id=product_id, supplier_id=supplier_id, observed_price=price_value,
-                    currency=currency, unit=item.get("unit"), package_quantity=item.get("package_quantity"),
-                    source_type=row.document_type or "OTHER", source_document_id=row.id,
-                    match_method=item.get("match_method") or "MANUAL_REVIEW", match_confidence=item.get("match_confidence"))
+                intelligence.record_observation(product_id=product_id, supplier_id=supplier_id, observed_price=price_value, currency=currency, unit=item.get("unit"), package_quantity=item.get("package_quantity"), source_type=row.document_type or "OTHER", source_document_id=row.id, match_method=item.get("match_method") or "MANUAL_REVIEW", match_confidence=item.get("match_confidence"))
                 if not bool(item.get("update_price", False)): continue
-                intelligence.accept_price_change(product_id=product_id, supplier_id=supplier_id, new_price=price_value,
-                    currency=currency, unit=item.get("unit"), source_type=row.document_type or "OTHER", source_document_id=row.id)
+                intelligence.accept_price_change(product_id=product_id, supplier_id=supplier_id, new_price=price_value, currency=currency, unit=item.get("unit"), source_type=row.document_type or "OTHER", source_document_id=row.id)
                 if supplier_id == product.supplier_id:
                     product.current_price = price_value; product.currency = currency
                     if item.get("unit"): product.unit = item["unit"]
                 else:
                     offer = SupplierProductOffer.query.filter_by(tenant_id=self.tenant_id, product_id=product_id, supplier_id=supplier_id).first()
                     if offer is None:
-                        offer = SupplierProductOffer(tenant_id=self.tenant_id, product_id=product_id, supplier_id=supplier_id,
-                            price=price_value, currency=currency, unit=item.get("unit"), active=True); db.session.add(offer)
+                        offer = SupplierProductOffer(tenant_id=self.tenant_id, product_id=product_id, supplier_id=supplier_id, price=price_value, currency=currency, unit=item.get("unit"), active=True); db.session.add(offer)
                     else:
                         offer.price = price_value; offer.currency = currency
                         if item.get("unit"): offer.unit = item["unit"]
                         offer.active = True
                 db.session.flush()
-            row.status = "APPLIED"; row.applied_at = datetime.now(timezone.utc); row.applied_by = self.user_id
-            db.session.commit(); return row
+            row.status = "APPLIED"; row.applied_at = datetime.now(timezone.utc); row.applied_by = self.user_id; db.session.commit(); return row
         except HTTPException:
             db.session.rollback(); raise
         except Exception:
