@@ -8,7 +8,7 @@ predictable unavailable result when AI is disabled or not configured.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 
 @dataclass(frozen=True)
@@ -21,14 +21,20 @@ class AIResult:
     data: Any = None
 
 
+ProgressCallback = Callable[[dict[str, Any]], None]
+
+
 class AIProvider(Protocol):
     name: str
 
     def generate_text(self, prompt: str, *, system_instruction: str | None = None) -> AIResult:
         ...
 
-    def generate_structured_from_file(self, file_path: str, schema: dict, *,
-                                      system_instruction: str | None = None) -> AIResult:
+    def generate_structured_from_file(
+        self, file_path: str, schema: dict, *,
+        system_instruction: str | None = None,
+        progress_callback: ProgressCallback | None = None,
+    ) -> AIResult:
         ...
 
 
@@ -38,8 +44,11 @@ class UnavailableAIProvider:
     def generate_text(self, prompt: str, *, system_instruction: str | None = None) -> AIResult:
         return AIResult(success=False, error="ai_unavailable", provider=self.name)
 
-    def generate_structured_from_file(self, file_path: str, schema: dict, *,
-                                      system_instruction: str | None = None) -> AIResult:
+    def generate_structured_from_file(
+        self, file_path: str, schema: dict, *,
+        system_instruction: str | None = None,
+        progress_callback: ProgressCallback | None = None,
+    ) -> AIResult:
         return AIResult(success=False, error="ai_unavailable", provider=self.name)
 
 
@@ -73,10 +82,14 @@ class AIService:
             return AIResult(success=False, error="empty_prompt", provider=self.provider.name)
         return self.provider.generate_text(prompt.strip(), system_instruction=system_instruction)
 
-    def generate_structured_from_file(self, file_path: str, schema: dict, *,
-                                      system_instruction: str | None = None) -> AIResult:
+    def generate_structured_from_file(
+        self, file_path: str, schema: dict, *,
+        system_instruction: str | None = None,
+        progress_callback: ProgressCallback | None = None,
+    ) -> AIResult:
         if not file_path or not schema:
             return AIResult(success=False, error="invalid_ai_request", provider=self.provider.name)
         return self.provider.generate_structured_from_file(
             file_path, schema, system_instruction=system_instruction,
+            progress_callback=progress_callback,
         )
