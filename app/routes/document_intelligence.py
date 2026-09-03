@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 
@@ -9,6 +10,7 @@ from app.services.document_intelligence_service import DocumentIntelligenceServi
 
 
 document_intelligence_bp = Blueprint("document_intelligence", __name__, url_prefix="/api/document-intelligence")
+logger = logging.getLogger(__name__)
 
 
 def _handle(exc):
@@ -23,25 +25,41 @@ def upload_document():
             raise BadRequest("file is required")
         upload = request.files["file"]
         ext = os.path.splitext(upload.filename)[1].lower()
-        if ext not in DocumentIntelligenceService.ALLOWED_EXTENSIONS or upload.mimetype not in DocumentIntelligenceService.ALLOWED_MIMES:
-            raise BadRequest("Only PDF and PNG/JPEG/WEBP documents are supported")
+        mime_type = (upload.mimetype or "").lower()
+
+        if ext not in DocumentIntelligenceService.ALLOWED_EXTENSIONS:
+            raise BadRequest("Unsupported document extension")
+        # Some browsers/proxies report SVG as application/octet-stream. SVG is
+        # validated by extension and is always stored with image/svg+xml.
+        if ext == ".svg":
+            if mime_type not in {"image/svg+xml", "application/octet-stream", "text/xml", "application/xml", ""}:
+                raise BadRequest("Invalid SVG MIME type")
+            mime_type = "image/svg+xml"
+        elif mime_type not in DocumentIntelligenceService.ALLOWED_MIMES:
+            raise BadRequest("Unsupported document MIME type")
+
         upload.stream.seek(0, os.SEEK_END)
         size = upload.stream.tell()
         upload.stream.seek(0)
+        max_size = current_app.config.get("MAX_CONTENT_LENGTH")
         if size <= 0:
             raise BadRequest("Uploaded document is empty")
-        if size > current_app.config["MAX_CONTENT_LENGTH"]:
+        if max_size is not None and size > max_size:
             raise BadRequest("Uploaded document exceeds the maximum allowed size")
+
         directory = os.path.join(current_app.config["UPLOAD_FOLDER"], "documents")
         os.makedirs(directory, exist_ok=True)
         storage_path = os.path.join(directory, f"{uuid.uuid4().hex}{ext}")
         upload.save(storage_path)
         row = DocumentIntelligenceService(current_user.tenant_id, current_user.id).create_analysis(
-            upload.filename, storage_path, upload.mimetype
+            upload.filename, storage_path, mime_type
         )
         return jsonify({"success": True, "analysis": row.to_dict()}), 201
     except HTTPException as exc:
         return _handle(exc)
+    except (OSError, ValueError, TypeError) as exc:
+        logger.exception("Document upload failed")
+        return jsonify({"success": False, "error": "upload_failed", "message": str(exc)}), 500
 
 
 @document_intelligence_bp.route("/<int:analysis_id>/analyze", methods=["POST"])
