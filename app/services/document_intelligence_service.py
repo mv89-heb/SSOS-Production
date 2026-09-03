@@ -48,75 +48,192 @@ class DocumentIntelligenceService:
             raise BadRequest("Only PDF and supported image documents can be analyzed")
         if not os.path.isfile(storage_path):
             raise BadRequest("Uploaded document is unavailable")
-        row = DocumentAnalysis(tenant_id=self.tenant_id, uploaded_by=self.user_id, filename=filename,
-                               storage_path=storage_path, mime_type=mime_type, status="UPLOADED")
-        db.session.add(row); db.session.commit(); return row
+        row = DocumentAnalysis(
+            tenant_id=self.tenant_id,
+            uploaded_by=self.user_id,
+            filename=filename,
+            storage_path=storage_path,
+            mime_type=mime_type,
+            status="UPLOADED",
+        )
+        db.session.add(row)
+        db.session.commit()
+        return row
+
+    @staticmethod
+    def _delete_temp_file(path):
+        """Best-effort deletion of a private temporary upload."""
+        if not path:
+            return
+        try:
+            if os.path.isfile(path):
+                os.remove(path)
+        except OSError:
+            current_app.logger.warning("Could not delete temporary document %s", path, exc_info=True)
+
+    def _finalize_temp_file(self, row):
+        """Delete the source file and remove its path from persistent state."""
+        path = row.storage_path
+        self._delete_temp_file(path)
+        row.storage_path = None
 
     def _get(self, analysis_id: int):
         row = DocumentAnalysis.query.filter_by(tenant_id=self.tenant_id, id=analysis_id).first()
-        if row is None: raise NotFound("Document analysis not found")
+        if row is None:
+            raise NotFound("Document analysis not found")
         return row
 
     def analyze(self, analysis_id: int):
         PermissionService.require_role_at_least("manager")
         row = self._get(analysis_id)
-        if row.status == "APPLIED": return row
-        row.status = "PROCESSING"; row.error_message = None; db.session.commit()
-        service = AIService.from_config(current_app.config)
-        if not service.is_available():
-            row.status = "AI_UNAVAILABLE"; row.error_message = "Gemini is disabled or not configured"; db.session.commit(); return row
-        result = service.generate_structured_from_file(row.storage_path, DOCUMENT_SCHEMA, system_instruction=SYSTEM_INSTRUCTION)
-        row.analyzed_at = datetime.now(timezone.utc); row.provider = result.provider; row.model = result.model
-        if not result.success:
-            row.status = "FAILED"; row.error_message = result.error or "AI analysis failed"
-        elif not isinstance(result.data, dict) or not result.data:
-            row.status = "FAILED"; row.error_message = "Structured extraction was empty"
-        else:
-            row.status = "ANALYZED"; row.document_type = result.data.get("document_type"); row.extracted_data = result.data
-        db.session.commit(); return row
+        if row.status in {"ANALYZED", "APPLIED"}:
+            return row
+        if not row.storage_path or not os.path.isfile(row.storage_path):
+            row.status = "FAILED"
+            row.error_message = "Temporary document is no longer available. Please upload it again."
+            self._finalize_temp_file(row)
+            db.session.commit()
+            return row
+
+        row.status = "PROCESSING"
+        row.error_message = None
+        db.session.commit()
+        try:
+            service = AIService.from_config(current_app.config)
+            if not service.is_available():
+                row.status = "AI_UNAVAILABLE"
+                row.error_message = "Gemini is disabled or not configured"
+                self._finalize_temp_file(row)
+                db.session.commit()
+                return row
+
+            result = service.generate_structured_from_file(
+                row.storage_path,
+                DOCUMENT_SCHEMA,
+                system_instruction=SYSTEM_INSTRUCTION,
+            )
+            row.analyzed_at = datetime.now(timezone.utc)
+            row.provider = result.provider
+            row.model = result.model
+            if not result.success:
+                row.status = "FAILED"
+                row.error_message = result.error or "AI analysis failed"
+            elif not isinstance(result.data, dict) or not result.data:
+                row.status = "FAILED"
+                row.error_message = "Structured extraction was empty"
+            else:
+                row.status = "ANALYZED"
+                row.document_type = result.data.get("document_type")
+                row.extracted_data = result.data
+
+            self._finalize_temp_file(row)
+            db.session.commit()
+            return row
+        except Exception as exc:
+            db.session.rollback()
+            row = self._get(analysis_id)
+            row.status = "FAILED"
+            row.error_message = str(exc)[:2000]
+            self._finalize_temp_file(row)
+            db.session.commit()
+            raise
 
     def apply(self, analysis_id: int, lines: list[dict]):
         """Apply only explicitly reviewed mappings; Gemini never mutates catalog state."""
         PermissionService.require_role_at_least("manager")
         row = self._get(analysis_id)
-        if row.status == "APPLIED": return row
-        if row.status != "ANALYZED" or not isinstance(row.extracted_data, dict): raise BadRequest("Document must be successfully analyzed before apply")
-        if not isinstance(lines, list) or not lines: raise BadRequest("lines must contain at least one reviewed mapping")
+        if row.status == "APPLIED":
+            return row
+        if row.status != "ANALYZED" or not isinstance(row.extracted_data, dict):
+            raise BadRequest("Document must be successfully analyzed before apply")
+        if not isinstance(lines, list) or not lines:
+            raise BadRequest("lines must contain at least one reviewed mapping")
         intelligence = PriceIntelligenceService(self.tenant_id)
         try:
             for item in lines:
-                if not isinstance(item, dict): raise BadRequest("Each reviewed line must be an object")
+                if not isinstance(item, dict):
+                    raise BadRequest("Each reviewed line must be an object")
                 product_id, supplier_id, price = item.get("product_id"), item.get("supplier_id"), item.get("price")
-                if not isinstance(product_id, int) or isinstance(product_id, bool) or product_id <= 0: raise BadRequest("Each reviewed line requires a valid product_id")
-                if not isinstance(supplier_id, int) or isinstance(supplier_id, bool) or supplier_id <= 0: raise BadRequest("Each reviewed line requires a valid supplier_id")
+                if not isinstance(product_id, int) or isinstance(product_id, bool) or product_id <= 0:
+                    raise BadRequest("Each reviewed line requires a valid product_id")
+                if not isinstance(supplier_id, int) or isinstance(supplier_id, bool) or supplier_id <= 0:
+                    raise BadRequest("Each reviewed line requires a valid supplier_id")
                 supplier = Supplier.query.filter_by(id=supplier_id, tenant_id=self.tenant_id, active=True).first()
                 product = Product.query.filter_by(id=product_id, tenant_id=self.tenant_id, active=True).first()
-                if supplier is None: raise BadRequest("Supplier does not belong to this tenant or is inactive")
-                if product is None: raise BadRequest("Product does not belong to this tenant or is inactive")
-                try: price_value = float(price)
-                except (TypeError, ValueError): raise BadRequest("Reviewed price must be numeric")
-                if price_value <= 0: raise BadRequest("Reviewed price must be greater than zero")
+                if supplier is None:
+                    raise BadRequest("Supplier does not belong to this tenant or is inactive")
+                if product is None:
+                    raise BadRequest("Product does not belong to this tenant or is inactive")
+                try:
+                    price_value = float(price)
+                except (TypeError, ValueError):
+                    raise BadRequest("Reviewed price must be numeric")
+                if price_value <= 0:
+                    raise BadRequest("Reviewed price must be greater than zero")
                 currency = (item.get("currency") or row.extracted_data.get("currency") or "ILS").upper()
-                intelligence.record_observation(product_id=product_id, supplier_id=supplier_id, observed_price=price_value, currency=currency, unit=item.get("unit"), package_quantity=item.get("package_quantity"), source_type=row.document_type or "OTHER", source_document_id=row.id, match_method=item.get("match_method") or "MANUAL_REVIEW", match_confidence=item.get("match_confidence"))
-                if not bool(item.get("update_price", False)): continue
-                intelligence.accept_price_change(product_id=product_id, supplier_id=supplier_id, new_price=price_value, currency=currency, unit=item.get("unit"), source_type=row.document_type or "OTHER", source_document_id=row.id)
+                intelligence.record_observation(
+                    product_id=product_id,
+                    supplier_id=supplier_id,
+                    observed_price=price_value,
+                    currency=currency,
+                    unit=item.get("unit"),
+                    package_quantity=item.get("package_quantity"),
+                    source_type=row.document_type or "OTHER",
+                    source_document_id=row.id,
+                    match_method=item.get("match_method") or "MANUAL_REVIEW",
+                    match_confidence=item.get("match_confidence"),
+                )
+                if not bool(item.get("update_price", False)):
+                    continue
+                intelligence.accept_price_change(
+                    product_id=product_id,
+                    supplier_id=supplier_id,
+                    new_price=price_value,
+                    currency=currency,
+                    unit=item.get("unit"),
+                    source_type=row.document_type or "OTHER",
+                    source_document_id=row.id,
+                )
                 if supplier_id == product.supplier_id:
-                    product.current_price = price_value; product.currency = currency
-                    if item.get("unit"): product.unit = item["unit"]
+                    product.current_price = price_value
+                    product.currency = currency
+                    if item.get("unit"):
+                        product.unit = item["unit"]
                 else:
-                    offer = SupplierProductOffer.query.filter_by(tenant_id=self.tenant_id, product_id=product_id, supplier_id=supplier_id).first()
+                    offer = SupplierProductOffer.query.filter_by(
+                        tenant_id=self.tenant_id,
+                        product_id=product_id,
+                        supplier_id=supplier_id,
+                    ).first()
                     if offer is None:
-                        offer = SupplierProductOffer(tenant_id=self.tenant_id, product_id=product_id, supplier_id=supplier_id, price=price_value, currency=currency, unit=item.get("unit"), active=True); db.session.add(offer)
+                        offer = SupplierProductOffer(
+                            tenant_id=self.tenant_id,
+                            product_id=product_id,
+                            supplier_id=supplier_id,
+                            price=price_value,
+                            currency=currency,
+                            unit=item.get("unit"),
+                            active=True,
+                        )
+                        db.session.add(offer)
                     else:
-                        offer.price = price_value; offer.currency = currency
-                        if item.get("unit"): offer.unit = item["unit"]
+                        offer.price = price_value
+                        offer.currency = currency
+                        if item.get("unit"):
+                            offer.unit = item["unit"]
                         offer.active = True
                 db.session.flush()
-            row.status = "APPLIED"; row.applied_at = datetime.now(timezone.utc); row.applied_by = self.user_id; db.session.commit(); return row
+            row.status = "APPLIED"
+            row.applied_at = datetime.now(timezone.utc)
+            row.applied_by = self.user_id
+            db.session.commit()
+            return row
         except HTTPException:
-            db.session.rollback(); raise
+            db.session.rollback()
+            raise
         except Exception:
-            db.session.rollback(); raise
+            db.session.rollback()
+            raise
 
     def get(self, analysis_id: int):
         PermissionService.require_role_at_least("manager")
