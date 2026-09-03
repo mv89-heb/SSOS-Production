@@ -1,3 +1,4 @@
+import logging
 import os
 
 from flask import Flask, jsonify
@@ -6,6 +7,8 @@ from werkzeug.exceptions import HTTPException
 
 from app.config import get_config
 from app.extensions import db, migrate, login_manager, csrf, limiter, swagger, cors
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(config_name=None):
@@ -24,10 +27,31 @@ def create_app(config_name=None):
 
     _ensure_directories(app)
     _init_extensions(app)
+    _ensure_document_analysis_table(app, config_class)
     _install_import_analysis_patches()
     _register_blueprints(app)
     _register_error_handlers(app)
     return app
+
+
+def _ensure_document_analysis_table(app, config_class):
+    """Create the document-analysis table if production DB migrations missed it.
+
+    Alembic remains the canonical schema manager. This narrowly scoped startup
+    guard is intentionally idempotent and only creates the table when it is
+    absent, preventing an existing production database from failing uploads
+    because a deployment did not execute the corresponding migration.
+    """
+    if config_class.__name__ != "ProductionConfig":
+        return
+
+    from app.models.document_analysis import DocumentAnalysis
+
+    try:
+        DocumentAnalysis.__table__.create(bind=db.engine, checkfirst=True)
+    except Exception:
+        logger.exception("Could not ensure document_analyses table exists")
+        raise
 
 
 def _install_import_analysis_patches():
