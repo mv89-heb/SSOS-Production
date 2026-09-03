@@ -26,9 +26,20 @@ def _internal_error(exc, operation):
     }), 500
 
 
+def _delete_file(path):
+    if not path:
+        return
+    try:
+        if os.path.isfile(path):
+            os.remove(path)
+    except OSError:
+        logger.warning("Could not delete temporary document %s", path, exc_info=True)
+
+
 @document_intelligence_bp.route("/upload", methods=["POST"])
 @login_required
 def upload_document():
+    storage_path = None
     try:
         if "file" not in request.files or not request.files["file"].filename:
             raise BadRequest("file is required")
@@ -65,8 +76,10 @@ def upload_document():
         )
         return jsonify({"success": True, "analysis": row.to_dict()}), 201
     except HTTPException as exc:
+        _delete_file(storage_path)
         return _handle(exc)
     except Exception as exc:
+        _delete_file(storage_path)
         return _internal_error(exc, "upload")
 
 
@@ -105,7 +118,7 @@ def apply_document(analysis_id):
 def get_document_analysis(analysis_id):
     try:
         row = DocumentIntelligenceService(current_user.tenant_id, current_user.id).get(analysis_id)
-        return jsonify({"success": True, "analysis": row.to_dict()})
+        return jsonify({"success": True, "analysis": row.to_dict()}), 200
     except HTTPException as exc:
         return _handle(exc)
     except Exception as exc:
