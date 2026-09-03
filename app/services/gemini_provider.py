@@ -3,10 +3,24 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
 from typing import Any
 
 from app.services.ai_service import AIResult
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_provider_error(exc: Exception) -> str:
+    """Return useful provider diagnostics without exposing credentials."""
+    detail = str(exc).strip()
+    if not detail:
+        return "ai_provider_error"
+    detail = re.sub(r"(?i)(api[_ -]?key|key)=?[^\s,;]+", r"\1=[REDACTED]", detail)
+    detail = detail.replace("GEMINI_API_KEY", "Gemini API key")
+    return f"ai_provider_error: {detail[:1500]}"
 
 
 class GeminiProvider:
@@ -37,8 +51,9 @@ class GeminiProvider:
             if not text:
                 return AIResult(success=False, error="empty_ai_response", provider=self.name, model=self.model)
             return AIResult(success=True, text=text, provider=self.name, model=self.model)
-        except Exception:
-            return AIResult(success=False, error="ai_provider_error", provider=self.name, model=self.model)
+        except Exception as exc:
+            logger.exception("Gemini text generation failed")
+            return AIResult(success=False, error=_safe_provider_error(exc), provider=self.name, model=self.model)
 
     def generate_structured_from_file(
         self, file_path: str, schema: dict, *, system_instruction: str | None = None
@@ -58,12 +73,7 @@ class GeminiProvider:
                 with open(file_path, "r", encoding="utf-8", errors="replace") as handle:
                     svg_text = handle.read()
                 if not svg_text.strip():
-                    return AIResult(
-                        success=False,
-                        error="empty_svg",
-                        provider=self.name,
-                        model=self.model,
-                    )
+                    return AIResult(success=False, error="empty_svg", provider=self.name, model=self.model)
                 prompt = (
                     "Analyze the following SVG/XML procurement document. "
                     "Extract only facts visible in its text/XML content. "
@@ -88,6 +98,8 @@ class GeminiProvider:
             data = json.loads(text)
             return AIResult(success=True, text=text, data=data, provider=self.name, model=self.model)
         except json.JSONDecodeError:
+            logger.exception("Gemini returned invalid structured JSON")
             return AIResult(success=False, error="invalid_structured_response", provider=self.name, model=self.model)
-        except Exception:
-            return AIResult(success=False, error="ai_provider_error", provider=self.name, model=self.model)
+        except Exception as exc:
+            logger.exception("Gemini structured document analysis failed")
+            return AIResult(success=False, error=_safe_provider_error(exc), provider=self.name, model=self.model)
