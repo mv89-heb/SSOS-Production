@@ -7,11 +7,12 @@ import json
 import logging
 import os
 import re
-from typing import Any
+from typing import Any, Callable
 
 from app.services.ai_service import AIResult
 
 logger = logging.getLogger(__name__)
+ProgressCallback = Callable[[dict[str, Any]], None]
 
 
 def _safe_provider_error(exc: Exception) -> str:
@@ -31,7 +32,6 @@ class GeminiProvider:
         if not api_key:
             raise ValueError("GEMINI_API_KEY is required when Gemini is enabled")
         from google import genai
-
         self.model = model
         self._client = genai.Client(api_key=api_key)
 
@@ -58,15 +58,8 @@ class GeminiProvider:
 
     @staticmethod
     def _merge_page_results(page_results: list[dict], page_count: int) -> dict:
-        """Merge independent page extractions while preserving source page numbers."""
-        merged: dict[str, Any] = {
-            "items": [],
-            "page_count": page_count,
-            "pages_processed": 0,
-            "extraction_mode": "pdf_page_by_page",
-        }
+        merged: dict[str, Any] = {"items": [], "page_count": page_count, "pages_processed": 0, "extraction_mode": "pdf_page_by_page"}
         metadata_keys = ("document_type", "supplier", "document_number", "document_date", "currency")
-
         for page_number, result in enumerate(page_results, start=1):
             if not isinstance(result, dict):
                 continue
@@ -82,34 +75,18 @@ class GeminiProvider:
             totals = result.get("totals")
             if isinstance(totals, dict) and any(value not in (None, "") for value in totals.values()):
                 existing_totals = merged.get("totals") if isinstance(merged.get("totals"), dict) else {}
-                merged["totals"] = {
-                    **existing_totals,
-                    **{key: value for key, value in totals.items() if value not in (None, "")},
-                }
-
+                merged["totals"] = {**existing_totals, **{key: value for key, value in totals.items() if value not in (None, "")}}
             items = result.get("items")
-            if not isinstance(items, list):
-                continue
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                normalized = dict(item)
-                normalized["page_number"] = page_number
-                merged["items"].append(normalized)
-
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict):
+                        normalized = dict(item)
+                        normalized["page_number"] = page_number
+                        merged["items"].append(normalized)
         return merged
 
-    def _generate_structured_page(
-        self,
-        page_bytes: bytes,
-        page_number: int,
-        page_count: int,
-        schema: dict,
-        system_instruction: str | None,
-    ) -> dict:
-        """Analyze exactly one PDF page and return its structured extraction."""
+    def _generate_structured_page(self, page_bytes: bytes, page_number: int, page_count: int, schema: dict, system_instruction: str | None) -> dict:
         from google.genai import types
-
         page_instruction = (
             f"This is page {page_number} of {page_count} of the same procurement document. "
             "Analyze this page completely. Extract EVERY product/line item visible on this page, "
@@ -117,14 +94,8 @@ class GeminiProvider:
             "Do not stop after the first visible row or table section. "
             "Return only facts visible on this page. If there are no line items, return an empty items array."
         )
-        instruction = page_instruction
-        if system_instruction:
-            instruction = f"{system_instruction}\n\n{page_instruction}"
-        config = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=schema,
-            system_instruction=instruction,
-        )
+        instruction = f"{system_instruction}\n\n{page_instruction}" if system_instruction else page_instruction
+        config = types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema, system_instruction=instruction)
         response = self._client.models.generate_content(
             model=self.model,
             contents=[
@@ -139,48 +110,41 @@ class GeminiProvider:
         return json.loads(text)
 
     def generate_structured_from_file(
-        self, file_path: str, schema: dict, *, system_instruction: str | None = None
+        self, file_path: str, schema: dict, *, system_instruction: str | None = None,
+        progress_callback: ProgressCallback | None = None,
     ) -> AIResult:
-        """Extract structured procurement data, processing every PDF page independently."""
+        """Extract structured procurement data and report live progress for PDF pages."""
         try:
             from google.genai import types
-
-            config_kwargs = {
-                "response_mime_type": "application/json",
-                "response_schema": schema,
-            }
+            config_kwargs = {"response_mime_type": "application/json", "response_schema": schema}
             if system_instruction:
                 config_kwargs["system_instruction"] = system_instruction
 
             if os.path.splitext(file_path)[1].lower() == ".svg":
+                if progress_callback:
+                    progress_callback({"phase": "processing", "percent": 10, "pages_total": None, "pages_processed": None, "eta_seconds": None})
                 with open(file_path, "r", encoding="utf-8", errors="replace") as handle:
                     svg_text = handle.read()
                 if not svg_text.strip():
                     return AIResult(success=False, error="empty_svg", provider=self.name, model=self.model)
-                prompt = (
-                    "Analyze the following SVG/XML procurement document. "
-                    "Extract only facts visible in its text/XML content. "
-                    "Do not invent missing values.\n\nSVG/XML:\n" + svg_text
-                )
-                response = self._client.models.generate_content(
-                    model=self.model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(**config_kwargs),
-                )
+                prompt = "Analyze the following SVG/XML procurement document. Extract only facts visible in its text/XML content. Do not invent missing values.\n\nSVG/XML:\n" + svg_text
+                response = self._client.models.generate_content(model=self.model, contents=prompt, config=types.GenerateContentConfig(**config_kwargs))
                 text = (response.text or "").strip()
                 if not text:
                     return AIResult(success=False, error="empty_ai_response", provider=self.name, model=self.model)
                 data = json.loads(text)
+                if progress_callback:
+                    progress_callback({"phase": "completed", "percent": 100, "pages_total": None, "pages_processed": None, "eta_seconds": 0})
                 return AIResult(success=True, text=text, data=data, provider=self.name, model=self.model)
 
             if os.path.splitext(file_path)[1].lower() == ".pdf":
                 from pypdf import PdfReader, PdfWriter
-
                 reader = PdfReader(file_path, strict=False)
                 page_count = len(reader.pages)
                 if page_count <= 0:
                     return AIResult(success=False, error="empty_pdf", provider=self.name, model=self.model)
-
+                if progress_callback:
+                    progress_callback({"phase": "processing", "percent": 0, "pages_total": page_count, "pages_processed": 0, "eta_seconds": None})
                 page_results: list[dict] = []
                 for page_index, page in enumerate(reader.pages, start=1):
                     writer = PdfWriter()
@@ -189,35 +153,29 @@ class GeminiProvider:
                     writer.write(page_buffer)
                     writer.close()
                     page_buffer.seek(0)
-                    page_results.append(
-                        self._generate_structured_page(
-                            page_buffer.getvalue(), page_index, page_count, schema, system_instruction
-                        )
-                    )
-
+                    page_results.append(self._generate_structured_page(page_buffer.getvalue(), page_index, page_count, schema, system_instruction))
+                    processed = page_index
+                    percent = round(processed / page_count * 100)
+                    if progress_callback:
+                        progress_callback({"phase": "processing", "percent": percent, "pages_total": page_count, "pages_processed": processed})
                 data = self._merge_page_results(page_results, page_count)
                 text = json.dumps(data, ensure_ascii=False)
                 if data["pages_processed"] != page_count:
-                    return AIResult(
-                        success=False,
-                        text=text,
-                        data=data,
-                        error=f"pdf_page_coverage_error: processed {data['pages_processed']} of {page_count} pages",
-                        provider=self.name,
-                        model=self.model,
-                    )
+                    return AIResult(success=False, text=text, data=data, error=f"pdf_page_coverage_error: processed {data['pages_processed']} of {page_count} pages", provider=self.name, model=self.model)
+                if progress_callback:
+                    progress_callback({"phase": "completed", "percent": 100, "pages_total": page_count, "pages_processed": page_count, "eta_seconds": 0})
                 return AIResult(success=True, text=text, data=data, provider=self.name, model=self.model)
 
+            if progress_callback:
+                progress_callback({"phase": "processing", "percent": 10, "pages_total": None, "pages_processed": None, "eta_seconds": None})
             uploaded = self._client.files.upload(file=file_path)
-            response = self._client.models.generate_content(
-                model=self.model,
-                contents=[uploaded],
-                config=types.GenerateContentConfig(**config_kwargs),
-            )
+            response = self._client.models.generate_content(model=self.model, contents=[uploaded], config=types.GenerateContentConfig(**config_kwargs))
             text = (response.text or "").strip()
             if not text:
                 return AIResult(success=False, error="empty_ai_response", provider=self.name, model=self.model)
             data = json.loads(text)
+            if progress_callback:
+                progress_callback({"phase": "completed", "percent": 100, "pages_total": None, "pages_processed": None, "eta_seconds": 0})
             return AIResult(success=True, text=text, data=data, provider=self.name, model=self.model)
         except json.JSONDecodeError:
             logger.exception("Gemini returned invalid structured JSON")
