@@ -31,6 +31,18 @@ services:
         value: "True"
       - key: PYTHON_VERSION
         value: "3.11.9"
+      # Optional Gemini integration. The API key is intentionally not stored
+      # in Git; Render Dashboard must supply GEMINI_API_KEY as a secret.
+      - key: AI_ENABLED
+        value: "true"
+      - key: AI_PROVIDER
+        value: gemini
+      - key: GEMINI_ENABLED
+        value: "true"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
       # The browser sends the Flask-Login session cookie cross-origin
       # (see CORS_ORIGINS comment in app/config.py) — without the
       # frontend's real deployed origin here, every authenticated
