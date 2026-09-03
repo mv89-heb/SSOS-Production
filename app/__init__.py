@@ -99,3 +99,35 @@ def _init_extensions(app):
 def _register_blueprints(app):
     from app.routes.auth import auth_bp
     from app.routes.orders import orders_bp
+    from app.routes.catalog import catalog_bp
+    from app.routes.category_routes import category_bp
+    from app.routes.audit import audit_bp
+    from app.routes.notifications import notifications_bp
+    from app.routes.health import health_bp
+    from app.routes.imports import imports_bp
+    from app.routes.bulk_price_update import bulk_price_update_bp
+    from app.routes.users import users_bp
+    from app.routes.admin import admin_bp
+    from app.routes.price_intelligence import price_intelligence_bp
+    from app.routes.document_intelligence import document_intelligence_bp
+
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(orders_bp)
+    app.register_blueprint(catalog_bp)
+    app.register_blueprint(category_bp)
+    app.register_blueprint(audit_bp)
+    app.register_blueprint(notifications_bp)
+    app.register_blueprint(health_bp)
+    app.register_blueprint(imports_bp)
+    app.register_blueprint(bulk_price_update_bp)
+    app.register_blueprint(users_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(price_intelligence_bp)
+    app.register_blueprint(document_intelligence_bp)
+    csrf.exempt(health_bp)
+
+
+def _register_error_handlers(app):
+    @app.errorhandler(HTTPException)
+    def handle_exception(e):
+        return jsonify({"success": False, "error": e.name.lower().replace(" ", "_"), "message": e.description}), e.code
