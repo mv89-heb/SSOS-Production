@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import datetime, timezone
 
 from flask import current_app
@@ -49,21 +50,13 @@ class DocumentIntelligenceService:
             raise BadRequest("Only PDF and supported image documents can be analyzed")
         if not os.path.isfile(storage_path):
             raise BadRequest("Uploaded document is unavailable")
-        row = DocumentAnalysis(
-            tenant_id=self.tenant_id,
-            uploaded_by=self.user_id,
-            filename=filename,
-            storage_path=storage_path,
-            mime_type=mime_type,
-            status="UPLOADED",
-        )
+        row = DocumentAnalysis(tenant_id=self.tenant_id, uploaded_by=self.user_id, filename=filename, storage_path=storage_path, mime_type=mime_type, status="UPLOADED")
         db.session.add(row)
         db.session.commit()
         return row
 
     @staticmethod
     def _delete_temp_file(path):
-        """Best-effort deletion of a private temporary upload."""
         if not path:
             return
         try:
@@ -73,7 +66,6 @@ class DocumentIntelligenceService:
             current_app.logger.warning("Could not delete temporary document %s", path, exc_info=True)
 
     def _finalize_temp_file(self, row):
-        """Delete the source file and remove its path from persistent state."""
         path = row.storage_path
         self._delete_temp_file(path)
         row.storage_path = None
@@ -98,7 +90,21 @@ class DocumentIntelligenceService:
 
         row.status = "PROCESSING"
         row.error_message = None
+        row.extracted_data = {"processing": {"phase": "starting", "percent": 0, "pages_total": None, "pages_processed": 0, "elapsed_seconds": 0, "eta_seconds": None}}
         db.session.commit()
+        started = time.monotonic()
+
+        def on_progress(progress: dict):
+            percent = max(0, min(100, int(progress.get("percent") or 0)))
+            total = progress.get("pages_total")
+            processed = progress.get("pages_processed") or 0
+            elapsed = max(0.0, time.monotonic() - started)
+            eta = progress.get("eta_seconds")
+            if eta is None and total and processed > 0 and processed < total:
+                eta = max(0, round((elapsed / processed) * (total - processed)))
+            row.extracted_data = {"processing": {"phase": progress.get("phase", "processing"), "percent": percent, "pages_total": total, "pages_processed": processed, "elapsed_seconds": round(elapsed, 1), "eta_seconds": eta}}
+            db.session.commit()
+
         try:
             service = AIService.from_config(current_app.config)
             if not service.is_available():
@@ -108,11 +114,7 @@ class DocumentIntelligenceService:
                 db.session.commit()
                 return row
 
-            result = service.generate_structured_from_file(
-                row.storage_path,
-                DOCUMENT_SCHEMA,
-                system_instruction=SYSTEM_INSTRUCTION,
-            )
+            result = service.generate_structured_from_file(row.storage_path, DOCUMENT_SCHEMA, system_instruction=SYSTEM_INSTRUCTION, progress_callback=on_progress)
             row.analyzed_at = datetime.now(timezone.utc)
             row.provider = result.provider
             row.model = result.model
@@ -173,50 +175,19 @@ class DocumentIntelligenceService:
                 if price_value <= 0:
                     raise BadRequest("Reviewed price must be greater than zero")
                 currency = (item.get("currency") or row.extracted_data.get("currency") or "ILS").upper()
-                intelligence.record_observation(
-                    product_id=product_id,
-                    supplier_id=supplier_id,
-                    observed_price=price_value,
-                    currency=currency,
-                    unit=item.get("unit"),
-                    package_quantity=item.get("package_quantity"),
-                    source_type=row.document_type or "OTHER",
-                    source_document_id=row.id,
-                    match_method=item.get("match_method") or "MANUAL_REVIEW",
-                    match_confidence=item.get("match_confidence"),
-                )
+                intelligence.record_observation(product_id=product_id, supplier_id=supplier_id, observed_price=price_value, currency=currency, unit=item.get("unit"), package_quantity=item.get("package_quantity"), source_type=row.document_type or "OTHER", source_document_id=row.id, match_method=item.get("match_method") or "MANUAL_REVIEW", match_confidence=item.get("match_confidence"))
                 if not bool(item.get("update_price", False)):
                     continue
-                intelligence.accept_price_change(
-                    product_id=product_id,
-                    supplier_id=supplier_id,
-                    new_price=price_value,
-                    currency=currency,
-                    unit=item.get("unit"),
-                    source_type=row.document_type or "OTHER",
-                    source_document_id=row.id,
-                )
+                intelligence.accept_price_change(product_id=product_id, supplier_id=supplier_id, new_price=price_value, currency=currency, unit=item.get("unit"), source_type=row.document_type or "OTHER", source_document_id=row.id)
                 if supplier_id == product.supplier_id:
                     product.current_price = price_value
                     product.currency = currency
                     if item.get("unit"):
                         product.unit = item["unit"]
                 else:
-                    offer = SupplierProductOffer.query.filter_by(
-                        tenant_id=self.tenant_id,
-                        product_id=product_id,
-                        supplier_id=supplier_id,
-                    ).first()
+                    offer = SupplierProductOffer.query.filter_by(tenant_id=self.tenant_id, product_id=product_id, supplier_id=supplier_id).first()
                     if offer is None:
-                        offer = SupplierProductOffer(
-                            tenant_id=self.tenant_id,
-                            product_id=product_id,
-                            supplier_id=supplier_id,
-                            price=price_value,
-                            currency=currency,
-                            unit=item.get("unit"),
-                            active=True,
-                        )
+                        offer = SupplierProductOffer(tenant_id=self.tenant_id, product_id=product_id, supplier_id=supplier_id, price=price_value, currency=currency, unit=item.get("unit"), active=True)
                         db.session.add(offer)
                     else:
                         offer.price = price_value
