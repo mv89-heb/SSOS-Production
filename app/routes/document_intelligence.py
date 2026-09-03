@@ -17,6 +17,15 @@ def _handle(exc):
     return jsonify({"success": False, "error": exc.name.lower().replace(" ", "_"), "message": exc.description}), exc.code
 
 
+def _internal_error(exc, operation):
+    logger.exception("Document intelligence %s failed", operation)
+    return jsonify({
+        "success": False,
+        "error": "internal_error",
+        "message": f"Document intelligence {operation} failed. Check backend logs for details.",
+    }), 500
+
+
 @document_intelligence_bp.route("/upload", methods=["POST"])
 @login_required
 def upload_document():
@@ -58,8 +67,7 @@ def upload_document():
     except HTTPException as exc:
         return _handle(exc)
     except (OSError, ValueError, TypeError) as exc:
-        logger.exception("Document upload failed")
-        return jsonify({"success": False, "error": "upload_failed", "message": str(exc)}), 500
+        return _internal_error(exc, "upload")
 
 
 @document_intelligence_bp.route("/<int:analysis_id>/analyze", methods=["POST"])
@@ -70,6 +78,8 @@ def analyze_document(analysis_id):
         return jsonify({"success": True, "analysis": row.to_dict()})
     except HTTPException as exc:
         return _handle(exc)
+    except (OSError, ValueError, TypeError) as exc:
+        return _internal_error(exc, "analysis")
 
 
 @document_intelligence_bp.route("/<int:analysis_id>/apply", methods=["POST"])
