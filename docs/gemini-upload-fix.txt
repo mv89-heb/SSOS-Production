@@ -1,1 +1,0 @@
-Gemini upload regression coverage notes: multipart requests must not send application/json; accepted formats include PDF, PNG, JPEG, WEBP, SVG; UI supports selecting multiple files.
