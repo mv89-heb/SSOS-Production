@@ -13,6 +13,7 @@ def product(**kwargs):
         "supplier_sku": "TN-100",
         "unit": "ליטר",
         "units_per_carton": None,
+        "supplier_id": 10,
         "supplier": SimpleNamespace(id=10, name="תנובה"),
     }
     defaults.update(kwargs)
@@ -40,16 +41,23 @@ def test_supplier_sku_matches_before_name_similarity():
     assert method == "SUPPLIER_SKU"
 
 
-def test_similar_hebrew_product_name_is_reviewable_match():
+def test_similar_hebrew_product_name_is_high_confidence_enough_for_review():
     service = ProductMatchingService(1)
     extracted = {"description": "חלב תנובה 3 אחוז 1 ליטר", "unit": "ליטר"}
-    result = service.match_line = lambda item: None
     score, method = service._candidate_score(extracted, product())
     assert score >= 0.75
     assert method == "NAME_SIMILARITY"
 
 
-def test_no_match_for_unrelated_product():
+def test_supplier_context_boosts_same_supplier():
+    service = ProductMatchingService(1)
+    extracted = {"description": "חלב תנובה 3% 1 ליטר"}
+    without_supplier, _ = service._candidate_score(extracted, product(supplier_id=20))
+    with_supplier, _ = service._candidate_score(extracted, product(supplier_id=10), supplier_id=10)
+    assert with_supplier > without_supplier
+
+
+def test_unrelated_product_is_below_match_threshold():
     service = ProductMatchingService(1)
     extracted = {"description": "מפתח ברגים תעשייתי"}
     score, method = service._candidate_score(extracted, product())
