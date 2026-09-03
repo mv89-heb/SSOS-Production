@@ -43,7 +43,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.6-flash
       # The browser sends the Flask-Login session cookie cross-origin
       # (see CORS_ORIGINS comment in app/config.py) — without the
       # frontend's real deployed origin here, every authenticated
