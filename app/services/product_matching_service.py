@@ -72,7 +72,7 @@ class ProductMatchingService:
         return 0.0, None
 
     @classmethod
-    def _candidate_score(cls, extracted, product) -> tuple[float, str]:
+    def _candidate_score(cls, extracted, product, supplier_id: int | None = None) -> tuple[float, str]:
         identity, method = cls._identity_score(extracted, product)
         if identity:
             return identity, method
@@ -94,6 +94,9 @@ class ProductMatchingService:
                     score = min(1.0, score + 0.02)
             except (TypeError, ValueError):
                 pass
+
+        if supplier_id is not None and product.supplier_id == supplier_id:
+            score = min(1.0, score + 0.05)
 
         return round(score, 4), "NAME_SIMILARITY"
 
@@ -136,11 +139,11 @@ class ProductMatchingService:
             "method": "NAME_SIMILARITY",
         }
 
-    def match_line(self, extracted: dict, limit: int = 3):
+    def match_line(self, extracted: dict, limit: int = 3, supplier_id: int | None = None):
         self._load_catalog()
         scored = []
         for product in self._products or []:
-            score, method = self._candidate_score(extracted, product)
+            score, method = self._candidate_score(extracted, product, supplier_id=supplier_id)
             if score >= 0.45:
                 scored.append((score, method, product))
         scored.sort(key=lambda row: (-row[0], row[2].id))
@@ -175,11 +178,12 @@ class ProductMatchingService:
             return data
         self._load_catalog()
         supplier_match = self.match_supplier(data.get("supplier"))
+        supplier_id = supplier_match.get("supplier_id") if supplier_match else None
         items = data.get("items")
         if isinstance(items, list):
             for item in items:
                 if isinstance(item, dict):
-                    item["product_matching"] = self.match_line(item)
+                    item["product_matching"] = self.match_line(item, supplier_id=supplier_id)
         data["supplier_matching"] = supplier_match
         data["matching_version"] = "deterministic-v1"
         return data
