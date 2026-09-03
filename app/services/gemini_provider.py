@@ -70,19 +70,13 @@ class GeminiProvider:
         rc, rn = cls._normalize_supplier(right.get("supplier"))
         if lc and rc:
             return lc == rc
-        if lc or rc or not ln or not rn:
-            return False
-        return SequenceMatcher(None, ln, rn).ratio() >= 0.90
+        if ln and rn:
+            return SequenceMatcher(None, ln, rn).ratio() >= 0.93
+        return False
 
     @classmethod
     def _merge_page_results(cls, page_results: list[dict], page_count: int) -> dict:
-        merged: dict[str, Any] = {
-            "items": [],
-            "supplier_sections": [],
-            "page_count": page_count,
-            "pages_processed": 0,
-            "extraction_mode": "pdf_page_by_page",
-        }
+        merged: dict[str, Any] = {"items": [], "supplier_sections": [], "page_count": page_count, "pages_processed": 0, "extraction_mode": "pdf_page_by_page"}
         metadata_keys = ("document_type", "document_number", "document_date", "currency")
         for page_number, result in enumerate(page_results, start=1):
             if not isinstance(result, dict):
@@ -92,12 +86,10 @@ class GeminiProvider:
                 value = result.get(key)
                 if value not in (None, "", {}):
                     merged[key] = value
-
             raw_sections = result.get("supplier_sections")
             if not isinstance(raw_sections, list) or not raw_sections:
                 legacy_supplier = result.get("supplier") if isinstance(result.get("supplier"), dict) else {}
                 raw_sections = [{"supplier": legacy_supplier, "items": result.get("items") if isinstance(result.get("items"), list) else []}]
-
             for raw_section in raw_sections:
                 if not isinstance(raw_section, dict):
                     continue
@@ -117,7 +109,6 @@ class GeminiProvider:
                     normalized["supplier_context"] = dict(supplier)
                     target["items"].append(normalized)
                     merged["items"].append(normalized)
-
         merged["supplier_sections"] = [section for section in merged["supplier_sections"] if section.get("items") or section.get("supplier")]
         if len(merged["supplier_sections"]) == 1:
             merged["supplier"] = merged["supplier_sections"][0].get("supplier") or {}
@@ -139,30 +130,19 @@ class GeminiProvider:
         )
         instruction = f"{system_instruction}\n\n{page_instruction}" if system_instruction else page_instruction
         config = types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema, system_instruction=instruction)
-        response = self._client.models.generate_content(
-            model=self.model,
-            contents=[
-                types.Part.from_text(text=f"Extract all procurement data from page {page_number} of {page_count}, separating all supplier sections."),
-                types.Part.from_bytes(data=page_bytes, mime_type="application/pdf"),
-            ],
-            config=config,
-        )
+        response = self._client.models.generate_content(model=self.model, contents=[types.Part.from_text(text=f"Extract all procurement data from page {page_number} of {page_count}, separating all supplier sections."), types.Part.from_bytes(data=page_bytes, mime_type="application/pdf")], config=config)
         text = (response.text or "").strip()
         if not text:
             raise ValueError(f"Gemini returned an empty response for page {page_number}")
         return json.loads(text)
 
-    def generate_structured_from_file(
-        self, file_path: str, schema: dict, *, system_instruction: str | None = None,
-        progress_callback: ProgressCallback | None = None,
-    ) -> AIResult:
+    def generate_structured_from_file(self, file_path: str, schema: dict, *, system_instruction: str | None = None, progress_callback: ProgressCallback | None = None) -> AIResult:
         """Extract structured procurement data and report live progress for PDF pages."""
         try:
             from google.genai import types
             config_kwargs = {"response_mime_type": "application/json", "response_schema": schema}
             if system_instruction:
                 config_kwargs["system_instruction"] = system_instruction
-
             if os.path.splitext(file_path)[1].lower() == ".svg":
                 if progress_callback:
                     progress_callback({"phase": "processing", "percent": 10, "pages_total": None, "pages_processed": None, "eta_seconds": None})
@@ -179,7 +159,6 @@ class GeminiProvider:
                 if progress_callback:
                     progress_callback({"phase": "completed", "percent": 100, "pages_total": None, "pages_processed": None, "eta_seconds": 0})
                 return AIResult(success=True, text=text, data=data, provider=self.name, model=self.model)
-
             if os.path.splitext(file_path)[1].lower() == ".pdf":
                 from pypdf import PdfReader, PdfWriter
                 reader = PdfReader(file_path, strict=False)
@@ -207,7 +186,6 @@ class GeminiProvider:
                 if progress_callback:
                     progress_callback({"phase": "completed", "percent": 100, "pages_total": page_count, "pages_processed": page_count, "eta_seconds": 0})
                 return AIResult(success=True, text=text, data=data, provider=self.name, model=self.model)
-
             if progress_callback:
                 progress_callback({"phase": "processing", "percent": 10, "pages_total": None, "pages_processed": None, "eta_seconds": None})
             uploaded = self._client.files.upload(file=file_path)
