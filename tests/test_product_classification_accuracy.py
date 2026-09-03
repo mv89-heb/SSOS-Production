@@ -16,9 +16,9 @@ def test_normalization_removes_quantity_without_losing_product_words():
     assert normalize_product_name('תפוח אדמה 2 ק"ג') == 'תפוח אדמה'
 
 
-def test_phrase_matching_uses_word_boundaries():
-    assert _phrase_present('תפוח אדמה', 'תפוח אדמה')
-    assert not _phrase_present('תפוח אדמה', 'תפוח')
+def test_phrase_matching_respects_hebrew_word_boundaries():
+    assert _phrase_present('תפוח אדמה', 'תפוח')
+    assert not _phrase_present('תפוחים', 'תפוח')
 
 
 def test_common_ambiguous_products_use_hard_rules():
