@@ -10,10 +10,11 @@ services:
     healthCheckPath: /health
     # Database migrations belong in Render's pre-deploy phase so they run
     # against the target database immediately before the new version starts.
-    # If the migration fails, Render keeps the last successful deployment live.
+    # Keep the runtime fallback below because the existing Render service
+    # may not have the Blueprint pre-deploy command attached yet.
     buildCommand: "pip install -r requirements.txt"
     preDeployCommand: "python -m flask --app wsgi:app db upgrade"
-    startCommand: "gunicorn -w 4 -b 0.0.0.0:$PORT wsgi:app --timeout 120"
+    startCommand: "python -m flask --app wsgi:app db upgrade && exec gunicorn -w 4 -b 0.0.0.0:$PORT wsgi:app --timeout 120"
     envVars:
       - key: FLASK_ENV
         value: production
