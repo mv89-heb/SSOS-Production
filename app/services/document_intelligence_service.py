@@ -14,6 +14,7 @@ from app.models.supplier_offer import SupplierProductOffer
 from app.services.ai_service import AIService
 from app.services.permission_service import PermissionService
 from app.services.price_intelligence_service import PriceIntelligenceService
+from app.services.product_matching_service import ProductMatchingService
 
 DOCUMENT_SCHEMA = {
     "type": "object",
@@ -122,9 +123,10 @@ class DocumentIntelligenceService:
                 row.status = "FAILED"
                 row.error_message = "Structured extraction was empty"
             else:
+                enriched = ProductMatchingService(self.tenant_id).enrich_document(result.data)
                 row.status = "ANALYZED"
-                row.document_type = result.data.get("document_type")
-                row.extracted_data = result.data
+                row.document_type = enriched.get("document_type")
+                row.extracted_data = enriched
 
             self._finalize_temp_file(row)
             db.session.commit()
