@@ -1,6 +1,6 @@
 import logging
 import os
-import uuid
+import tempfile
 
 from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
@@ -67,9 +67,12 @@ def upload_document():
         if max_size is not None and size > max_size:
             raise BadRequest("Uploaded document exceeds the maximum allowed size")
 
-        directory = os.path.join(current_app.config["UPLOAD_FOLDER"], "documents")
-        os.makedirs(directory, exist_ok=True)
-        storage_path = os.path.join(directory, f"{uuid.uuid4().hex}{ext}")
+        # Render instances have an ephemeral filesystem. Stage the document in
+        # the OS temp directory rather than inside the application tree. The
+        # file exists only long enough for the analysis flow and is deleted on
+        # every exit path.
+        fd, storage_path = tempfile.mkstemp(prefix="ssos-document-", suffix=ext)
+        os.close(fd)
         upload.save(storage_path)
         row = DocumentIntelligenceService(current_user.tenant_id, current_user.id).create_analysis(
             upload.filename, storage_path, mime_type
