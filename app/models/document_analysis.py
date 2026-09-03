@@ -17,7 +17,9 @@ class DocumentAnalysis(db.Model):
     uploaded_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
     filename = db.Column(db.String(255), nullable=False)
-    storage_path = db.Column(db.String(500), nullable=False)
+    # The path exists only while the uploaded document is being analyzed.
+    # It is cleared immediately after analysis and is never returned by to_dict().
+    storage_path = db.Column(db.String(500), nullable=True)
     mime_type = db.Column(db.String(100), nullable=False)
     document_type = db.Column(db.String(30), nullable=True)
     status = db.Column(db.String(30), nullable=False, default="UPLOADED")
