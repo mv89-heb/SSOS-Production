@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+from difflib import SequenceMatcher
 from typing import Any, Callable
 
 from app.services.ai_service import AIResult
@@ -57,9 +58,32 @@ class GeminiProvider:
             return AIResult(success=False, error=_safe_provider_error(exc), provider=self.name, model=self.model)
 
     @staticmethod
-    def _merge_page_results(page_results: list[dict], page_count: int) -> dict:
-        merged: dict[str, Any] = {"items": [], "page_count": page_count, "pages_processed": 0, "extraction_mode": "pdf_page_by_page"}
-        metadata_keys = ("document_type", "supplier", "document_number", "document_date", "currency")
+    def _normalize_supplier(value: dict | None) -> tuple[str, str]:
+        value = value or {}
+        customer = re.sub(r"\W+", "", str(value.get("customer_number") or "").casefold())
+        name = re.sub(r"\s+", " ", str(value.get("name") or "").casefold()).strip()
+        return customer, name
+
+    @classmethod
+    def _same_supplier(cls, left: dict, right: dict) -> bool:
+        lc, ln = cls._normalize_supplier(left.get("supplier"))
+        rc, rn = cls._normalize_supplier(right.get("supplier"))
+        if lc and rc:
+            return lc == rc
+        if lc or rc or not ln or not rn:
+            return False
+        return SequenceMatcher(None, ln, rn).ratio() >= 0.90
+
+    @classmethod
+    def _merge_page_results(cls, page_results: list[dict], page_count: int) -> dict:
+        merged: dict[str, Any] = {
+            "items": [],
+            "supplier_sections": [],
+            "page_count": page_count,
+            "pages_processed": 0,
+            "extraction_mode": "pdf_page_by_page",
+        }
+        metadata_keys = ("document_type", "document_number", "document_date", "currency")
         for page_number, result in enumerate(page_results, start=1):
             if not isinstance(result, dict):
                 continue
@@ -67,39 +91,58 @@ class GeminiProvider:
             for key in metadata_keys:
                 value = result.get(key)
                 if value not in (None, "", {}):
-                    if key == "supplier" and isinstance(value, dict):
-                        existing = merged.get(key) if isinstance(merged.get(key), dict) else {}
-                        merged[key] = {**existing, **{k: v for k, v in value.items() if v not in (None, "")}}
-                    else:
-                        merged[key] = value
-            totals = result.get("totals")
-            if isinstance(totals, dict) and any(value not in (None, "") for value in totals.values()):
-                existing_totals = merged.get("totals") if isinstance(merged.get("totals"), dict) else {}
-                merged["totals"] = {**existing_totals, **{key: value for key, value in totals.items() if value not in (None, "")}}
-            items = result.get("items")
-            if isinstance(items, list):
+                    merged[key] = value
+
+            raw_sections = result.get("supplier_sections")
+            if not isinstance(raw_sections, list) or not raw_sections:
+                legacy_supplier = result.get("supplier") if isinstance(result.get("supplier"), dict) else {}
+                raw_sections = [{"supplier": legacy_supplier, "items": result.get("items") if isinstance(result.get("items"), list) else []}]
+
+            for raw_section in raw_sections:
+                if not isinstance(raw_section, dict):
+                    continue
+                supplier = raw_section.get("supplier") if isinstance(raw_section.get("supplier"), dict) else {}
+                target = next((section for section in merged["supplier_sections"] if cls._same_supplier(section, {"supplier": supplier})), None)
+                if target is None:
+                    target = {"supplier": dict(supplier), "items": [], "page_numbers": []}
+                    merged["supplier_sections"].append(target)
+                if page_number not in target["page_numbers"]:
+                    target["page_numbers"].append(page_number)
+                items = raw_section.get("items") if isinstance(raw_section.get("items"), list) else []
                 for item in items:
-                    if isinstance(item, dict):
-                        normalized = dict(item)
-                        normalized["page_number"] = page_number
-                        merged["items"].append(normalized)
+                    if not isinstance(item, dict):
+                        continue
+                    normalized = dict(item)
+                    normalized["page_number"] = page_number
+                    normalized["supplier_context"] = dict(supplier)
+                    target["items"].append(normalized)
+                    merged["items"].append(normalized)
+
+        merged["supplier_sections"] = [section for section in merged["supplier_sections"] if section.get("items") or section.get("supplier")]
+        if len(merged["supplier_sections"]) == 1:
+            merged["supplier"] = merged["supplier_sections"][0].get("supplier") or {}
         return merged
 
     def _generate_structured_page(self, page_bytes: bytes, page_number: int, page_count: int, schema: dict, system_instruction: str | None) -> dict:
         from google.genai import types
         page_instruction = (
-            f"This is page {page_number} of {page_count} of the same procurement document. "
-            "Analyze this page completely. Extract EVERY product/line item visible on this page, "
-            "including rows that continue from a previous page or continue onto the next page. "
-            "Do not stop after the first visible row or table section. "
-            "Return only facts visible on this page. If there are no line items, return an empty items array."
+            f"This is page {page_number} of {page_count} of the same procurement document. Analyze the entire page. "
+            "The document may contain multiple suppliers, including multiple suppliers on this SAME page. "
+            "Identify EVERY supplier section visible on this page. A supplier section is a group of line items associated "
+            "with an explicit supplier name/customer number, a supplier heading, a table heading, or an unambiguous supplier context. "
+            "Return one supplier_sections entry per distinct supplier context and put EVERY visible line item into exactly one section. "
+            "If a supplier continues from a previous page, use the supplier identity visible on this page when available; do not invent it. "
+            "If the supplier cannot be established for a line, place it in a section with an empty supplier object rather than guessing. "
+            "Never merge two suppliers merely because their product names are similar. "
+            "Extract EVERY product/line item visible on this page, including rows that continue from a previous page or continue onto the next page. "
+            "Return only facts visible on this page. If there are no line items, return an empty supplier_sections array."
         )
         instruction = f"{system_instruction}\n\n{page_instruction}" if system_instruction else page_instruction
         config = types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema, system_instruction=instruction)
         response = self._client.models.generate_content(
             model=self.model,
             contents=[
-                types.Part.from_text(text=f"Extract all procurement data from page {page_number} of {page_count}."),
+                types.Part.from_text(text=f"Extract all procurement data from page {page_number} of {page_count}, separating all supplier sections."),
                 types.Part.from_bytes(data=page_bytes, mime_type="application/pdf"),
             ],
             config=config,
@@ -127,7 +170,7 @@ class GeminiProvider:
                     svg_text = handle.read()
                 if not svg_text.strip():
                     return AIResult(success=False, error="empty_svg", provider=self.name, model=self.model)
-                prompt = "Analyze the following SVG/XML procurement document. Extract only facts visible in its text/XML content. Do not invent missing values.\n\nSVG/XML:\n" + svg_text
+                prompt = "Analyze the following SVG/XML procurement document. Extract only facts visible in its text/XML content. Do not invent missing values. Separate all distinct supplier sections.\n\nSVG/XML:\n" + svg_text
                 response = self._client.models.generate_content(model=self.model, contents=prompt, config=types.GenerateContentConfig(**config_kwargs))
                 text = (response.text or "").strip()
                 if not text:
@@ -152,7 +195,6 @@ class GeminiProvider:
                     page_buffer = io.BytesIO()
                     writer.write(page_buffer)
                     writer.close()
-                    page_buffer.seek(0)
                     page_results.append(self._generate_structured_page(page_buffer.getvalue(), page_index, page_count, schema, system_instruction))
                     processed = page_index
                     percent = round(processed / page_count * 100)

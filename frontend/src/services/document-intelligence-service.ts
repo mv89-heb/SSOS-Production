@@ -1,8 +1,10 @@
 import { apiClient } from "./api-client";
 
 export interface ProcessingProgress { phase?: string; percent?: number; pages_total?: number | null; pages_processed?: number; elapsed_seconds?: number; eta_seconds?: number | null; }
-export interface ExtractedItem { supplier_sku?: string; barcode?: string; description?: string; quantity?: number; unit?: string; package_quantity?: number; unit_price?: number; discount?: number; tax?: number; page_number?: number; product_matching?: { decision?: string; best_match?: { product_id?: number; product_name?: string; supplier_id?: number; supplier_name?: string; confidence?: number; method?: string }; suggestions?: Array<Record<string, unknown>> }; }
-export interface ExtractedData { document_type?: string; supplier?: { name?: string; customer_number?: string }; document_number?: string; document_date?: string; currency?: string; totals?: { subtotal?: number; tax?: number; total?: number }; items?: ExtractedItem[]; processing?: ProcessingProgress; page_count?: number; pages_processed?: number; extraction_mode?: string; supplier_matching?: Record<string, unknown> | null; matching_version?: string; }
+export interface SupplierMatching { supplier_id?: number; supplier_name?: string; confidence?: number; method?: string; }
+export interface ExtractedItem { supplier_sku?: string; barcode?: string; description?: string; quantity?: number; unit?: string; package_quantity?: number; unit_price?: number; discount?: number; tax?: number; page_number?: number; supplier_section_index?: number; supplier_context?: { name?: string; customer_number?: string }; supplier_matching?: SupplierMatching | null; product_matching?: { decision?: string; best_match?: { product_id?: number; product_name?: string; supplier_id?: number; supplier_name?: string; confidence?: number; method?: string }; suggestions?: Array<Record<string, unknown>> }; }
+export interface SupplierSection { supplier?: { name?: string; customer_number?: string }; items?: ExtractedItem[]; page_numbers?: number[]; supplier_matching?: SupplierMatching | null; }
+export interface ExtractedData { document_type?: string; supplier?: { name?: string; customer_number?: string }; supplier_sections?: SupplierSection[]; supplier_count?: number; document_number?: string; document_date?: string; currency?: string; totals?: { subtotal?: number; tax?: number; total?: number }; items?: ExtractedItem[]; processing?: ProcessingProgress; page_count?: number; pages_processed?: number; extraction_mode?: string; supplier_matching?: SupplierMatching | SupplierMatching[] | null; matching_version?: string; }
 export interface DocumentAnalysis { id: number; filename: string; mime_type: string; document_type: string | null; status: string; extracted_data: ExtractedData | null; error_message: string | null; provider: string | null; model: string | null; created_at: string; analyzed_at: string | null; applied_at: string | null; applied_by: number | null; }
 
 export const documentIntelligenceService = {
@@ -30,7 +32,7 @@ export const documentIntelligenceService = {
   uploadManyAndAnalyze: async (files: File[], onFileStatus?: (file: File, analysis: DocumentAnalysis | null, stage: "uploading" | "uploaded" | "processing" | "done", percent: number) => void) => {
     const results: DocumentAnalysis[] = [];
     for (const file of files) {
-      const result = await documentIntelligenceService.uploadAndAnalyze(file, (percent) => onFileStatus?.(file, null, "uploading", percent), (analysis) => onFileStatus?.(file, analysis, analysis.status === "UPLOADED" ? "uploaded" : analysis.status === "PROCESSING" ? "processing" : "done", analysis.status === "UPLOADED" ? 100 : 0));
+      const result = await documentIntelligenceService.uploadAndAnalyze(file, (percent) => onFileStatus?.(file, null, "uploading", percent), (analysis) => onFileStatus?.(file, analysis, analysis.status === "UPLOADED" ? "uploaded" : analysis.status === "PROCESSING" ? "processing" : "done", analysis.extracted_data?.processing?.percent ?? (analysis.status === "UPLOADED" ? 100 : 0)));
       results.push(result); onFileStatus?.(file, result, "done", 100);
     }
     return results;
