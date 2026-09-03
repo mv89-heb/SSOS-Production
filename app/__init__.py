@@ -48,7 +48,8 @@ def _ensure_document_analysis_table(app, config_class):
     from app.models.document_analysis import DocumentAnalysis
 
     try:
-        DocumentAnalysis.__table__.create(bind=db.engine, checkfirst=True)
+        with app.app_context():
+            DocumentAnalysis.__table__.create(bind=db.engine, checkfirst=True)
     except Exception:
         logger.exception("Could not ensure document_analyses table exists")
         raise
