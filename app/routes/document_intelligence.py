@@ -66,7 +66,7 @@ def upload_document():
         return jsonify({"success": True, "analysis": row.to_dict()}), 201
     except HTTPException as exc:
         return _handle(exc)
-    except (OSError, ValueError, TypeError) as exc:
+    except Exception as exc:
         return _internal_error(exc, "upload")
 
 
@@ -78,7 +78,9 @@ def analyze_document(analysis_id):
         return jsonify({"success": True, "analysis": row.to_dict()})
     except HTTPException as exc:
         return _handle(exc)
-    except (OSError, ValueError, TypeError) as exc:
+    except Exception as exc:
+        # Never expose an unhandled Flask 500 for provider/filesystem/runtime
+        # failures. The detailed traceback remains in the backend logs.
         return _internal_error(exc, "analysis")
 
 
@@ -94,6 +96,8 @@ def apply_document(analysis_id):
         return _handle(exc)
     except ValueError as exc:
         return jsonify({"success": False, "error": "validation_error", "message": str(exc)}), 400
+    except Exception as exc:
+        return _internal_error(exc, "apply")
 
 
 @document_intelligence_bp.route("/<int:analysis_id>", methods=["GET"])
@@ -104,3 +108,5 @@ def get_document_analysis(analysis_id):
         return jsonify({"success": True, "analysis": row.to_dict()})
     except HTTPException as exc:
         return _handle(exc)
+    except Exception as exc:
+        return _internal_error(exc, "get")
