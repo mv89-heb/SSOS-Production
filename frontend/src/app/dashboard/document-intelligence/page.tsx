@@ -8,8 +8,8 @@ import { documentIntelligenceService, type DocumentAnalysis, type ExtractedItem 
 
 const statusLabel: Record<string, string> = { UPLOADED: "הועלה", PROCESSING: "מנתח...", ANALYZED: "נותח — מוכן לבדיקה", AI_UNAVAILABLE: "Gemini אינו מוגדר", FAILED: "הניתוח נכשל", APPLIED: "יושם בהצלחה" };
 const allowed = ".pdf,.png,.jpg,.jpeg,.webp,.svg";
-
 type Mapping = { product?: number; supplier?: number; update?: boolean };
+type UploadProgress = { name: string; stage: "uploading" | "uploaded" | "processing" | "done"; percent: number; status?: string; error?: string };
 
 export default function DocumentIntelligencePage() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -19,20 +19,39 @@ export default function DocumentIntelligencePage() {
   const [analyses, setAnalyses] = useState<DocumentAnalysis[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [mappings, setMappings] = useState<Record<number, Mapping>>({});
+  const [progress, setProgress] = useState<UploadProgress[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const analysis = analyses.find((item) => item.id === selectedId) ?? analyses[analyses.length - 1] ?? null;
   const items = useMemo<ExtractedItem[]>(() => Array.isArray(analysis?.extracted_data?.items) ? analysis.extracted_data.items : [], [analysis]);
 
+  const updateProgress = (file: File, patch: Partial<UploadProgress>) => {
+    setProgress((current) => current.map((item) => item.name === file.name ? { ...item, ...patch } : item));
+  };
+
   async function handleFiles(fileList: FileList | null) {
     const files = Array.from(fileList || []);
     if (!files.length) return;
     setBusy(true); setError("");
+    setProgress(files.map((file) => ({ name: file.name, stage: "uploading", percent: 0 })));
     try {
-      const results = await documentIntelligenceService.uploadManyAndAnalyze(files);
-      setAnalyses((current) => [...results, ...current]);
+      const results = await documentIntelligenceService.uploadManyAndAnalyze(files, (file, item, stage, percent) => {
+        updateProgress(file, { stage, percent, status: item?.status, error: item?.error_message || undefined });
+        if (item) {
+          setAnalyses((current) => {
+            const exists = current.some((row) => row.id === item.id);
+            return exists ? current.map((row) => row.id === item.id ? item : row) : [item, ...current];
+          });
+          setSelectedId(item.id);
+        }
+      });
+      setAnalyses((current) => {
+        const incoming = new Map(results.map((item) => [item.id, item]));
+        return [...results, ...current.filter((item) => !incoming.has(item.id))];
+      });
       setSelectedId(results[0]?.id ?? null);
+      setProgress((current) => current.map((item) => ({ ...item, stage: "done", percent: 100 })));
     } catch (err: any) {
       setError(err?.friendlyMessage || err?.response?.data?.message || "לא ניתן להעלות או לנתח את המסמכים");
     } finally {
@@ -63,6 +82,15 @@ export default function DocumentIntelligencePage() {
       <p className="mt-3 text-xs text-slate-400">PDF, PNG, JPG, WEBP ו-SVG · ניתן לבחור מספר קבצים בבת אחת · אין אחסון קבוע של המסמך</p>
     </header>
 
+    {progress.length > 0 && <section className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/20">
+      <div className="mb-4 flex items-center justify-between"><h2 className="font-bold">התקדמות מסמכים</h2>{busy && <Loader2 className="animate-spin text-indigo-600" size={18}/>}</div>
+      <div className="space-y-4">{progress.map((item) => <div key={item.name} className="rounded-xl border border-white/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex items-center gap-3"><div className="min-w-0 flex-1"><div className="truncate font-semibold">{item.name}</div><div className="mt-1 text-xs text-slate-500">{item.stage === "uploading" ? `מעלה מסמך... ${item.percent}%` : item.stage === "uploaded" ? "✓ ההעלאה הושלמה · ממתין לניתוח" : item.stage === "processing" ? "✨ Gemini מנתח את המסמך..." : statusLabel[item.status || ""] || "הסתיים"}</div></div>{item.stage === "done" ? <CheckCircle2 className="text-emerald-600" size={20}/> : <Loader2 className="animate-spin text-indigo-600" size={20}/>}</div>
+        {item.stage === "uploading" && <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-indigo-600 transition-all duration-200" style={{ width: `${item.percent}%` }}/></div>}
+        {item.error && <p className="mt-2 text-sm text-red-600">{item.error}</p>}
+      </div>)}</div>
+    </section>}
+
     {error && <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700"><AlertTriangle size={18}/>{error}</div>}
 
     {analyses.length > 0 && <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="border-b border-slate-100 p-5 dark:border-slate-800"><h2 className="font-bold">מסמכים שהועלו ({analyses.length})</h2></div><div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3">{analyses.map((item) => <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className={`rounded-xl border p-3 text-right ${item.id === analysis?.id ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950/30" : "border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"}`}><div className="truncate font-semibold">{item.filename}</div><div className="mt-1 text-xs text-slate-500">{statusLabel[item.status] || item.status}</div></button>)}</div></section>}
@@ -70,7 +98,7 @@ export default function DocumentIntelligencePage() {
     {!analysis && <section className="rounded-2xl border-2 border-dashed border-slate-300 bg-white p-14 text-center dark:border-slate-700 dark:bg-slate-950"><FileSearch className="mx-auto mb-4 text-slate-400" size={44}/><h2 className="text-xl font-bold">אין מסמכים לניתוח</h2><p className="mt-2 text-sm text-slate-500">בחר מסמך אחד או כמה מסמכים כדי להתחיל.</p></section>}
 
     {analysis && <>
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex flex-wrap items-center gap-3"><div className="rounded-xl bg-indigo-50 p-3 text-indigo-600"><FileSearch size={22}/></div><div className="min-w-0 flex-1"><div className="truncate font-bold">{analysis.filename}</div><div className="text-sm text-slate-500">{analysis.document_type || "מסמך"} · {analysis.provider || "—"} {analysis.model ? `· ${analysis.model}` : ""}</div></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{statusLabel[analysis.status] || analysis.status}</span></div>{analysis.error_message && <p className="mt-3 text-sm text-red-600">{analysis.error_message}</p>}{(analysis.status === "FAILED" || analysis.status === "AI_UNAVAILABLE") && <p className="mt-2 text-xs text-slate-500">הקובץ הזמני נמחק. כדי לנסות שוב, העלה את המסמך מחדש.</p>}</section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex flex-wrap items-center gap-3"><div className="rounded-xl bg-indigo-50 p-3 text-indigo-600"><FileSearch size={22}/></div><div className="min-w-0 flex-1"><div className="truncate font-bold">{analysis.filename}</div><div className="text-sm text-slate-500">{analysis.document_type || "מסמך"} · {analysis.provider || "—"} {analysis.model ? `· ${analysis.model}` : ""}</div></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{statusLabel[analysis.status] || analysis.status}</span></div>{analysis.error_message && <p className="mt-3 whitespace-pre-wrap text-sm text-red-600">{analysis.error_message}</p>}{(analysis.status === "FAILED" || analysis.status === "AI_UNAVAILABLE") && <p className="mt-2 text-xs text-slate-500">הקובץ הזמני נמחק. כדי לנסות שוב, העלה את המסמך מחדש.</p>}</section>
       {analysis.status === "ANALYZED" && <><section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[["ספק", analysis.extracted_data?.supplier?.name],["מספר מסמך", analysis.extracted_data?.document_number],["תאריך", analysis.extracted_data?.document_date],["סה״כ", analysis.extracted_data?.totals?.total != null ? `${analysis.extracted_data.totals.total} ${analysis.extracted_data.currency || "ILS"}` : "—"]].map(([label,value]) => <div key={String(label)} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 font-bold">{value || "—"}</div></div>)}</section>
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="border-b border-slate-100 p-5 dark:border-slate-800"><h2 className="font-bold">בדיקה ואישור שורות</h2><p className="mt-1 text-xs text-slate-500">Gemini לא משנה נתונים בעצמו. בחר מוצר וספק לכל שורה.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50 text-right text-xs text-slate-500 dark:bg-slate-900"><tr><th className="p-3">פריט</th><th className="p-3">כמות</th><th className="p-3">מחיר</th><th className="p-3">מוצר במערכת</th><th className="p-3">ספק</th><th className="p-3">עדכון מחיר</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{items.map((item,index) => <tr key={index}><td className="max-w-[260px] p-3"><div className="font-medium">{item.description || "ללא תיאור"}</div><div className="text-xs text-slate-400">מק״ט: {item.supplier_sku || "—"} · ברקוד: {item.barcode || "—"}</div></td><td className="p-3">{item.quantity ?? "—"} {item.unit || ""}</td><td className="p-3 font-bold">{item.unit_price ?? "—"} {analysis.extracted_data?.currency || "ILS"}</td><td className="p-3"><select className="w-56 rounded-lg border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-900" value={mappings[index]?.product || ""} onChange={(e) => setMap(index,{product:Number(e.target.value)})}><option value="">בחר מוצר...</option>{products.map((p)=><option key={p.id} value={p.id}>{p.name}{p.sku ? ` · ${p.sku}` : ""}</option>)}</select></td><td className="p-3"><select className="w-52 rounded-lg border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-900" value={mappings[index]?.supplier || ""} onChange={(e)=>setMap(index,{supplier:Number(e.target.value)})}><option value="">בחר ספק...</option>{suppliers.map((s)=><option key={s.id} value={s.id}>{s.name}</option>)}</select></td><td className="p-3 text-center"><input type="checkbox" checked={Boolean(mappings[index]?.update)} onChange={(e)=>setMap(index,{update:e.target.checked})} aria-label="עדכן מחיר"/></td></tr>)}</tbody></table></div><div className="flex flex-col gap-3 border-t border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800"><span className="text-xs text-slate-500">{items.length} שורות חולצו</span><button type="button" onClick={apply} disabled={busy || !items.length} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white disabled:opacity-50">{busy ? <Loader2 className="animate-spin" size={18}/> : <CheckCircle2 size={18}/>}אשר ויישם</button></div></section></>}
       {analysis.status === "APPLIED" && <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 font-bold text-emerald-700"><CheckCircle2/> המסמך יושם בהצלחה.</div>}
