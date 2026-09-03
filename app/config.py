@@ -66,7 +66,7 @@ class BaseConfig:
     AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini").strip().lower()
     GEMINI_ENABLED = _env_bool("GEMINI_ENABLED", False)
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-    GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash").strip()
     GEMINI_TIMEOUT = float(os.environ.get("GEMINI_TIMEOUT", "30"))
 
     @staticmethod
@@ -112,7 +112,7 @@ class ProductionConfig(BaseConfig):
         app.config["AI_PROVIDER"] = os.environ.get("AI_PROVIDER", "gemini").strip().lower()
         app.config["AI_ENABLED"] = _env_bool("AI_ENABLED", bool(gemini_api_key))
         app.config["GEMINI_ENABLED"] = _env_bool("GEMINI_ENABLED", bool(gemini_api_key))
-        app.config["GEMINI_MODEL"] = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
+        app.config["GEMINI_MODEL"] = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash").strip()
         app.config["GEMINI_TIMEOUT"] = float(os.environ.get("GEMINI_TIMEOUT", "30"))
 
 
