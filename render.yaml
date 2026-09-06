@@ -13,8 +13,10 @@ services:
     # The production entrypoint is also migration-safe for existing Render
     # services whose dashboard start command has not been synchronized with
     # this Blueprint yet.
+    # The repository currently has multiple Alembic heads, so target all heads
+    # explicitly; `db upgrade`/`head` fails with Multiple head revisions.
     buildCommand: "pip install -r requirements.txt"
-    preDeployCommand: "python -m flask --app app:create_app() db upgrade"
+    preDeployCommand: "python -m flask --app app:create_app() db upgrade heads"
     startCommand: "python scripts/start_production.py"
     envVars:
       - key: FLASK_ENV
