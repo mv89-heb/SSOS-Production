@@ -10,6 +10,7 @@ from app.models.order import (
     STATUS_COMPLETED,
     STATUS_CANCELLED,
     VALID_STATUSES,
+    REMINDER_COMPLETE,
 )
 from app.repositories.order_repository import OrderRepository
 from app.repositories.product_repository import ProductRepository
@@ -74,12 +75,7 @@ class OrderService:
         return order
 
     def delete_order(self, user, order_id: int) -> None:
-        """Delete only draft orders through the normal workflow.
-
-        Permanent deletion of submitted/approved/sent/completed orders is a
-        separate explicit administrator operation so normal DELETE cannot
-        bypass the immutable order snapshot lifecycle.
-        """
+        """Delete only draft orders through the normal workflow."""
         order = self.repo.get_by_id_for_update(order_id)
         if order is None:
             raise NotFound("Order not found")
@@ -87,7 +83,6 @@ class OrderService:
             raise Conflict(f"Only '{STATUS_DRAFT}' orders can be deleted")
         if user.role not in (ROLE_MANAGER, ROLE_ADMIN) and order.user_id != user.id:
             raise Conflict("Only the order creator or a manager can delete this draft")
-
         status = order.status
         number = order.order_number
         AuditService.log_event(self.tenant_id, user.id, "order.deleted", f"Order {number} deleted", {"order_id": order.id, "order_number": number, "previous_status": status, "administrative_delete": user.role == ROLE_ADMIN})
@@ -127,19 +122,29 @@ class OrderService:
         reason = (reason or "").strip()
         if len(reason) > 1000: raise BadRequest("Rejection reason is too long")
         order.status = STATUS_CANCELLED; rejection_note = f"Rejected: {reason}" if reason else "Rejected"; order.notes = f"{order.notes}\n{rejection_note}" if order.notes else rejection_note
+        order.reminder_state = REMINDER_COMPLETE
+        order.next_reminder_at = None
         AuditService.log_event(self.tenant_id, user.id, "order.rejected", f"Order {order.order_number} rejected", {"order_id": order.id, "reason": reason, "rejected_by": user.id}); return order
 
     def mark_sent(self, user, order_id: int) -> Order:
         order = self.repo.get_by_id_for_update(order_id)
         if order is None: raise NotFound("Order not found")
         if order.status != STATUS_APPROVED: raise Conflict(f"Only '{STATUS_APPROVED}' orders can be marked sent (current: '{order.status}')")
-        order.status = STATUS_SENT; AuditService.log_event(self.tenant_id, user.id, "order.sent", f"Order {order.order_number} sent to supplier", {"order_id": order.id}); return order
+        order.status = STATUS_SENT
+        order.reminder_state = REMINDER_COMPLETE
+        order.next_reminder_at = None
+        AuditService.log_event(self.tenant_id, user.id, "order.sent", f"Order {order.order_number} sent to supplier", {"order_id": order.id})
+        return order
 
     def mark_completed(self, user, order_id: int) -> Order:
         order = self.repo.get_by_id_for_update(order_id)
         if order is None: raise NotFound("Order not found")
         if order.status != STATUS_SENT: raise Conflict(f"Only '{STATUS_SENT}' orders can be completed (current: '{order.status}')")
-        order.status = STATUS_COMPLETED; AuditService.log_event(self.tenant_id, user.id, "order.completed", f"Order {order.order_number} completed", {"order_id": order.id}); return order
+        order.status = STATUS_COMPLETED
+        order.reminder_state = REMINDER_COMPLETE
+        order.next_reminder_at = None
+        AuditService.log_event(self.tenant_id, user.id, "order.completed", f"Order {order.order_number} completed", {"order_id": order.id})
+        return order
 
     def _build_snapshot_items(self, input_items: list) -> list:
         if not all(isinstance(item, dict) for item in input_items): raise BadRequest("Each order item must be an object")
