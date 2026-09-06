@@ -1,13 +1,13 @@
 """price intelligence history
 
 Revision ID: 20260901_price_intelligence
-Revises: 20260812_product_classification_repair
+Revises: 20260812_prod_cls_repair
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "20260901_price_intelligence"
-down_revision = "20260812_product_classification_repair"
+down_revision = "20260812_prod_cls_repair"
 
 
 def upgrade():
