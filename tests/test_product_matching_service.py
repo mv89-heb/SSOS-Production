@@ -51,9 +51,9 @@ def test_similar_hebrew_product_name_is_high_confidence_enough_for_review():
 
 def test_supplier_context_boosts_same_supplier():
     service = ProductMatchingService(1)
-    extracted = {"description": "חלב תנובה 3% 1 ליטר"}
-    without_supplier, _ = service._candidate_score(extracted, product(supplier_id=20))
-    with_supplier, _ = service._candidate_score(extracted, product(supplier_id=10), supplier_id=10)
+    extracted = {"description": "חלב תנובה 3 אחוז 1 ליטר", "unit": "ליטר"}
+    without_supplier, _ = service._candidate_score(extracted, product(supplier_id=20, barcode=""))
+    with_supplier, _ = service._candidate_score(extracted, product(supplier_id=10, barcode=""), supplier_id=10)
     assert with_supplier > without_supplier
 
 
