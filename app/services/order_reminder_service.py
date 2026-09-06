@@ -29,28 +29,12 @@ class OrderingWindow:
     closes_at: time
 
     def contains(self, value: datetime) -> bool:
-        local = value.astimezone(timezone.utc)
-        current = local.time().replace(tzinfo=None)
+        current = value.astimezone(timezone.utc).time().replace(tzinfo=None)
         return self.opens_at <= current < self.closes_at
 
 
 class OrderReminderService:
-    """Calculate persistent, supplier-aware order reminders.
-
-    Rules are represented as a small JSON-friendly mapping so existing
-    supplier records remain backward compatible. Example::
-
-        {
-          "timezone": "UTC",
-          "windows": {
-            "4": {"open": "08:00", "close": "16:00"},
-            "6": {"open": "08:00", "close": "14:00"}
-          },
-          "remind_minutes_before_close": [360, 180, 60, 30, 10]
-        }
-
-    Weekday keys use Python's ``datetime.weekday()`` convention.
-    """
+    """Calculate persistent, supplier-aware order reminders."""
 
     DEFAULT_MINUTES = (360, 180, 60, 30, 10)
 
@@ -83,7 +67,6 @@ class OrderReminderService:
         rules: dict,
         horizon_days: int = 14,
     ) -> datetime | None:
-        """Return the next active/eligible ordering-window close."""
         windows = cls.windows_from_rules(rules)
         if not windows:
             return None
@@ -114,13 +97,6 @@ class OrderReminderService:
         *,
         minutes_before_close: Iterable[int] | None = None,
     ) -> list[ReminderPoint]:
-        """Plan reminders for the next order window.
-
-        The last reminder is always inside the supplier window when possible;
-        reminders that fall before opening are omitted. This supports the
-        requested "never forget" behavior without generating useless alerts
-        after the supplier has closed.
-        """
         close = cls.next_window_close(now, rules)
         if close is None:
             return []
@@ -130,7 +106,15 @@ class OrderReminderService:
             return []
         open_dt = datetime.combine(close.date(), active_window.opens_at, tzinfo=close.tzinfo)
         minute_values = sorted(
-            {int(value) for value in (minutes_before_close or rules.get("remind_minutes_before_close", cls.DEFAULT_MINUTES)) if int(value) >= 0},
+            {
+                int(value)
+                for value in (
+                    minutes_before_close
+                    if minutes_before_close is not None
+                    else rules.get("remind_minutes_before_close", cls.DEFAULT_MINUTES)
+                )
+                if int(value) >= 0
+            },
             reverse=True,
         )
         points: list[ReminderPoint] = []
@@ -158,8 +142,8 @@ class OrderReminderService:
         opens_at: str = "08:00",
         closes_at: str = "16:00",
         remind_minutes_before_close: Iterable[int] | None = None,
+        timezone_name: str = "UTC",
     ) -> dict:
-        """Build a normalized rules document for persistence."""
         open_value = cls.parse_time(opens_at)
         close_value = cls.parse_time(closes_at)
         if open_value >= close_value:
@@ -168,10 +152,19 @@ class OrderReminderService:
         if any(day < 0 or day > 6 for day in days):
             raise ValueError("weekday must be between 0 and 6")
         reminders = sorted(
-            {int(value) for value in (remind_minutes_before_close or cls.DEFAULT_MINUTES) if int(value) >= 0},
+            {
+                int(value)
+                for value in (
+                    remind_minutes_before_close
+                    if remind_minutes_before_close is not None
+                    else cls.DEFAULT_MINUTES
+                )
+                if int(value) >= 0
+            },
             reverse=True,
         )
         return {
+            "timezone": str(timezone_name),
             "windows": {
                 str(day): {"open": opens_at, "close": closes_at}
                 for day in days
