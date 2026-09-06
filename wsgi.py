@@ -1,20 +1,25 @@
 import os
 
 from app import create_app
+from app.extensions import db
 from flask_migrate import upgrade as migrate_upgrade
+from sqlalchemy import text
 
 
 def _run_startup_migrations(app):
-    """Bring the target database to the application revision before serving.
+    """Bring the production database to the application revision before serving.
 
-    This runs from WSGI because the existing Render service still uses a
-    dashboard-configured Gunicorn command and may not consume the Blueprint
-    pre-deploy setting from render.yaml.
+    The existing Render service uses a dashboard-configured Gunicorn command.
+    Running Alembic from WSGI makes the protection independent of Render
+    Blueprint synchronization. A PostgreSQL advisory lock serializes multiple
+    Gunicorn workers so only one process performs a migration at a time.
     """
     with app.app_context():
-        print("[production] Running database migrations before serving", flush=True)
-        migrate_upgrade()
-        print("[production] Database migrations completed", flush=True)
+        with db.engine.begin() as conn:
+            conn.execute(text("SELECT pg_advisory_xact_lock(73184219)"))
+            print("[production] Running database migrations before serving", flush=True)
+            migrate_upgrade()
+            print("[production] Database migrations completed", flush=True)
 
 
 app = create_app()
