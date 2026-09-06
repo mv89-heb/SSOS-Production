@@ -8,13 +8,13 @@ aborting the whole deployment. Application-level transaction handling remains
 in place for new executions, and the unique index can be introduced after the
 legacy records are reconciled.
 
-Revision ID: 20260811_import_execution_integrity
+Revision ID: 20260811_import_integrity
 Revises: 20260811_catalog_integrity
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "20260811_import_execution_integrity"
+revision = "20260811_import_integrity"
 down_revision = "20260811_catalog_integrity"
 
 
