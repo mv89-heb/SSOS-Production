@@ -18,7 +18,16 @@ def main() -> None:
 
     print("[production] Running database migrations before Gunicorn", flush=True)
     subprocess.run(
-        [sys.executable, "-m", "flask", "--app", "app:create_app()", "db", "upgrade"],
+        [
+            sys.executable,
+            "-m",
+            "flask",
+            "--app",
+            "app:create_app()",
+            "db",
+            "upgrade",
+            "heads",
+        ],
         env=env,
         check=True,
     )

@@ -7,18 +7,22 @@ from sqlalchemy import text
 
 
 def _run_startup_migrations(app):
-    """Bring the production database to the application revision before serving.
+    """Bring the production database to all current Alembic heads before serving.
 
     The existing Render service uses a dashboard-configured Gunicorn command.
     Running Alembic from WSGI makes the protection independent of Render
     Blueprint synchronization. A PostgreSQL advisory lock serializes multiple
-    Gunicorn workers so only one process performs a migration at a time.
+    Gunicorn workers so only one process performs migrations at a time.
+
+    The repository currently has multiple valid Alembic heads. Targeting
+    ``heads`` is intentional: targeting ``head`` fails with Multiple head
+    revisions and prevents the service from starting.
     """
     with app.app_context():
         with db.engine.begin() as conn:
             conn.execute(text("SELECT pg_advisory_xact_lock(73184219)"))
             print("[production] Running database migrations before serving", flush=True)
-            migrate_upgrade()
+            migrate_upgrade(revision="heads")
             print("[production] Database migrations completed", flush=True)
 
 
