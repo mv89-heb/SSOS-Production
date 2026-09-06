@@ -2,16 +2,18 @@
 
 The application model contains product classification metadata, but some
 production databases may have reached an application revision without the
-corresponding columns being present.  This migration is deliberately
+corresponding columns being present. This migration is deliberately
 idempotent so it can repair that drift without disturbing existing data.
 
-Revision ID: 20260812_product_classification_repair
+Revision ID: 20260812_prod_cls_repair
 Revises: 20260812_product_classification
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "20260812_product_classification_repair"
+# PostgreSQL's alembic_version.version_num is VARCHAR(32) in this database.
+# Keep revision identifiers at or below that limit.
+revision = "20260812_prod_cls_repair"
 down_revision = "20260812_product_classification"
 
 
@@ -85,7 +87,7 @@ def upgrade():
 
 
 def downgrade():
-    # Do not remove repaired columns/table automatically.  This migration is
-    # a production repair layer; destructive rollback belongs to the original
+    # Do not remove repaired columns/table automatically. This migration is a
+    # production repair layer; destructive rollback belongs to the original
     # schema migration and must be explicit.
     pass
