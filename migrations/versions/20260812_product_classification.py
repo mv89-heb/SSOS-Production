@@ -1,13 +1,13 @@
 """product classification metadata and feedback
 
 Revision ID: 20260812_product_classification
-Revises: 20260811_import_execution_integrity
+Revises: 20260811_import_integrity
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "20260812_product_classification"
-down_revision = "20260811_import_execution_integrity"
+down_revision = "20260811_import_integrity"
 
 
 def upgrade():
