@@ -14,11 +14,11 @@ import sys
 
 def main() -> None:
     env = os.environ.copy()
-    env.setdefault("FLASK_APP", "wsgi.py")
+    env.setdefault("FLASK_APP", "app:create_app()")
 
     print("[production] Running database migrations before Gunicorn", flush=True)
     subprocess.run(
-        [sys.executable, "-m", "flask", "--app", "wsgi:app", "db", "upgrade"],
+        [sys.executable, "-m", "flask", "--app", "app:create_app()", "db", "upgrade"],
         env=env,
         check=True,
     )
