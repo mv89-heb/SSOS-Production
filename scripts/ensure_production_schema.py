@@ -1,12 +1,8 @@
-"""Minimal production schema bootstrap for Render startup.
+"""Minimal additive production schema bootstrap.
 
-This is intentionally limited to additive, idempotent changes required by the
-current Product ORM. It is a safety net for existing Render services where
-Alembic cannot be guaranteed to run before Gunicorn starts.
-
-Alembic remains the canonical migration mechanism; this bootstrap only repairs
-the known product-classification schema drift and never deletes or rewrites
-existing data.
+Alembic remains the canonical migration mechanism. This startup fallback exists
+for Render services where the Blueprint pre-deploy command is not attached or
+was skipped. All changes are additive and idempotent.
 """
 from __future__ import annotations
 
@@ -15,42 +11,67 @@ import os
 from sqlalchemy import create_engine, inspect, text
 
 
-PRODUCT_COLUMNS = {
-    "category_source": "VARCHAR(30)",
-    "category_confidence": "NUMERIC(5,4)",
-    "category_reviewed": "BOOLEAN NOT NULL DEFAULT FALSE",
-}
-
-
 def _database_url() -> str:
     url = os.environ.get("DATABASE_URL")
     if not url:
         raise RuntimeError("DATABASE_URL is required for production schema bootstrap")
     if url.startswith("postgres://"):
-        url = "postgresql+psycopg2://" + url[len("postgres://") :]
-    elif url.startswith("postgresql://"):
-        url = "postgresql+psycopg2://" + url[len("postgresql://") :]
+        return "postgresql+psycopg2://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg2://" + url[len("postgresql://") :]
     return url
+
+
+def _add_columns(conn, table: str, definitions: dict[str, str]) -> None:
+    inspector = inspect(conn)
+    existing = {c["name"] for c in inspector.get_columns(table)}
+    for name, definition in definitions.items():
+        if name not in existing:
+            conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {definition}'))
 
 
 def ensure_schema() -> None:
     engine = create_engine(_database_url(), pool_pre_ping=True)
     try:
         with engine.begin() as conn:
-            # Serialize startup repairs across Gunicorn workers/instances.
             conn.execute(text("SELECT pg_advisory_xact_lock(73184219)"))
             inspector = inspect(conn)
             tables = set(inspector.get_table_names())
+
             if "products" not in tables:
                 raise RuntimeError("products table does not exist; run Alembic migrations first")
 
-            columns = {c["name"] for c in inspector.get_columns("products")}
-            for name, definition in PRODUCT_COLUMNS.items():
-                if name not in columns:
-                    conn.execute(text(f'ALTER TABLE products ADD COLUMN "{name}" {definition}'))
+            _add_columns(
+                conn,
+                "products",
+                {
+                    "category_source": "VARCHAR(30)",
+                    "category_confidence": "NUMERIC(5,4)",
+                    "category_reviewed": "BOOLEAN NOT NULL DEFAULT FALSE",
+                },
+            )
 
-            # The feedback table is additive and is needed by the classification
-            # learning workflow. Create it only when absent.
+            if "suppliers" in tables:
+                _add_columns(conn, "suppliers", {"ordering_rules": "JSON"})
+            if "orders" in tables:
+                _add_columns(
+                    conn,
+                    "orders",
+                    {
+                        "reminder_state": "VARCHAR(20)",
+                        "reminder_rules_snapshot": "JSON",
+                        "next_reminder_at": "TIMESTAMP",
+                    },
+                )
+                indexes = {i["name"] for i in inspect(conn).get_indexes("orders")}
+                if "ix_orders_next_reminder_at" not in indexes:
+                    conn.execute(
+                        text(
+                            'CREATE INDEX "ix_orders_next_reminder_at" '
+                            'ON "orders" ("next_reminder_at")'
+                        )
+                    )
+
             if "product_classification_feedback" not in tables:
                 conn.execute(
                     text(
@@ -77,9 +98,9 @@ def ensure_schema() -> None:
                 "ix_product_classification_feedback_product_id": ["product_id"],
                 "ix_product_classification_feedback_normalized_name": ["normalized_name"],
             }
-            for index_name, columns_for_index in index_specs.items():
+            for index_name, columns in index_specs.items():
                 if index_name not in indexes:
-                    quoted = ", ".join(f'"{c}"' for c in columns_for_index)
+                    quoted = ", ".join(f'"{column}"' for column in columns)
                     conn.execute(
                         text(
                             f'CREATE INDEX "{index_name}" '
