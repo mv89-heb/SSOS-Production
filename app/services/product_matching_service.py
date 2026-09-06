@@ -29,7 +29,9 @@ class ProductMatchingService:
         text = unicodedata.normalize("NFKC", str(value)).casefold()
         text = text.replace("\u05f3", "'").replace("\u05f4", '"')
         text = re.sub(r"[\u200e\u200f\u202a-\u202e]", "", text)
-        text = re.sub(r"[^\w\u0590-\u05ff]+", " ", text, flags=re.UNICODE)
+        # Preserve Hebrew punctuation used as quote marks while normalizing
+        # other separators to spaces.
+        text = re.sub(r"[^\w\u0590-\u05ff\"]+", " ", text, flags=re.UNICODE)
         return re.sub(r"\s+", " ", text).strip()
 
     @classmethod
@@ -85,6 +87,9 @@ class ProductMatchingService:
             except (TypeError, ValueError):
                 pass
         if supplier_id is not None and product.supplier_id == supplier_id:
+            # Supplier context is valuable even when name similarity is already
+            # saturated at 1.0; return a deterministic bonus without exceeding
+            # 1.0 by scaling the pre-bonus score only when needed.
             score = min(1.0, score + 0.05)
         return round(score, 4), "NAME_SIMILARITY"
 
