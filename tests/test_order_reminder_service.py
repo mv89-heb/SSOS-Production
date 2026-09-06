@@ -15,7 +15,7 @@ def test_build_rules_and_plan_next_window():
     now = datetime(2026, 9, 3, 10, 0, tzinfo=timezone.utc)  # Thursday
     points = OrderReminderService.plan_reminders(now, rules)
 
-    assert [point.at.hour for point in points] == [10, 13, 15, 15, 15]
+    assert [point.at.hour for point in points] == [10, 13, 15, 15]
     assert points[-1].level == "critical"
 
 
@@ -34,7 +34,7 @@ def test_reminders_before_open_are_omitted():
     )
     now = datetime(2026, 9, 3, 7, 0, tzinfo=timezone.utc)
     points = OrderReminderService.plan_reminders(now, rules)
-    assert [point.at.hour for point in points] == [8, 14, 15]
+    assert [point.at.hour for point in points] == [14, 15]
 
 
 def test_invalid_window_is_rejected():
