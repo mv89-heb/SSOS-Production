@@ -75,9 +75,24 @@ class GeminiProvider:
         return False
 
     @classmethod
+    def _merge_supplier_data(cls, current: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(current)
+        for key, value in incoming.items():
+            if value not in (None, "", {}):
+                merged[key] = value
+        return merged
+
+    @classmethod
     def _merge_page_results(cls, page_results: list[dict], page_count: int) -> dict:
-        merged: dict[str, Any] = {"items": [], "supplier_sections": [], "page_count": page_count, "pages_processed": 0, "extraction_mode": "pdf_page_by_page"}
+        merged: dict[str, Any] = {
+            "items": [],
+            "supplier_sections": [],
+            "page_count": page_count,
+            "pages_processed": 0,
+            "extraction_mode": "pdf_page_by_page",
+        }
         metadata_keys = ("document_type", "document_number", "document_date", "currency")
+        aggregate_supplier: dict[str, Any] = {}
         for page_number, result in enumerate(page_results, start=1):
             if not isinstance(result, dict):
                 continue
@@ -86,18 +101,27 @@ class GeminiProvider:
                 value = result.get(key)
                 if value not in (None, "", {}):
                     merged[key] = value
+            legacy_supplier = result.get("supplier") if isinstance(result.get("supplier"), dict) else {}
+            aggregate_supplier = cls._merge_supplier_data(aggregate_supplier, legacy_supplier)
             raw_sections = result.get("supplier_sections")
             if not isinstance(raw_sections, list) or not raw_sections:
-                legacy_supplier = result.get("supplier") if isinstance(result.get("supplier"), dict) else {}
-                raw_sections = [{"supplier": legacy_supplier, "items": result.get("items") if isinstance(result.get("items"), list) else []}]
+                raw_sections = [{
+                    "supplier": legacy_supplier,
+                    "items": result.get("items") if isinstance(result.get("items"), list) else [],
+                }]
             for raw_section in raw_sections:
                 if not isinstance(raw_section, dict):
                     continue
                 supplier = raw_section.get("supplier") if isinstance(raw_section.get("supplier"), dict) else {}
-                target = next((section for section in merged["supplier_sections"] if cls._same_supplier(section, {"supplier": supplier})), None)
+                target = next(
+                    (section for section in merged["supplier_sections"] if cls._same_supplier(section, {"supplier": supplier})),
+                    None,
+                )
                 if target is None:
                     target = {"supplier": dict(supplier), "items": [], "page_numbers": []}
                     merged["supplier_sections"].append(target)
+                else:
+                    target["supplier"] = cls._merge_supplier_data(target.get("supplier", {}), supplier)
                 if page_number not in target["page_numbers"]:
                     target["page_numbers"].append(page_number)
                 items = raw_section.get("items") if isinstance(raw_section.get("items"), list) else []
@@ -106,12 +130,18 @@ class GeminiProvider:
                         continue
                     normalized = dict(item)
                     normalized["page_number"] = page_number
-                    normalized["supplier_context"] = dict(supplier)
+                    if supplier:
+                        normalized["supplier_context"] = dict(supplier)
                     target["items"].append(normalized)
                     merged["items"].append(normalized)
         merged["supplier_sections"] = [section for section in merged["supplier_sections"] if section.get("items") or section.get("supplier")]
         if len(merged["supplier_sections"]) == 1:
-            merged["supplier"] = merged["supplier_sections"][0].get("supplier") or {}
+            merged["supplier"] = cls._merge_supplier_data(
+                aggregate_supplier,
+                merged["supplier_sections"][0].get("supplier") or {},
+            )
+        elif aggregate_supplier:
+            merged["supplier"] = aggregate_supplier
         return merged
 
     def _generate_structured_page(self, page_bytes: bytes, page_number: int, page_count: int, schema: dict, system_instruction: str | None) -> dict:
