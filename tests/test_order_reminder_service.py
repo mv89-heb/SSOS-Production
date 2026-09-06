@@ -38,11 +38,11 @@ def test_reminders_before_open_are_omitted():
     rules = OrderReminderService.build_rules(
         order_days=[3], opens_at="08:00", closes_at="16:00", remind_minutes_before_close=[600, 120, 30]
     )
-    now = datetime(2026, 9, 2, 7, 0, tzinfo=timezone.utc)  # Wednesday
+    now = datetime(2026, 9, 2, 7, 0, tzinfo=timezone.utc)  # Wednesday; Thursday is the order day
     points = OrderReminderService.plan_reminders(now, rules)
     assert [point.at for point in points] == [
-        datetime(2026, 9, 2, 14, 0, tzinfo=timezone.utc),
-        datetime(2026, 9, 2, 15, 30, tzinfo=timezone.utc),
+        datetime(2026, 9, 3, 14, 0, tzinfo=timezone.utc),
+        datetime(2026, 9, 3, 15, 30, tzinfo=timezone.utc),
     ]
 
 
