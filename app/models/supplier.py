@@ -15,6 +15,7 @@ class Supplier(db.Model):
     customer_number = db.Column(db.String(100))
     delivery_days = db.Column(db.String(100))
     order_days = db.Column(db.String(100))
+    ordering_rules = db.Column(db.JSON, nullable=True)
     active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -35,6 +36,7 @@ class Supplier(db.Model):
             "customer_number": self.customer_number,
             "delivery_days": self.delivery_days,
             "order_days": self.order_days,
+            "ordering_rules": self.ordering_rules or {},
             "active": self.active,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }

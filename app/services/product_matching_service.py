@@ -29,7 +29,7 @@ class ProductMatchingService:
         text = unicodedata.normalize("NFKC", str(value)).casefold()
         text = text.replace("\u05f3", "'").replace("\u05f4", '"')
         text = re.sub(r"[\u200e\u200f\u202a-\u202e]", "", text)
-        text = re.sub(r"[^\w\u0590-\u05ff]+", " ", text, flags=re.UNICODE)
+        text = re.sub(r"[^\w\u0590-\u05ff\"]+", " ", text, flags=re.UNICODE)
         return re.sub(r"\s+", " ", text).strip()
 
     @classmethod
@@ -125,8 +125,17 @@ class ProductMatchingService:
             score, method = self._candidate_score(extracted, product, supplier_id=supplier_id)
             if score >= 0.45:
                 scored.append((score, method, product))
-        scored.sort(key=lambda row: (-row[0], row[2].id))
-        suggestions = [{"product_id": product.id, "product_name": product.name, "supplier_id": product.supplier_id, "supplier_name": product.supplier.name if product.supplier else None, "confidence": round(score, 4), "method": method} for score, method, product in scored[: max(1, limit)]]
+        scored.sort(
+            key=lambda row: (
+                -(1 if supplier_id is not None and row[2].supplier_id == supplier_id else 0),
+                -row[0],
+                row[2].id,
+            )
+        )
+        suggestions = [
+            {"product_id": product.id, "product_name": product.name, "supplier_id": product.supplier_id, "supplier_name": product.supplier.name if product.supplier else None, "confidence": round(score, 4), "method": method}
+            for score, method, product in scored[: max(1, limit)]
+        ]
         best = suggestions[0] if suggestions else None
         if best is None:
             decision = "NO_MATCH"
