@@ -2,16 +2,17 @@
 
 The application model contains product classification metadata, but some
 production databases may have reached an application revision without the
-corresponding columns being present.  This migration is deliberately
+corresponding columns being present. This migration is deliberately
 idempotent so it can repair that drift without disturbing existing data.
 
-Revision ID: 20260812_product_classification_repair
+Revision ID: 20260812_prod_cls_repair
 Revises: 20260812_product_classification
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "20260812_product_classification_repair"
+# Keep Alembic revision identifiers within PostgreSQL's VARCHAR(32) limit.
+revision = "20260812_prod_cls_repair"
 down_revision = "20260812_product_classification"
 
 
@@ -32,12 +33,7 @@ def upgrade():
     if not _column_exists(bind, "products", "category_reviewed"):
         op.add_column(
             "products",
-            sa.Column(
-                "category_reviewed",
-                sa.Boolean(),
-                nullable=False,
-                server_default=sa.false(),
-            ),
+            sa.Column("category_reviewed", sa.Boolean(), nullable=False, server_default=sa.false()),
         )
 
     inspector = sa.inspect(bind)
@@ -59,10 +55,7 @@ def upgrade():
         )
 
     inspector = sa.inspect(bind)
-    indexes = {
-        index["name"]
-        for index in inspector.get_indexes("product_classification_feedback")
-    }
+    indexes = {index["name"] for index in inspector.get_indexes("product_classification_feedback")}
 
     if "ix_product_classification_feedback_tenant_id" not in indexes:
         op.create_index(
@@ -85,7 +78,5 @@ def upgrade():
 
 
 def downgrade():
-    # Do not remove repaired columns/table automatically.  This migration is
-    # a production repair layer; destructive rollback belongs to the original
-    # schema migration and must be explicit.
+    # This is a non-destructive production repair layer.
     pass
