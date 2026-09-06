@@ -32,8 +32,9 @@ def test_analyze_deletes_temporary_document(logged_in_client_a, db, monkeypatch)
             return True
 
         @staticmethod
-        def generate_structured_from_file(path, schema, system_instruction=None):
+        def generate_structured_from_file(path, schema, system_instruction=None, progress_callback=None):
             assert path
+            assert progress_callback is not None
             return SimpleNamespace(
                 success=True,
                 data={"document_type": "INVOICE", "items": [{"description": "Milk", "unit_price": 10}]},
