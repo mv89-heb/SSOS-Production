@@ -3,7 +3,7 @@ services:
   # Backend — Flask API (app/, wsgi.py)
   # -------------------------------------------------------------------
   - type: web
-    name: ssos-platform
+    name: ssos-backend
     env: python
     plan: starter
     pythonVersion: "3.11.9"
@@ -45,7 +45,7 @@ services:
           envVarKey: RENDER_EXTERNAL_URL
       - key: API_PUBLIC_URL
         fromService:
-          name: ssos-platform
+          name: ssos-backend
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: FRONTEND_PUBLIC_URL
@@ -79,17 +79,17 @@ services:
         value: wsgi.py
       - key: SECRET_KEY
         fromService:
-          name: ssos-platform
+          name: ssos-backend
           type: web
           envVarKey: SECRET_KEY
       - key: DATABASE_URL
         fromService:
-          name: ssos-platform
+          name: ssos-backend
           type: web
           envVarKey: DATABASE_URL
       - key: CORS_ORIGINS
         fromService:
-          name: ssos-platform
+          name: ssos-backend
           type: web
           envVarKey: CORS_ORIGINS
       - key: SESSION_COOKIE_SECURE
@@ -117,6 +117,6 @@ services:
         value: "22.22.2"
       - key: NEXT_PUBLIC_API_URL
         fromService:
-          name: ssos-platform
+          name: ssos-backend
           type: web
           envVarKey: RENDER_EXTERNAL_URL
