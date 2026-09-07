@@ -30,6 +30,12 @@ def _json_error(exc: HTTPException):
     return jsonify({"success": False, "error": exc.name.lower().replace(" ", "_"), "message": exc.description}), exc.code
 
 
+def _unexpected_error(message: str, exc: Exception):
+    current_app.logger.exception(message, exc_info=exc)
+    db.session.rollback()
+    return jsonify({"success": False, "error": "internal_server_error", "message": "אירעה שגיאה בהפעלת התזכורת. נסה שוב."}), 500
+
+
 def _get_owned_open_order(order_id: int):
     repo = OrderReminderRepository(tenant_id=current_user.tenant_id)
     order = repo.get_by_id_for_update(order_id)
@@ -46,8 +52,17 @@ def _get_supplier_rules(order: Order):
     return matching.ordering_rules if matching else None
 
 
+def _fallback_candidates(now: datetime):
+    tomorrow = now + timedelta(days=1)
+    day_after = now + timedelta(days=2)
+    return [
+        {"at": (now + timedelta(hours=1)).isoformat(), "label": "מעקב בעוד שעה", "level": "upcoming"},
+        {"at": tomorrow.replace(hour=9, minute=0, second=0, microsecond=0).isoformat(), "label": "מעקב מחר בבוקר", "level": "upcoming"},
+        {"at": day_after.replace(hour=9, minute=0, second=0, microsecond=0).isoformat(), "label": "מעקב בעוד יומיים", "level": "upcoming"},
+    ]
+
+
 def _sync_google_calendar(order: Order) -> str | None:
-    """Calendar is an integration, not a dependency of the reminder itself."""
     try:
         event_id = gcal.sync_order_event(order)
         if event_id:
@@ -105,51 +120,67 @@ def list_open_reminders():
 def reminder_configuration(order_id: int):
     try:
         order = _get_owned_open_order(order_id)
+        rules = _get_supplier_rules(order)
+        connection = gcal.get_connection(current_user.id, current_user.tenant_id)
+        return jsonify({"success": True, "has_supplier_rules": bool(rules), "supplier_name": order.supplier_name, "google_calendar_connected": bool(connection)})
     except HTTPException as exc:
         return _json_error(exc)
-    rules = _get_supplier_rules(order)
-    connection = gcal.get_connection(current_user.id, current_user.tenant_id)
-    return jsonify({"success": True, "has_supplier_rules": bool(rules), "supplier_name": order.supplier_name, "google_calendar_connected": bool(connection)})
+    except Exception as exc:
+        return _unexpected_error("Reminder configuration lookup failed", exc)
 
 
 @order_reminders_bp.route("/orders/<int:order_id>/activate", methods=["POST"])
 @login_required
 def activate_order_reminder(order_id: int):
-    repo = OrderReminderRepository(tenant_id=current_user.tenant_id)
-    order = repo.get_by_id_for_update(order_id)
-    if order is None or order.user_id != current_user.id:
-        return _json_error(NotFound("Order not found"))
-    if order.status in ("sent", "completed", "cancelled"):
-        return _json_error(BadRequest("Reminder cannot be activated for a closed order"))
+    try:
+        repo = OrderReminderRepository(tenant_id=current_user.tenant_id)
+        order = repo.get_by_id_for_update(order_id)
+        if order is None or order.user_id != current_user.id:
+            return _json_error(NotFound("Order not found"))
+        if order.status in ("sent", "completed", "cancelled"):
+            return _json_error(BadRequest("Reminder cannot be activated for a closed order"))
 
-    rules = _get_supplier_rules(order)
-    now = datetime.now(timezone.utc)
-    ai_reason = None
-    if rules:
-        points = OrderReminderService.plan_reminders(now, rules)
-        candidates = [{"at": point.at.isoformat(), "level": point.level, "label": point.label} for point in points]
-        chosen = ReminderAIService.choose_candidate(order, candidates, now)
-        chosen_at = chosen["at"] if chosen else (candidates[0]["at"] if candidates else None)
-        order.reminder_rules_snapshot = {"mode": "supplier_rules", "rules": rules, "ai_reason": chosen.get("reason") if chosen else None}
-        ai_reason = chosen.get("reason") if chosen else None
-        order.next_reminder_at = datetime.fromisoformat(chosen_at) if chosen_at else None
-        order.reminder_state = REMINDER_PENDING if chosen_at else REMINDER_COMPLETE
-    else:
-        fallback_candidates = [
-            {"at": (now + timedelta(hours=1)).isoformat(), "label": "מעקב בעוד שעה", "level": "due"},
-            {"at": (now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0).isoformat(), "label": "מעקב מחר בבוקר", "level": "upcoming"},
-            {"at": (now + timedelta(days=2)).replace(hour=9, minute=0, second=0, microsecond=0).isoformat(), "label": "מעקב בעוד יומיים", "level": "upcoming"},
-        ]
-        chosen = ReminderAIService.choose_candidate(order, fallback_candidates, now)
-        chosen_at = chosen["at"] if chosen else fallback_candidates[0]["at"]
-        ai_reason = chosen.get("reason") if chosen else "אין כללי ספק, ולכן נבחר מועד גיבוי בטוח."
-        order.reminder_rules_snapshot = {"mode": "manual_fallback", "note": "נוצרה תזכורת כי לספק אין ימי הזמנה/אספקה מוגדרים.", "ai_reason": ai_reason, "created_at": now.isoformat()}
-        order.next_reminder_at = datetime.fromisoformat(chosen_at)
+        rules = _get_supplier_rules(order)
+        now = datetime.now(timezone.utc)
+
+        if rules:
+            points = OrderReminderService.plan_reminders(now, rules)
+            candidates = [{"at": point.at.isoformat(), "level": point.level, "label": point.label} for point in points]
+            if candidates:
+                chosen = ReminderAIService.choose_candidate(order, candidates, now)
+                chosen_at = chosen["at"] if chosen else candidates[0]["at"]
+                ai_reason = chosen.get("reason") if chosen else "נבחר מועד המעקב הראשון לפי כללי הספק."
+                mode = "supplier_rules"
+                snapshot = {"mode": mode, "rules": rules, "ai_reason": ai_reason}
+            else:
+                candidates = _fallback_candidates(now)
+                chosen = ReminderAIService.choose_candidate(order, candidates, now)
+                chosen_at = chosen["at"] if chosen else candidates[0]["at"]
+                ai_reason = chosen.get("reason") if chosen else "כללי הספק לא יצרו מועד עתידי, ולכן נבחר מועד גיבוי."
+                snapshot = {"mode": "supplier_rules_fallback", "rules": rules, "ai_reason": ai_reason}
+        else:
+            candidates = _fallback_candidates(now)
+            chosen = ReminderAIService.choose_candidate(order, candidates, now)
+            chosen_at = chosen["at"] if chosen else candidates[0]["at"]
+            ai_reason = chosen.get("reason") if chosen else "אין כללי ספק, ולכן נבחר מועד גיבוי בטוח."
+            snapshot = {"mode": "manual_fallback", "note": "נוצרה תזכורת כי לספק אין ימי הזמנה/אספקה מוגדרים.", "ai_reason": ai_reason, "created_at": now.isoformat()}
+
+        next_at = datetime.fromisoformat(chosen_at)
+        if next_at.tzinfo is None:
+            next_at = next_at.replace(tzinfo=timezone.utc)
+        order.reminder_rules_snapshot = snapshot
+        order.next_reminder_at = next_at.astimezone(timezone.utc)
         order.reminder_state = REMINDER_PENDING
+        db.session.commit()
 
-    db.session.commit()
-    calendar_event_id = _sync_google_calendar(order)
-    return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id, "ai_reason": ai_reason})
+        calendar_event_id = _sync_google_calendar(order)
+        return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id, "ai_reason": ai_reason})
+    except HTTPException as exc:
+        return _json_error(exc)
+    except (TypeError, ValueError, KeyError) as exc:
+        return _unexpected_error("Reminder activation data processing failed", exc)
+    except Exception as exc:
+        return _unexpected_error("Reminder activation failed", exc)
 
 
 @order_reminders_bp.route("/orders/<int:order_id>/manual", methods=["POST"])
@@ -174,12 +205,15 @@ def create_manual_order_reminder(order_id: int):
         return _json_error(BadRequest(f"Invalid reminder date: {exc}"))
     except HTTPException as exc:
         return _json_error(exc)
-    order.reminder_rules_snapshot = {"mode": "manual", "note": note, "created_at": datetime.now(timezone.utc).isoformat()}
-    order.next_reminder_at = reminder_at
-    order.reminder_state = REMINDER_PENDING
-    db.session.commit()
-    calendar_event_id = _sync_google_calendar(order)
-    return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id})
+    try:
+        order.reminder_rules_snapshot = {"mode": "manual", "note": note, "created_at": datetime.now(timezone.utc).isoformat()}
+        order.next_reminder_at = reminder_at
+        order.reminder_state = REMINDER_PENDING
+        db.session.commit()
+        calendar_event_id = _sync_google_calendar(order)
+        return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id})
+    except Exception as exc:
+        return _unexpected_error("Manual reminder creation failed", exc)
 
 
 @order_reminders_bp.route("/orders/<int:order_id>/complete", methods=["POST"])
@@ -191,12 +225,12 @@ def complete_order_reminder(order_id: int):
         return _json_error(exc)
     try:
         gcal.delete_order_event(order)
-    except Exception:
-        current_app.logger.exception("Google Calendar reminder delete failed")
-    order.reminder_state = REMINDER_COMPLETE
-    order.next_reminder_at = None
-    db.session.commit()
-    return jsonify({"success": True, "order": order.to_dict()})
+        order.reminder_state = REMINDER_COMPLETE
+        order.next_reminder_at = None
+        db.session.commit()
+        return jsonify({"success": True, "order": order.to_dict()})
+    except Exception as exc:
+        return _unexpected_error("Completing reminder failed", exc)
 
 
 @order_reminders_bp.route("/orders/<int:order_id>/snooze", methods=["POST"])
@@ -212,12 +246,14 @@ def snooze_order_reminder(order_id: int):
         return _json_error(BadRequest("minutes must be an integer"))
     except HTTPException as exc:
         return _json_error(exc)
-
-    base = order.next_reminder_at or datetime.now(timezone.utc)
-    if base.tzinfo is None:
-        base = base.replace(tzinfo=timezone.utc)
-    order.next_reminder_at = max(base, datetime.now(timezone.utc)) + timedelta(minutes=minutes)
-    order.reminder_state = REMINDER_PENDING
-    db.session.commit()
-    calendar_event_id = _sync_google_calendar(order)
-    return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id})
+    try:
+        base = order.next_reminder_at or datetime.now(timezone.utc)
+        if base.tzinfo is None:
+            base = base.replace(tzinfo=timezone.utc)
+        order.next_reminder_at = max(base, datetime.now(timezone.utc)) + timedelta(minutes=minutes)
+        order.reminder_state = REMINDER_PENDING
+        db.session.commit()
+        calendar_event_id = _sync_google_calendar(order)
+        return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id})
+    except Exception as exc:
+        return _unexpected_error("Snoozing reminder failed", exc)
