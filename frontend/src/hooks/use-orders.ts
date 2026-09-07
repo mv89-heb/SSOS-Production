@@ -44,6 +44,18 @@ export function useUpdateDraftOrder(id: number) {
   });
 }
 
+export function useDeleteOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => orderService.deleteOrder(id),
+    onSuccess: (_, id) => {
+      queryClient.removeQueries({ queryKey: orderKey(id) });
+      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["order-reminders"] });
+    },
+  });
+}
+
 export function useSubmitOrder(id: number) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -77,9 +89,6 @@ export function useRejectOrder(id: number) {
   });
 }
 
-// Not explicitly requested, but required for the manual test flow in Step 5
-// (Approve -> Complete): the backend only allows mark_completed from
-// `sent`, so a "Complete" action needs this transition first. See summary.
 export function useMarkSentOrder(id: number) {
   const queryClient = useQueryClient();
   return useMutation({

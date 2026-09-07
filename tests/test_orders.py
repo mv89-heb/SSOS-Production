@@ -168,12 +168,13 @@ def test_delete_draft_order_succeeds(logged_in_client_a, make_order):
     assert logged_in_client_a.get(f"/api/orders/{order_id}").status_code == 404
 
 
-def test_delete_submitted_order_blocked(logged_in_client_a, make_order):
+def test_delete_submitted_order_succeeds_for_admin(logged_in_client_a, make_order):
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
     logged_in_client_a.post(f"/api/orders/{order_id}/submit")
     deleted = logged_in_client_a.delete(f"/api/orders/{order_id}")
-    assert deleted.status_code == 409
+    assert deleted.status_code == 200
+    assert logged_in_client_a.get(f"/api/orders/{order_id}").status_code == 404
 
 
 def test_order_with_unknown_product_404(logged_in_client_a):
