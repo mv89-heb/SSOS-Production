@@ -35,13 +35,7 @@ def create_app(config_name=None):
 
 
 def _ensure_document_analysis_table(app, config_class):
-    """Create the document-analysis table if production DB migrations missed it.
-
-    Alembic remains the canonical schema manager. This narrowly scoped startup
-    guard is intentionally idempotent and only creates the table when it is
-    absent, preventing an existing production database from failing uploads
-    because a deployment did not execute the corresponding migration.
-    """
+    """Create the document-analysis table if production DB migrations missed it."""
     if config_class.__name__ != "ProductionConfig":
         return
 
@@ -111,6 +105,7 @@ def _register_blueprints(app):
     from app.routes.price_intelligence import price_intelligence_bp
     from app.routes.document_intelligence import document_intelligence_bp
     from app.routes.order_reminders import order_reminders_bp
+    from app.routes.google_calendar import google_calendar_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
@@ -126,6 +121,7 @@ def _register_blueprints(app):
     app.register_blueprint(price_intelligence_bp)
     app.register_blueprint(document_intelligence_bp)
     app.register_blueprint(order_reminders_bp)
+    app.register_blueprint(google_calendar_bp)
     csrf.exempt(health_bp)
 
 
