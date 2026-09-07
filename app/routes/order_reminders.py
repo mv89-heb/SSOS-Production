@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
@@ -32,6 +32,16 @@ def _json_error(exc: HTTPException):
         "error": exc.name.lower().replace(" ", "_"),
         "message": exc.description,
     }), exc.code
+
+
+def _get_owned_open_order(order_id: int):
+    repo = OrderReminderRepository(tenant_id=current_user.tenant_id)
+    order = repo.get_by_id_for_update(order_id)
+    if order is None or order.user_id != current_user.id:
+        raise NotFound("Order not found")
+    if order.status in ("sent", "completed", "cancelled"):
+        raise BadRequest("Reminder cannot be changed for a closed order")
+    return order
 
 
 @order_reminders_bp.route("/suppliers/<int:supplier_id>", methods=["POST"])
@@ -117,8 +127,8 @@ def activate_order_reminder(order_id: int):
         return _json_error(NotFound("Order not found"))
     if order.status in ("sent", "completed", "cancelled"):
         return _json_error(BadRequest("Reminder cannot be activated for a closed order"))
-    supplier = SupplierRepository(tenant_id=current_user.tenant_id).get_all_for_matching()
-    matching = next((item for item in supplier if item.name == order.supplier_name), None)
+    suppliers = SupplierRepository(tenant_id=current_user.tenant_id).get_all_for_matching()
+    matching = next((item for item in suppliers if item.name == order.supplier_name), None)
     if matching is None or not matching.ordering_rules:
         return _json_error(BadRequest("Supplier has no ordering rules configured"))
 
@@ -127,5 +137,43 @@ def activate_order_reminder(order_id: int):
     order.reminder_rules_snapshot = matching.ordering_rules
     order.next_reminder_at = points[0].at if points else None
     order.reminder_state = REMINDER_PENDING if points else REMINDER_COMPLETE
+    db.session.commit()
+    return jsonify({"success": True, "order": order.to_dict()})
+
+
+@order_reminders_bp.route("/orders/<int:order_id>/complete", methods=["POST"])
+@login_required
+def complete_order_reminder(order_id: int):
+    """Dismiss the current follow-up reminder without changing order status."""
+    try:
+        order = _get_owned_open_order(order_id)
+    except HTTPException as exc:
+        return _json_error(exc)
+    order.reminder_state = REMINDER_COMPLETE
+    order.next_reminder_at = None
+    db.session.commit()
+    return jsonify({"success": True, "order": order.to_dict()})
+
+
+@order_reminders_bp.route("/orders/<int:order_id>/snooze", methods=["POST"])
+@login_required
+def snooze_order_reminder(order_id: int):
+    """Move the current reminder forward by a caller-selected number of minutes."""
+    try:
+        order = _get_owned_open_order(order_id)
+        data = request.get_json(silent=True) or {}
+        minutes = int(data.get("minutes", 60))
+        if minutes < 5 or minutes > 10080:
+            raise BadRequest("minutes must be between 5 and 10080")
+    except (ValueError, TypeError):
+        return _json_error(BadRequest("minutes must be an integer"))
+    except HTTPException as exc:
+        return _json_error(exc)
+
+    base = order.next_reminder_at or datetime.now(timezone.utc)
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=timezone.utc)
+    order.next_reminder_at = max(base, datetime.now(timezone.utc)) + timedelta(minutes=minutes)
+    order.reminder_state = REMINDER_PENDING
     db.session.commit()
     return jsonify({"success": True, "order": order.to_dict()})
