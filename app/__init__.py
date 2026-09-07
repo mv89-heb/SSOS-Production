@@ -35,12 +35,9 @@ def create_app(config_name=None):
 
 
 def _ensure_document_analysis_table(app, config_class):
-    """Create the document-analysis table if production DB migrations missed it."""
     if config_class.__name__ != "ProductionConfig":
         return
-
     from app.models.document_analysis import DocumentAnalysis
-
     try:
         with app.app_context():
             DocumentAnalysis.__table__.create(bind=db.engine, checkfirst=True)
@@ -50,7 +47,6 @@ def _ensure_document_analysis_table(app, config_class):
 
 
 def _install_import_analysis_patches():
-    """Install small compatibility enrichments before import routes are loaded."""
     from app.services.import_supplier_detection import install_supplier_detection_patch
     from app.services.import_validation_integrity import install_import_validation_integrity_patch
     install_supplier_detection_patch()
@@ -106,6 +102,7 @@ def _register_blueprints(app):
     from app.routes.document_intelligence import document_intelligence_bp
     from app.routes.order_reminders import order_reminders_bp
     from app.routes.google_calendar import google_calendar_bp
+    from app.routes.web_push import web_push_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
@@ -122,6 +119,7 @@ def _register_blueprints(app):
     app.register_blueprint(document_intelligence_bp)
     app.register_blueprint(order_reminders_bp)
     app.register_blueprint(google_calendar_bp)
+    app.register_blueprint(web_push_bp)
     csrf.exempt(health_bp)
 
 
