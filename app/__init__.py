@@ -103,6 +103,7 @@ def _register_blueprints(app):
     from app.routes.order_reminders import order_reminders_bp
     from app.routes.google_calendar import google_calendar_bp
     from app.routes.web_push import web_push_bp
+    from app.routes.reminder_advanced import reminder_advanced_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
@@ -120,7 +121,9 @@ def _register_blueprints(app):
     app.register_blueprint(order_reminders_bp)
     app.register_blueprint(google_calendar_bp)
     app.register_blueprint(web_push_bp)
+    app.register_blueprint(reminder_advanced_bp)
     csrf.exempt(health_bp)
+    csrf.exempt(web_push_bp)
 
 
 def _register_error_handlers(app):
