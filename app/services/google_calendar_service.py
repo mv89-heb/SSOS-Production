@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import secrets
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -107,31 +108,12 @@ def _http_json(url: str, *, method: str = "GET", data: dict | None = None, heade
 def exchange_code(code: str) -> dict:
     if not is_configured():
         raise RuntimeError("Google Calendar OAuth is not configured")
-    return _http_json(
-        GOOGLE_TOKEN_URL,
-        method="POST",
-        data={
-            "code": code,
-            "client_id": _client_id(),
-            "client_secret": _client_secret(),
-            "redirect_uri": redirect_uri(),
-            "grant_type": "authorization_code",
-        },
-    )
+    return _http_json(GOOGLE_TOKEN_URL, method="POST", data={"code": code, "client_id": _client_id(), "client_secret": _client_secret(), "redirect_uri": redirect_uri(), "grant_type": "authorization_code"})
 
 
 def _access_token(connection: GoogleCalendarConnection) -> str:
     refresh_token = _decrypt(connection.refresh_token_encrypted)
-    token = _http_json(
-        GOOGLE_TOKEN_URL,
-        method="POST",
-        data={
-            "client_id": _client_id(),
-            "client_secret": _client_secret(),
-            "refresh_token": refresh_token,
-            "grant_type": "refresh_token",
-        },
-    )
+    token = _http_json(GOOGLE_TOKEN_URL, method="POST", data={"client_id": _client_id(), "client_secret": _client_secret(), "refresh_token": refresh_token, "grant_type": "refresh_token"})
     access_token = token.get("access_token")
     if not access_token:
         raise RuntimeError("Google did not return an access token")
@@ -140,12 +122,8 @@ def _access_token(connection: GoogleCalendarConnection) -> str:
 
 def _api(connection: GoogleCalendarConnection, path: str, *, method: str = "GET", payload: dict | None = None) -> dict:
     token = _access_token(connection)
-    url = CALENDAR_API + path
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    body = None
-    if payload is not None:
-        body = json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(url, data=body, headers=headers, method=method)
+    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    request = urllib.request.Request(CALENDAR_API + path, data=body, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, method=method)
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             raw = response.read().decode("utf-8")
@@ -201,33 +179,19 @@ def delete_connection(user_id: int, tenant_id: int) -> None:
 
 
 def _localize(value: datetime) -> datetime:
-    tz_name = current_app.config.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem")
-    target = ZoneInfo(tz_name)
+    target = ZoneInfo(current_app.config.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem"))
     aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
     return aware.astimezone(target)
 
 
 def event_payload(order, *, frontend_url: str | None = None) -> dict:
-    reminder_at = order.next_reminder_at
-    if not reminder_at:
+    if not order.next_reminder_at:
         raise ValueError("Order has no scheduled reminder")
-    start = _localize(reminder_at)
+    start = _localize(order.next_reminder_at)
     end = start + timedelta(minutes=30)
     url = (frontend_url or current_app.config.get("FRONTEND_PUBLIC_URL", "")).rstrip("/") + f"/dashboard/orders/{order.id}"
-    description = (
-        f"מעקב הזמנה {order.order_number}\n"
-        f"ספק: {order.supplier_name}\n\n"
-        "נוצר אוטומטית מ-SSOS.\n"
-        + (f"פתיחת ההזמנה: {url}" if url else "")
-    )
-    return {
-        "summary": f"מעקב הזמנה {order.order_number} – {order.supplier_name}",
-        "description": description,
-        "start": {"dateTime": start.isoformat(), "timeZone": current_app.config.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem")},
-        "end": {"dateTime": end.isoformat(), "timeZone": current_app.config.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem")},
-        "visibility": "private",
-        "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 10}]},
-    }
+    description = f"מעקב הזמנה {order.order_number}\nספק: {order.supplier_name}\n\nנוצר אוטומטית מ-SSOS.\n" + (f"פתיחת ההזמנה: {url}" if url else "")
+    return {"summary": f"מעקב הזמנה {order.order_number} – {order.supplier_name}", "description": description, "start": {"dateTime": start.isoformat(), "timeZone": current_app.config.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem")}, "end": {"dateTime": end.isoformat(), "timeZone": current_app.config.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem")}, "visibility": "private", "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 10}]}}
 
 
 def sync_order_event(order, *, frontend_url: str | None = None) -> str | None:
