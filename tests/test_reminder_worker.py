@@ -1,6 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
 
+def _aware(value):
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
 def test_due_reminder_worker_repeats_until_completed(app, db, make_order, logged_in_client_a, monkeypatch):
     from app.models.notification import Notification, STATUS_UNREAD
     from app.models.order import Order, REMINDER_PENDING, REMINDER_COMPLETE
@@ -21,8 +25,8 @@ def test_due_reminder_worker_repeats_until_completed(app, db, make_order, logged
 
     order = db.session.get(Order, order_id)
     assert order.reminder_state == REMINDER_PENDING
-    assert order.next_reminder_at > datetime.now(timezone.utc)
-    first_next = order.next_reminder_at
+    assert _aware(order.next_reminder_at) > datetime.now(timezone.utc)
+    first_next = _aware(order.next_reminder_at)
 
     notifications = db.session.query(Notification).filter_by(
         tenant_id=order.tenant_id,
@@ -39,7 +43,7 @@ def test_due_reminder_worker_repeats_until_completed(app, db, make_order, logged
 
     order = db.session.get(Order, order_id)
     assert order.reminder_state == REMINDER_PENDING
-    assert order.next_reminder_at > first_next
+    assert _aware(order.next_reminder_at) > first_next
 
     reminder_notifications = [
         item for item in db.session.query(Notification).filter_by(
