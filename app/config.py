@@ -63,6 +63,10 @@ class BaseConfig:
     API_PUBLIC_URL = os.environ.get("API_PUBLIC_URL", "").strip()
     FRONTEND_PUBLIC_URL = os.environ.get("FRONTEND_PUBLIC_URL", "").strip()
 
+    WEB_PUSH_VAPID_PUBLIC_KEY = os.environ.get("WEB_PUSH_VAPID_PUBLIC_KEY", "").strip()
+    WEB_PUSH_VAPID_PRIVATE_KEY = os.environ.get("WEB_PUSH_VAPID_PRIVATE_KEY", "").strip()
+    WEB_PUSH_VAPID_CLAIMS_EMAIL = os.environ.get("WEB_PUSH_VAPID_CLAIMS_EMAIL", "mailto:admin@example.com").strip()
+
     @staticmethod
     def init_app(app):
         pass
@@ -105,6 +109,9 @@ class ProductionConfig(BaseConfig):
         app.config["GOOGLE_CALENDAR_TIMEZONE"] = os.environ.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem").strip()
         app.config["API_PUBLIC_URL"] = os.environ.get("API_PUBLIC_URL", "").strip()
         app.config["FRONTEND_PUBLIC_URL"] = os.environ.get("FRONTEND_PUBLIC_URL", "").strip()
+        app.config["WEB_PUSH_VAPID_PUBLIC_KEY"] = os.environ.get("WEB_PUSH_VAPID_PUBLIC_KEY", "").strip()
+        app.config["WEB_PUSH_VAPID_PRIVATE_KEY"] = os.environ.get("WEB_PUSH_VAPID_PRIVATE_KEY", "").strip()
+        app.config["WEB_PUSH_VAPID_CLAIMS_EMAIL"] = os.environ.get("WEB_PUSH_VAPID_CLAIMS_EMAIL", "mailto:admin@example.com").strip()
 
 
 class DevelopmentConfig(BaseConfig):
