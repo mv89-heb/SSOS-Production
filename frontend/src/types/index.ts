@@ -5,8 +5,9 @@ export interface AuthResponse { success: boolean; user: User; }
 export type RegisterPayload = { email: string; password: string; full_name: string; tenant_name: string } | { email: string; password: string; full_name: string; tenant_slug: string };
 export interface RegisterResponse { success: boolean; user: User; tenant: Tenant; }
 export type OrderStatus = "draft" | "submitted" | "approved" | "sent" | "completed" | "cancelled";
+export type ReminderState = "pending" | "due" | "critical" | "complete";
 export interface OrderItem { product_id: number; product_name: string; sku: string; quantity: number; unit_price: number; total_price: number; }
-export interface Order { id: number; tenant_id: number; user_id: number; order_number: string; supplier_name: string; supplier_contact: string | null; supplier_email: string | null; status: OrderStatus; subtotal: number; discount_total: number; tax_total: number; final_total: number; currency: string; items: OrderItem[]; snapshot: unknown | null; snapshot_taken_at: string | null; notes: string | null; created_at: string; updated_at: string; }
+export interface Order { id: number; tenant_id: number; user_id: number; order_number: string; supplier_name: string; supplier_contact: string | null; supplier_email: string | null; status: OrderStatus; reminder_state: ReminderState; reminder_rules_snapshot: Record<string, unknown> | null; next_reminder_at: string | null; subtotal: number; discount_total: number; tax_total: number; final_total: number; currency: string; items: OrderItem[]; snapshot: unknown | null; snapshot_taken_at: string | null; notes: string | null; created_at: string; updated_at: string; }
 export interface CreateOrderItemInput { product_id: number; quantity: number; }
 export interface CreateOrderInput { supplier_id: number; currency?: string; notes?: string; items: CreateOrderItemInput[]; }
 export interface Supplier { id: number; tenant_id: number; name: string; contact_name: string | null; email: string | null; phone: string | null; phone2?: string | null; customer_number?: string | null; delivery_days?: string | null; order_days?: string | null; active: boolean; created_at: string; }

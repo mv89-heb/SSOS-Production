@@ -1,0 +1,1 @@
+Reminders UI is currently linked to orders exposing next_reminder_at.
