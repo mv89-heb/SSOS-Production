@@ -18,6 +18,8 @@ from app.models.user import ROLE_MANAGER, User
 from app.services.audit_service import AuditService
 from app.services.web_push_service import send_to_user
 
+DEFAULT_NAG_MINUTES = 60
+
 
 def _utc(value):
     if value is None:
@@ -74,7 +76,7 @@ def process_due_reminders() -> int:
     processed = 0
     for order in due_orders:
         rules = order.reminder_rules_snapshot or {}
-        recurrence = rules.get("recurrence") or {}
+        recurrence = rules.get("recurrence")
         escalation = rules.get("escalation") or {}
         occurrences = int(rules.get("occurrences", 0)) + 1
         rules["occurrences"] = occurrences
@@ -82,6 +84,12 @@ def process_due_reminders() -> int:
         action_url = order.google_calendar_event_url or _dashboard_url(order)
         title = f"תזכורת להזמנה {order.order_number}"
         message = f"הגיע מועד המעקב אחר ההזמנה מול {order.supplier_name}."
+
+        # All reminders are persistent by default: if no explicit recurrence
+        # policy exists, keep nudging every hour until the user marks it done.
+        if recurrence is None:
+            recurrence = {"every_minutes": DEFAULT_NAG_MINUTES, "max_occurrences": 0}
+            rules["recurrence"] = recurrence
         order.reminder_rules_snapshot = rules
 
         repeat_minutes = int(recurrence.get("every_minutes", 0) or 0)
