@@ -194,7 +194,15 @@ def event_payload(order, *, frontend_url: str | None = None) -> dict:
     end = start + timedelta(minutes=30)
     url = (frontend_url or current_app.config.get("FRONTEND_PUBLIC_URL", "")).rstrip("/") + f"/dashboard/orders/{order.id}"
     description = f"מעקב הזמנה {order.order_number}\nספק: {order.supplier_name}\n\nנוצר אוטומטית מ-SSOS.\n" + (f"פתיחת ההזמנה: {url}" if url else "")
-    return {"summary": f"מעקב הזמנה {order.order_number} – {order.supplier_name}", "description": description, "start": {"dateTime": start.isoformat(), "timeZone": current_app.config.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem")}, "end": {"dateTime": end.isoformat(), "timeZone": current_app.config.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem")}, "visibility": "private", "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 10}]}}
+    return {"summary": f"מעקב הזמנה {order.order_number} – {order.supplier_name}", "description": description, "start": {"dateTime": start.isoformat(), "timeZone": current_app.config.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem")}, "end": {"dateTime": end.isoformat(), "timeZone": current_app.config.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem")}, "visibility": "private", "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 10}]}, "extendedProperties": {"private": {"ssos_order_id": str(order.id)}}}
+
+
+def _find_existing_order_event(connection: GoogleCalendarConnection, order_id: int) -> str | None:
+    property_filter = urllib.parse.quote(f"ssos_order_id={order_id}", safe="")
+    calendar_id = urllib.parse.quote(connection.calendar_id, safe="")
+    result = _api(connection, f"/calendars/{calendar_id}/events?privateExtendedProperty={property_filter}&maxResults=10")
+    items = result.get("items", [])
+    return items[0].get("id") if items else None
 
 
 def sync_order_event(order, *, frontend_url: str | None = None) -> str | None:
@@ -209,6 +217,11 @@ def sync_order_event(order, *, frontend_url: str | None = None) -> str | None:
         except RuntimeError as exc:
             if "(404)" not in str(exc):
                 raise
+    existing_event_id = _find_existing_order_event(connection, order.id)
+    if existing_event_id:
+        _api(connection, f"/calendars/{urllib.parse.quote(connection.calendar_id, safe='')}/events/{urllib.parse.quote(existing_event_id, safe='')}", method="PUT", payload=payload)
+        order.google_calendar_event_id = existing_event_id
+        return existing_event_id
     result = _api(connection, f"/calendars/{urllib.parse.quote(connection.calendar_id, safe='')}/events", method="POST", payload=payload)
     event_id = result.get("id")
     order.google_calendar_event_id = event_id
