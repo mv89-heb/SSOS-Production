@@ -140,7 +140,7 @@ def reminder_configuration(order_id: int):
 @order_reminders_bp.route("/orders/<int:order_id>/activate", methods=["POST"])
 @login_required
 def activate_order_reminder(order_id: int):
-    """Snapshot supplier reminder rules onto an order and plan its next alert."""
+    """Activate automatic reminders, or create a safe one-off fallback when rules are absent."""
     repo = OrderReminderRepository(tenant_id=current_user.tenant_id)
     order = repo.get_by_id_for_update(order_id)
     if order is None:
@@ -149,15 +149,27 @@ def activate_order_reminder(order_id: int):
         return _json_error(NotFound("Order not found"))
     if order.status in ("sent", "completed", "cancelled"):
         return _json_error(BadRequest("Reminder cannot be activated for a closed order"))
-    rules = _get_supplier_rules(order)
-    if not rules:
-        return _json_error(BadRequest("Supplier has no ordering rules configured; use a manual reminder instead"))
 
+    rules = _get_supplier_rules(order)
     now = datetime.now(timezone.utc)
-    points = OrderReminderService.plan_reminders(now, rules)
-    order.reminder_rules_snapshot = rules
-    order.next_reminder_at = points[0].at if points else None
-    order.reminder_state = REMINDER_PENDING if points else REMINDER_COMPLETE
+    if rules:
+        points = OrderReminderService.plan_reminders(now, rules)
+        order.reminder_rules_snapshot = rules
+        order.next_reminder_at = points[0].at if points else None
+        order.reminder_state = REMINDER_PENDING if points else REMINDER_COMPLETE
+    else:
+        # No ordering/delivery calendar exists, so there is no honest automatic
+        # date to calculate. Keep the user's explicit activation useful by
+        # creating a one-off reminder one hour from now. It can then be snoozed,
+        # completed, or replaced by supplier rules later.
+        order.reminder_rules_snapshot = {
+            "mode": "manual_fallback",
+            "note": "נוצרה תזכורת חד-פעמית כי לספק אין ימי הזמנה/אספקה מוגדרים.",
+            "created_at": now.isoformat(),
+        }
+        order.next_reminder_at = now + timedelta(hours=1)
+        order.reminder_state = REMINDER_PENDING
+
     db.session.commit()
     return jsonify({"success": True, "order": order.to_dict()})
 
