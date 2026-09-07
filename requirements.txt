@@ -21,6 +21,9 @@ cryptography==46.0.1
 email-validator==2.1.1
 limits==5.8.0
 
+# Web Push
+pywebpush==2.1.0
+
 # API Documentation (Fixed)
 flasgger==0.9.7.1
 
