@@ -28,8 +28,30 @@ export function useOpenReminders() {
   });
 }
 
+export function useReminderConfiguration(orderId: number, enabled = true) {
+  return useQuery({
+    queryKey: ["order-reminder-configuration", orderId],
+    queryFn: () => reminderService.getConfiguration(orderId),
+    enabled,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useActivateOrderReminder() {
   return useReminderMutation(reminderService.activate);
+}
+
+export function useCreateManualOrderReminder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId, reminderAt, note }: { orderId: number; reminderAt: string; note: string }) =>
+      reminderService.createManual(orderId, reminderAt, note),
+    onSuccess: (order) => {
+      queryClient.setQueryData(orderKey(order.id), order);
+      queryClient.invalidateQueries({ queryKey: REMINDERS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+  });
 }
 
 export function useCompleteOrderReminder() {

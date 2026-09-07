@@ -44,6 +44,12 @@ def _get_owned_open_order(order_id: int):
     return order
 
 
+def _get_supplier_rules(order: Order):
+    suppliers = SupplierRepository(tenant_id=current_user.tenant_id).get_all_for_matching()
+    matching = next((item for item in suppliers if item.name == order.supplier_name), None)
+    return matching.ordering_rules if matching else None
+
+
 @order_reminders_bp.route("/suppliers/<int:supplier_id>", methods=["POST"])
 @login_required
 def set_supplier_rules(supplier_id: int):
@@ -115,10 +121,26 @@ def list_open_reminders():
     })
 
 
+@order_reminders_bp.route("/orders/<int:order_id>/configuration", methods=["GET"])
+@login_required
+def reminder_configuration(order_id: int):
+    """Return whether this order can use automatic supplier-based reminders."""
+    try:
+        order = _get_owned_open_order(order_id)
+    except HTTPException as exc:
+        return _json_error(exc)
+    rules = _get_supplier_rules(order)
+    return jsonify({
+        "success": True,
+        "has_supplier_rules": bool(rules),
+        "supplier_name": order.supplier_name,
+    })
+
+
 @order_reminders_bp.route("/orders/<int:order_id>/activate", methods=["POST"])
 @login_required
 def activate_order_reminder(order_id: int):
-    """Snapshot supplier reminder rules onto an order and plan its next alert."""
+    """Activate automatic reminders, or create a safe one-off fallback when rules are absent."""
     repo = OrderReminderRepository(tenant_id=current_user.tenant_id)
     order = repo.get_by_id_for_update(order_id)
     if order is None:
@@ -127,16 +149,62 @@ def activate_order_reminder(order_id: int):
         return _json_error(NotFound("Order not found"))
     if order.status in ("sent", "completed", "cancelled"):
         return _json_error(BadRequest("Reminder cannot be activated for a closed order"))
-    suppliers = SupplierRepository(tenant_id=current_user.tenant_id).get_all_for_matching()
-    matching = next((item for item in suppliers if item.name == order.supplier_name), None)
-    if matching is None or not matching.ordering_rules:
-        return _json_error(BadRequest("Supplier has no ordering rules configured"))
 
+    rules = _get_supplier_rules(order)
     now = datetime.now(timezone.utc)
-    points = OrderReminderService.plan_reminders(now, matching.ordering_rules)
-    order.reminder_rules_snapshot = matching.ordering_rules
-    order.next_reminder_at = points[0].at if points else None
-    order.reminder_state = REMINDER_PENDING if points else REMINDER_COMPLETE
+    if rules:
+        points = OrderReminderService.plan_reminders(now, rules)
+        order.reminder_rules_snapshot = rules
+        order.next_reminder_at = points[0].at if points else None
+        order.reminder_state = REMINDER_PENDING if points else REMINDER_COMPLETE
+    else:
+        # No ordering/delivery calendar exists, so there is no honest automatic
+        # date to calculate. Keep the user's explicit activation useful by
+        # creating a one-off reminder one hour from now. It can then be snoozed,
+        # completed, or replaced by supplier rules later.
+        order.reminder_rules_snapshot = {
+            "mode": "manual_fallback",
+            "note": "נוצרה תזכורת חד-פעמית כי לספק אין ימי הזמנה/אספקה מוגדרים.",
+            "created_at": now.isoformat(),
+        }
+        order.next_reminder_at = now + timedelta(hours=1)
+        order.reminder_state = REMINDER_PENDING
+
+    db.session.commit()
+    return jsonify({"success": True, "order": order.to_dict()})
+
+
+@order_reminders_bp.route("/orders/<int:order_id>/manual", methods=["POST"])
+@login_required
+def create_manual_order_reminder(order_id: int):
+    """Create a one-off reminder when supplier scheduling rules are unavailable."""
+    try:
+        order = _get_owned_open_order(order_id)
+        data = request.get_json(silent=True) or {}
+        raw_at = data.get("reminder_at")
+        if not raw_at or not isinstance(raw_at, str):
+            raise BadRequest("reminder_at is required")
+        reminder_at = datetime.fromisoformat(raw_at.replace("Z", "+00:00"))
+        if reminder_at.tzinfo is None:
+            reminder_at = reminder_at.replace(tzinfo=timezone.utc)
+        reminder_at = reminder_at.astimezone(timezone.utc)
+        if reminder_at <= datetime.now(timezone.utc):
+            raise BadRequest("reminder_at must be in the future")
+        note = str(data.get("note") or "").strip()
+        if len(note) > 500:
+            raise BadRequest("note must be 500 characters or fewer")
+    except (TypeError, ValueError) as exc:
+        return _json_error(BadRequest(f"Invalid reminder date: {exc}"))
+    except HTTPException as exc:
+        return _json_error(exc)
+
+    order.reminder_rules_snapshot = {
+        "mode": "manual",
+        "note": note,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    order.next_reminder_at = reminder_at
+    order.reminder_state = REMINDER_PENDING
     db.session.commit()
     return jsonify({"success": True, "order": order.to_dict()})
 
