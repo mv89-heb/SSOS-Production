@@ -25,7 +25,13 @@ class ReminderAIService:
             from google import genai
             from google.genai import types
 
-            client = genai.Client(api_key=current_app.config["GEMINI_API_KEY"])
+            client = genai.Client(
+                api_key=current_app.config["GEMINI_API_KEY"],
+                http_options=types.HttpOptions(
+                    timeout=10_000,
+                    retry_options=types.HttpRetryOptions(attempts=1),
+                ),
+            )
             payload = {
                 "order": {
                     "order_number": order.order_number,
