@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, LogOut, Menu, X, HelpCircle } from "lucide-react";
+import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, LogOut, Menu, X, HelpCircle, Bell } from "lucide-react";
 
 const ORGANIZATION_NAME = "ישיבת אוהבי ירושלים - ראשית";
 const ROLE_LABELS: Record<string, string> = { admin: "מנהל מערכת", manager: "מנהל", employee: "עובד" };
@@ -15,6 +15,7 @@ const NAVIGATION = [
   { name: "ניהול ספקים", href: "/dashboard/suppliers", icon: Users },
   { name: "קטלוג מוצרים", href: "/dashboard/catalog", icon: Package },
   { name: "הזמנות רכש", href: "/dashboard/orders", icon: ShoppingCart },
+  { name: "תזכורות", href: "/dashboard/reminders", icon: Bell },
   { name: "לוג ביקורת", href: "/dashboard/audit", icon: History },
   { name: "הגדרות מערכת", href: "/dashboard/settings", icon: Settings },
   { name: "מרכז עזרה", href: "/dashboard/help", icon: HelpCircle },
