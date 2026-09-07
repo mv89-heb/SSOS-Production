@@ -11,6 +11,8 @@ from app.extensions import db
 from app.models.notification import Notification
 from app.models.order import Order
 from app.services.audit_service import AuditService
+from app.services.google_calendar_link_service import get_event_html_link
+from app.services import google_calendar_service as gcal
 from app.services.web_push_service import public_key, remove_subscription, save_subscription, send_to_user
 
 web_push_bp = Blueprint("web_push", __name__, url_prefix="/api/push")
@@ -60,6 +62,12 @@ def reminder_change_push(response):
         ).scalar_one_or_none()
         if order is None or not order.next_reminder_at:
             return response
+
+        if not order.google_calendar_event_url and order.google_calendar_event_id:
+            connection = gcal.get_connection(current_user.id, current_user.tenant_id)
+            order.google_calendar_event_url = get_event_html_link(connection, order.google_calendar_event_id)
+            if order.google_calendar_event_url:
+                db.session.commit()
 
         notification_type = "reminder_created" if operation in ("activate", "manual") else "reminder_rescheduled"
         title = "התזכורת נוצרה" if notification_type == "reminder_created" else "התזכורת עודכנה"
