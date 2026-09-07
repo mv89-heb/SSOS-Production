@@ -63,8 +63,8 @@ export default function RemindersPage() {
                 </Link>
                 <div className="flex flex-wrap items-center gap-2 md:justify-end">
                   <span className={`text-xs font-extrabold ${isDue ? "text-amber-700 dark:text-amber-300" : "text-slate-600 dark:text-slate-300"}`}>{isDue ? "דורש טיפול" : "ממתין"}</span>
-                  <Button size="sm" variant="secondary" disabled={busy} onClick={() => snooze.mutate({ orderId: order.id, minutes: 60 })}>+ שעה</Button>
-                  <Button size="sm" disabled={busy} onClick={() => complete.mutate(order.id)}>טופל</Button>
+                  <Button variant="secondary" className="min-h-9 px-3 py-1.5 text-xs" disabled={busy} onClick={() => snooze.mutate({ orderId: order.id, minutes: 60 })}>+ שעה</Button>
+                  <Button className="min-h-9 px-3 py-1.5 text-xs" disabled={busy} onClick={() => complete.mutate(order.id)}>טופל</Button>
                   <Link href={`/dashboard/orders/${order.id}`} className="text-xs font-bold text-indigo-600 hover:underline">פתח הזמנה</Link>
                 </div>
               </div>;
