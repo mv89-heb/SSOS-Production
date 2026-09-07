@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
@@ -33,7 +34,8 @@ def _json_error(exc: HTTPException):
 def _unexpected_error(message: str, exc: Exception, stage: str | None = None):
     request_id = request.headers.get("Rndr-Id")
     current_app.logger.exception(
-        "Reminder activation error stage=%s order_id=%s request_id=%s",
+        "%s stage=%s order_id=%s request_id=%s",
+        message,
         stage or "unknown",
         request.view_args.get("order_id") if request.view_args else None,
         request_id or "unknown",
@@ -47,7 +49,6 @@ def _unexpected_error(message: str, exc: Exception, stage: str | None = None):
         "success": False,
         "error": "internal_server_error",
         "message": "אירעה שגיאה בהפעלת התזכורת. נסה שוב.",
-        "stage": stage or "unknown",
         "request_id": request_id,
     }), 500
 
@@ -64,30 +65,59 @@ def _get_owned_open_order(order_id: int):
 
 def _get_supplier_rules(order: Order):
     suppliers = SupplierRepository(tenant_id=current_user.tenant_id).get_all_for_matching()
-    matching = next((item for item in suppliers if item.name == order.supplier_name), None)
+    target = (order.supplier_name or "").strip().casefold()
+    matching = next((item for item in suppliers if (item.name or "").strip().casefold() == target), None)
     return matching.ordering_rules if matching else None
 
 
 def _fallback_candidates(now: datetime):
-    tomorrow = now + timedelta(days=1)
-    day_after = now + timedelta(days=2)
+    timezone_name = current_app.config.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem")
+    try:
+        local_zone = ZoneInfo(timezone_name)
+    except Exception:
+        local_zone = timezone.utc
+    local_now = (now if now.tzinfo else now.replace(tzinfo=timezone.utc)).astimezone(local_zone)
+    tomorrow = local_now + timedelta(days=1)
+    day_after = local_now + timedelta(days=2)
     return [
-        {"at": (now + timedelta(hours=1)).isoformat(), "label": "מעקב בעוד שעה", "level": "upcoming"},
+        {"at": (local_now + timedelta(hours=1)).isoformat(), "label": "מעקב בעוד שעה", "level": "upcoming"},
         {"at": tomorrow.replace(hour=9, minute=0, second=0, microsecond=0).isoformat(), "label": "מעקב מחר בבוקר", "level": "upcoming"},
         {"at": day_after.replace(hour=9, minute=0, second=0, microsecond=0).isoformat(), "label": "מעקב בעוד יומיים", "level": "upcoming"},
     ]
 
 
+def _refresh_order_after_calendar_failure(order: Order):
+    try:
+        db.session.refresh(order)
+    except Exception:
+        current_app.logger.exception("Failed to refresh order after calendar failure")
+
+
 def _sync_google_calendar(order: Order) -> str | None:
+    """Sync Calendar without ever rolling back the already-persisted reminder."""
     try:
         event_id = gcal.sync_order_event(order)
         if event_id:
             db.session.commit()
         return event_id
     except Exception:
-        current_app.logger.exception("Google Calendar reminder sync failed")
+        current_app.logger.exception("Google Calendar reminder sync failed; reminder remains persisted")
         db.session.rollback()
+        _refresh_order_after_calendar_failure(order)
         return None
+
+
+def _delete_google_calendar_event(order: Order) -> bool:
+    """Delete a Calendar event best-effort; reminder completion must not depend on Google."""
+    try:
+        gcal.delete_order_event(order)
+        db.session.commit()
+        return True
+    except Exception:
+        current_app.logger.exception("Google Calendar reminder deletion failed; reminder completion remains persisted")
+        db.session.rollback()
+        _refresh_order_after_calendar_failure(order)
+        return False
 
 
 @order_reminders_bp.route("/suppliers/<int:supplier_id>", methods=["POST"])
@@ -100,7 +130,7 @@ def set_supplier_rules(supplier_id: int):
             rules = {"windows": data["windows"], "remind_minutes_before_close": data.get("remind_minutes_before_close", OrderReminderService.DEFAULT_MINUTES)}
             OrderReminderService.windows_from_rules(rules)
         else:
-            rules = OrderReminderService.build_rules(order_days=data.get("order_days", []), opens_at=data.get("opens_at", "08:00"), closes_at=data.get("closes_at", "16:00"), remind_minutes_before_close=data.get("remind_minutes_before_close"))
+            rules = OrderReminderService.build_rules(order_days=data.get("order_days", []), opens_at=data.get("opens_at", "08:00"), closes_at=data.get("closes_at", "16:00"), remind_minutes_before_close=data.get("remind_minutes_before_close"), timezone_name=data.get("timezone", current_app.config.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem")))
     except (TypeError, ValueError, KeyError) as exc:
         return _json_error(BadRequest(str(exc)))
     supplier.ordering_rules = rules
@@ -252,10 +282,10 @@ def complete_order_reminder(order_id: int):
     except HTTPException as exc:
         return _json_error(exc)
     try:
-        gcal.delete_order_event(order)
         order.reminder_state = REMINDER_COMPLETE
         order.next_reminder_at = None
         db.session.commit()
+        _delete_google_calendar_event(order)
         return jsonify({"success": True, "order": order.to_dict()})
     except Exception as exc:
         return _unexpected_error("Completing reminder failed", exc, "complete")

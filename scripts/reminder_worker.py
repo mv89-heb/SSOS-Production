@@ -13,7 +13,6 @@ from app.models.order import (
     Order,
     REMINDER_DUE,
     REMINDER_PENDING,
-    REMINDER_COMPLETE,
     STATUS_CANCELLED,
     STATUS_COMPLETED,
     STATUS_SENT,
@@ -24,13 +23,17 @@ def process_due_reminders() -> int:
     now = datetime.now(timezone.utc)
     due_orders = list(
         db.session.execute(
-            select(Order).where(
+            select(Order)
+            .where(
                 Order.next_reminder_at.is_not(None),
                 Order.next_reminder_at <= now,
                 Order.reminder_state == REMINDER_PENDING,
                 Order.status.notin_((STATUS_SENT, STATUS_COMPLETED, STATUS_CANCELLED)),
             )
-        ).scalars().all()
+            .with_for_update(skip_locked=True)
+        )
+        .scalars()
+        .all()
     )
 
     processed = 0
