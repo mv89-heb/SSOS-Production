@@ -24,12 +24,14 @@ export const orderService = {
     return data.order;
   },
 
-  // Draft-only content edits (notes/items). The backend rejects any `status`
-  // field on this endpoint — lifecycle transitions each have their own
-  // dedicated endpoint below instead of PUT /api/orders/{id}.
   updateDraftOrder: async (id: number, payload: UpdateDraftOrderInput) => {
     const { data } = await apiClient.put<{ success: boolean; order: Order }>(`/api/orders/${id}`, payload);
     return data.order;
+  },
+
+  deleteOrder: async (id: number) => {
+    const { data } = await apiClient.delete<{ success: boolean; calendar_event_deleted?: boolean }>(`/api/orders/${id}`);
+    return data;
   },
 
   submitOrder: async (id: number) => {
@@ -57,10 +59,5 @@ export const orderService = {
   markCompleted: async (id: number) => {
     const { data } = await apiClient.post<{ success: boolean; order: Order }>(`/api/orders/${id}/complete`);
     return data.order;
-  },
-
-  deleteOrder: async (id: number) => {
-    const { data } = await apiClient.delete<{ success: boolean }>(`/api/orders/${id}`);
-    return data;
   },
 };
