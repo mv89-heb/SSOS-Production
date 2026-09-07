@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, FileText, Loader2, Package, Send, ShieldCheck, Truck } from "lucide-react";
+import { ArrowLeft, Bell, CheckCircle2, FileText, Loader2, Package, Send, ShieldCheck, Truck } from "lucide-react";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { OrderTimeline } from "@/components/orders/order-timeline";
 import { WhatsAppOrderShare } from "@/components/orders/whatsapp-order-share";
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
+import { useActivateOrderReminder, useCompleteOrderReminder, useSnoozeOrderReminder } from "@/hooks/use-reminders";
 import { useOrder, useUpdateDraftOrder, useSubmitOrder, useApproveOrder, useRejectOrder, useMarkSentOrder, useCompleteOrder } from "@/hooks/use-orders";
 
 const money = (currency: string, value: number) => `${currency} ${value.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -30,9 +31,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const reject = useRejectOrder(orderId);
   const markSent = useMarkSentOrder(orderId);
   const complete = useCompleteOrder(orderId);
-  const isMutating = updateDraft.isPending || submit.isPending || approve.isPending || reject.isPending || markSent.isPending || complete.isPending;
+  const activateReminder = useActivateOrderReminder();
+  const completeReminder = useCompleteOrderReminder();
+  const snoozeReminder = useSnoozeOrderReminder();
+  const isMutating = updateDraft.isPending || submit.isPending || approve.isPending || reject.isPending || markSent.isPending || complete.isPending || activateReminder.isPending || completeReminder.isPending || snoozeReminder.isPending;
   const canCreateOrEdit = permissions.canCreateOrders(user);
   const isManagerOrAdmin = permissions.canApproveOrders(user);
+  const reminderActive = order?.reminder_state && order.reminder_state !== "complete";
 
   if (isLoading) return <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="animate-spin" size={16} /> טוען הזמנה...</div>;
   if (isError) {
@@ -67,6 +72,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </header>
 
       <OrderTimeline currentStatus={order.status} />
+
+      <Card className="border-indigo-100 shadow-sm dark:border-indigo-900/50">
+        <CardHeader className="border-b border-indigo-100 dark:border-indigo-900/50"><CardTitle className="flex items-center gap-2 text-base font-extrabold text-slate-900 dark:text-white"><Bell size={18} className="text-indigo-600" /> מעקב ותזכורת</CardTitle></CardHeader>
+        <CardContent className="space-y-4 pt-5">
+          {reminderActive ? <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><p className="text-sm font-extrabold text-slate-900 dark:text-white">{order.next_reminder_at ? `התזכורת הבאה: ${new Date(order.next_reminder_at).toLocaleString("he-IL")}` : "תזכורת פעילה"}</p><p className="mt-1 text-xs text-slate-500">אפשר לדחות בשעה או לסמן שטיפלת. ההזמנה עצמה לא משתנה.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={isMutating} onClick={() => snoozeReminder.mutate({ orderId, minutes: 60 })}>דחה בשעה</Button><Button disabled={isMutating} onClick={() => completeReminder.mutate(orderId)}>טופל</Button><Link href="/dashboard/reminders" className="inline-flex items-center rounded-md px-3 text-xs font-bold text-indigo-600 hover:underline">לכל התזכורות</Link></div></div>
+            : order.status !== "sent" && order.status !== "completed" && order.status !== "cancelled" ? <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><p className="text-sm font-extrabold text-slate-900 dark:text-white">אין כרגע תזכורת פעילה</p><p className="mt-1 text-xs text-slate-500">בהפעלה המערכת תחשב את מועדי המעקב לפי כללי ההזמנה של הספק.</p></div><Button disabled={isMutating} onClick={() => activateReminder.mutate(orderId)}><Bell size={15} /> {activateReminder.isPending ? "מפעיל..." : "הפעל תזכורת"}</Button></div>
+            : <p className="text-sm text-slate-500">ההזמנה סגורה, לכן אין צורך בתזכורת.</p>}
+        </CardContent>
+      </Card>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:p-5">
         <div className="flex flex-wrap items-center gap-2">
