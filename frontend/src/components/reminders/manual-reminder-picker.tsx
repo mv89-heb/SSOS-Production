@@ -1,14 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Clock3, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const TIMEZONE = "Asia/Jerusalem";
-
-function pad(value: number) {
-  return String(value).padStart(2, "0");
-}
 
 function toLocalInputParts(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -29,14 +25,12 @@ function toLocalInputParts(date: Date) {
 
 function localJerusalemToIso(dateValue: string, timeValue: string) {
   if (!dateValue || !timeValue) return "";
-  const probe = new Date(`${dateValue}T${timeValue}:00+03:00`);
-  if (Number.isNaN(probe.getTime())) return "";
-  return probe.toISOString();
+  const candidate = new Date(`${dateValue}T${timeValue}:00+03:00`);
+  return Number.isNaN(candidate.getTime()) ? "" : candidate.toISOString();
 }
 
 function minutesFromNow(minutes: number) {
-  const future = new Date(Date.now() + minutes * 60_000);
-  return toLocalInputParts(future);
+  return toLocalInputParts(new Date(Date.now() + minutes * 60_000));
 }
 
 export type ManualReminderPickerProps = {
@@ -49,12 +43,24 @@ export function ManualReminderPicker({ value = "", onChange, disabled = false }:
   const initial = useMemo(() => (value ? toLocalInputParts(new Date(value)) : minutesFromNow(60)), [value]);
   const [dateValue, setDateValue] = useState(initial.date);
   const [timeValue, setTimeValue] = useState(initial.time);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setDateValue(initial.date);
+    setTimeValue(initial.time);
+  }, [initial.date, initial.time]);
 
   const update = (nextDate: string, nextTime: string) => {
     setDateValue(nextDate);
     setTimeValue(nextTime);
     const iso = localJerusalemToIso(nextDate, nextTime);
-    if (iso) onChange(iso);
+    if (!iso) return;
+    if (new Date(iso).getTime() <= Date.now()) {
+      setError("בחר תאריך ושעה שטרם עברו.");
+      return;
+    }
+    setError("");
+    onChange(iso);
   };
 
   const applyQuick = (minutes: number) => {
@@ -62,11 +68,9 @@ export function ManualReminderPicker({ value = "", onChange, disabled = false }:
     update(next.date, next.time);
   };
 
-  const tomorrow = () => {
-    const next = minutesFromNow(60);
-    const tomorrowDate = new Date(`${next.date}T12:00:00+03:00`);
-    tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
-    const parts = toLocalInputParts(tomorrowDate);
+  const applyTomorrow = () => {
+    const next = new Date(Date.now() + 24 * 60 * 60_000);
+    const parts = toLocalInputParts(next);
     update(parts.date, "09:00");
   };
 
@@ -83,31 +87,20 @@ export function ManualReminderPicker({ value = "", onChange, disabled = false }:
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="space-y-1.5">
           <span className="text-xs font-bold text-slate-700 dark:text-slate-200">תאריך</span>
-          <input
-            type="date"
-            value={dateValue}
-            disabled={disabled}
-            onChange={(event) => update(event.target.value, timeValue)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none ring-indigo-200 transition focus:border-indigo-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-          />
+          <input type="date" value={dateValue} disabled={disabled} onChange={(event) => update(event.target.value, timeValue)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none ring-indigo-200 transition focus:border-indigo-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
         </label>
         <label className="space-y-1.5">
           <span className="flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-200"><Clock3 className="h-3.5 w-3.5" /> שעה</span>
-          <input
-            type="time"
-            value={timeValue}
-            disabled={disabled}
-            onChange={(event) => update(dateValue, event.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none ring-indigo-200 transition focus:border-indigo-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-          />
+          <input type="time" value={timeValue} disabled={disabled} onChange={(event) => update(dateValue, event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none ring-indigo-200 transition focus:border-indigo-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
         </label>
       </div>
 
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="secondary" className="min-h-9 text-xs" disabled={disabled} onClick={() => applyQuick(5)}><Sparkles className="h-3.5 w-3.5" />בעוד 5 דקות</Button>
         <Button type="button" variant="secondary" className="min-h-9 text-xs" disabled={disabled} onClick={() => applyQuick(60)}>בעוד שעה</Button>
-        <Button type="button" variant="secondary" className="min-h-9 text-xs" disabled={disabled} onClick={tomorrow}>מחר ב־09:00</Button>
+        <Button type="button" variant="secondary" className="min-h-9 text-xs" disabled={disabled} onClick={applyTomorrow}>מחר ב־09:00</Button>
       </div>
+      {error && <p className="text-xs font-bold text-red-600 dark:text-red-400">{error}</p>}
     </div>
   );
 }
