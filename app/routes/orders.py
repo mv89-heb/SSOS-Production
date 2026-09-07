@@ -103,16 +103,16 @@ def delete_order(order_id):
         return _handle(exc)
 
     calendar_event_id = order.google_calendar_event_id
-    db.session.commit()
-
     calendar_deleted = None
     if calendar_event_id:
         try:
-            calendar_deleted = bool(gcal.delete_order_event(order))
+            gcal.delete_order_event(order)
+            calendar_deleted = True
         except Exception:
-            current_app.logger.exception("Google Calendar cleanup failed after order deletion: order_id=%s", order_id)
+            current_app.logger.exception("Google Calendar cleanup failed before order deletion: order_id=%s", order_id)
             calendar_deleted = False
 
+    db.session.commit()
     return jsonify({"success": True, "calendar_event_deleted": calendar_deleted}), 200
 
 @orders_bp.route("/<int:order_id>/submit", methods=["POST"])
