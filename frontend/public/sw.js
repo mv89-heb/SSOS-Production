@@ -9,8 +9,6 @@ self.addEventListener("push", (event) => {
   const title = data.title || "SSOS – תזכורת חדשה";
   const options = {
     body: data.body || "נוצרה תזכורת חדשה.",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
     dir: "rtl",
     lang: "he",
     data: { url: data.url || "/dashboard", order_id: data.order_id || null },
