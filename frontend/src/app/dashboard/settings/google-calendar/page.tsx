@@ -21,6 +21,7 @@ export default function GoogleCalendarSettingsPage() {
 
   const data = status.data;
   const connection = data?.connection;
+  const calendars = data?.calendars ?? [];
 
   return (
     <div className="space-y-6" dir="rtl">
@@ -36,7 +37,7 @@ export default function GoogleCalendarSettingsPage() {
           {data?.configured && !connection && <div className="space-y-4"><p className="text-sm text-slate-600 dark:text-slate-300">לאחר החיבור, כל תזכורת שתופעל ב-SSOS תיצור אירוע ביומן, כולל קישור להזמנה והתראה של Google Calendar.</p><Button onClick={() => { window.location.href = googleCalendarService.connectUrl(); }}><ExternalLink className="h-4 w-4" /> התחבר ל-Google Calendar</Button></div>}
           {connection && <div className="space-y-4">
             <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4"><CheckCircle2 className="h-5 w-5 text-emerald-600" /><div><p className="text-sm font-black text-emerald-800">Google Calendar מחובר</p><p className="text-xs text-emerald-700">{connection.google_email || "חשבון Google מחובר"}</p></div></div>
-            <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end"><div><label className="mb-1 block text-xs font-bold text-slate-500">יומן לתזכורות</label><Select value={connection.calendar_id} onChange={(e) => selectCalendar.mutate(e.target.value)} disabled={selectCalendar.isPending || status.isFetching}><option value={connection.calendar_id}>{connection.calendar_name || connection.calendar_id}</option>{data.calendars.filter((item) => item.id !== connection.calendar_id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></div><Button variant="secondary" onClick={() => status.refetch()} disabled={status.isFetching}><RefreshCw className={`h-4 w-4 ${status.isFetching ? "animate-spin" : ""}`} /> רענן יומנים</Button></div>
+            <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end"><div><label className="mb-1 block text-xs font-bold text-slate-500">יומן לתזכורות</label><Select value={connection.calendar_id} onChange={(e) => selectCalendar.mutate(e.target.value)} disabled={selectCalendar.isPending || status.isFetching}><option value={connection.calendar_id}>{connection.calendar_name || connection.calendar_id}</option>{calendars.filter((item) => item.id !== connection.calendar_id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></div><Button variant="secondary" onClick={() => status.refetch()} disabled={status.isFetching}><RefreshCw className={`h-4 w-4 ${status.isFetching ? "animate-spin" : ""}`} /> רענן יומנים</Button></div>
             <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}><LogOut className="h-4 w-4" /> נתק את Google Calendar</Button></div>
           </div>}
         </CardContent>
