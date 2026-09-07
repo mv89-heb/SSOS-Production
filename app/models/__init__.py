@@ -10,6 +10,7 @@ from app.models.product_classification_feedback import ProductClassificationFeed
 from app.models.order import Order
 from app.models.audit import AuditLog
 from app.models.notification import Notification
+from app.models.google_calendar import GoogleCalendarConnection
 
 __all__ = [
     "Tenant",
@@ -24,4 +25,5 @@ __all__ = [
     "Order",
     "AuditLog",
     "Notification",
+    "GoogleCalendarConnection",
 ]
