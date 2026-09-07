@@ -40,6 +40,7 @@ class Order(db.Model):
     reminder_state = db.Column(db.String(20), default=REMINDER_COMPLETE, nullable=False, index=True)
     reminder_rules_snapshot = db.Column(db.JSON, nullable=True)
     next_reminder_at = db.Column(db.DateTime, nullable=True, index=True)
+    google_calendar_event_id = db.Column(db.String(255), nullable=True, index=True)
 
     # Monetary totals
     subtotal = db.Column(db.Numeric(12, 2), default=0)
@@ -82,6 +83,7 @@ class Order(db.Model):
             "reminder_state": self.reminder_state,
             "reminder_rules_snapshot": self.reminder_rules_snapshot,
             "next_reminder_at": self.next_reminder_at.isoformat() if self.next_reminder_at else None,
+            "google_calendar_event_id": self.google_calendar_event_id,
             "subtotal": float(self.subtotal) if self.subtotal is not None else 0.0,
             "discount_total": float(self.discount_total) if self.discount_total is not None else 0.0,
             "tax_total": float(self.tax_total) if self.tax_total is not None else 0.0,

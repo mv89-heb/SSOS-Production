@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
 from werkzeug.exceptions import BadRequest, HTTPException, NotFound
 
@@ -9,10 +9,10 @@ from app.models.order import REMINDER_COMPLETE, REMINDER_PENDING, Order
 from app.repositories.base_repository import BaseRepository
 from app.repositories.supplier_repository import SupplierRepository
 from app.services.order_reminder_service import OrderReminderService
+from app.services.reminder_ai_service import ReminderAIService
+from app.services import google_calendar_service as gcal
 
-order_reminders_bp = Blueprint(
-    "order_reminders", __name__, url_prefix="/api/order-reminders"
-)
+order_reminders_bp = Blueprint("order_reminders", __name__, url_prefix="/api/order-reminders")
 
 
 class OrderReminderRepository(BaseRepository):
@@ -27,11 +27,7 @@ class OrderReminderRepository(BaseRepository):
 
 
 def _json_error(exc: HTTPException):
-    return jsonify({
-        "success": False,
-        "error": exc.name.lower().replace(" ", "_"),
-        "message": exc.description,
-    }), exc.code
+    return jsonify({"success": False, "error": exc.name.lower().replace(" ", "_"), "message": exc.description}), exc.code
 
 
 def _get_owned_open_order(order_id: int):
@@ -50,32 +46,32 @@ def _get_supplier_rules(order: Order):
     return matching.ordering_rules if matching else None
 
 
+def _sync_google_calendar(order: Order) -> str | None:
+    """Calendar is an integration, not a dependency of the reminder itself."""
+    try:
+        event_id = gcal.sync_order_event(order)
+        if event_id:
+            db.session.commit()
+        return event_id
+    except Exception:
+        current_app.logger.exception("Google Calendar reminder sync failed")
+        db.session.rollback()
+        return None
+
+
 @order_reminders_bp.route("/suppliers/<int:supplier_id>", methods=["POST"])
 @login_required
 def set_supplier_rules(supplier_id: int):
-    """Persist normalized supplier ordering/reminder windows."""
     supplier = SupplierRepository(tenant_id=current_user.tenant_id).get_by_id_or_404(supplier_id)
     data = request.get_json(silent=True) or {}
     try:
         if "windows" in data:
-            rules = {
-                "windows": data["windows"],
-                "remind_minutes_before_close": data.get(
-                    "remind_minutes_before_close", OrderReminderService.DEFAULT_MINUTES
-                ),
-            }
+            rules = {"windows": data["windows"], "remind_minutes_before_close": data.get("remind_minutes_before_close", OrderReminderService.DEFAULT_MINUTES)}
             OrderReminderService.windows_from_rules(rules)
         else:
-            days = data.get("order_days", [])
-            rules = OrderReminderService.build_rules(
-                order_days=days,
-                opens_at=data.get("opens_at", "08:00"),
-                closes_at=data.get("closes_at", "16:00"),
-                remind_minutes_before_close=data.get("remind_minutes_before_close"),
-            )
+            rules = OrderReminderService.build_rules(order_days=data.get("order_days", []), opens_at=data.get("opens_at", "08:00"), closes_at=data.get("closes_at", "16:00"), remind_minutes_before_close=data.get("remind_minutes_before_close"))
     except (TypeError, ValueError, KeyError) as exc:
         return _json_error(BadRequest(str(exc)))
-
     supplier.ordering_rules = rules
     db.session.commit()
     return jsonify({"success": True, "supplier": supplier.to_dict()})
@@ -84,7 +80,6 @@ def set_supplier_rules(supplier_id: int):
 @order_reminders_bp.route("/preview", methods=["POST"])
 @login_required
 def preview():
-    """Preview reminder points for a supplier without changing state."""
     data = request.get_json(silent=True) or {}
     rules = data.get("rules")
     if not isinstance(rules, dict):
@@ -95,89 +90,71 @@ def preview():
         points = OrderReminderService.plan_reminders(now, rules)
     except (TypeError, ValueError, KeyError) as exc:
         return _json_error(BadRequest(str(exc)))
-    return jsonify({
-        "success": True,
-        "reminders": [
-            {"at": point.at.isoformat(), "level": point.level, "label": point.label}
-            for point in points
-        ],
-    })
+    return jsonify({"success": True, "reminders": [{"at": point.at.isoformat(), "level": point.level, "label": point.label} for point in points]})
 
 
 @order_reminders_bp.route("", methods=["GET"])
 @login_required
 def list_open_reminders():
-    repo = OrderReminderRepository(tenant_id=current_user.tenant_id)
-    orders = repo.list_open(user_id=current_user.id)
-    return jsonify({
-        "success": True,
-        "reminders": [
-            {
-                "order": order.to_dict(),
-                "next_reminder_at": order.next_reminder_at.isoformat() if order.next_reminder_at else None,
-            }
-            for order in orders
-        ],
-    })
+    orders = OrderReminderRepository(tenant_id=current_user.tenant_id).list_open(user_id=current_user.id)
+    return jsonify({"success": True, "reminders": [{"order": order.to_dict(), "next_reminder_at": order.next_reminder_at.isoformat() if order.next_reminder_at else None} for order in orders]})
 
 
 @order_reminders_bp.route("/orders/<int:order_id>/configuration", methods=["GET"])
 @login_required
 def reminder_configuration(order_id: int):
-    """Return whether this order can use automatic supplier-based reminders."""
     try:
         order = _get_owned_open_order(order_id)
     except HTTPException as exc:
         return _json_error(exc)
     rules = _get_supplier_rules(order)
-    return jsonify({
-        "success": True,
-        "has_supplier_rules": bool(rules),
-        "supplier_name": order.supplier_name,
-    })
+    connection = gcal.get_connection(current_user.id, current_user.tenant_id)
+    return jsonify({"success": True, "has_supplier_rules": bool(rules), "supplier_name": order.supplier_name, "google_calendar_connected": bool(connection)})
 
 
 @order_reminders_bp.route("/orders/<int:order_id>/activate", methods=["POST"])
 @login_required
 def activate_order_reminder(order_id: int):
-    """Activate automatic reminders, or create a safe one-off fallback when rules are absent."""
     repo = OrderReminderRepository(tenant_id=current_user.tenant_id)
     order = repo.get_by_id_for_update(order_id)
-    if order is None:
-        return _json_error(NotFound("Order not found"))
-    if order.user_id != current_user.id:
+    if order is None or order.user_id != current_user.id:
         return _json_error(NotFound("Order not found"))
     if order.status in ("sent", "completed", "cancelled"):
         return _json_error(BadRequest("Reminder cannot be activated for a closed order"))
 
     rules = _get_supplier_rules(order)
     now = datetime.now(timezone.utc)
+    ai_reason = None
     if rules:
         points = OrderReminderService.plan_reminders(now, rules)
-        order.reminder_rules_snapshot = rules
-        order.next_reminder_at = points[0].at if points else None
-        order.reminder_state = REMINDER_PENDING if points else REMINDER_COMPLETE
+        candidates = [{"at": point.at.isoformat(), "level": point.level, "label": point.label} for point in points]
+        chosen = ReminderAIService.choose_candidate(order, candidates, now)
+        chosen_at = chosen["at"] if chosen else (candidates[0]["at"] if candidates else None)
+        order.reminder_rules_snapshot = {"mode": "supplier_rules", "rules": rules, "ai_reason": chosen.get("reason") if chosen else None}
+        ai_reason = chosen.get("reason") if chosen else None
+        order.next_reminder_at = datetime.fromisoformat(chosen_at) if chosen_at else None
+        order.reminder_state = REMINDER_PENDING if chosen_at else REMINDER_COMPLETE
     else:
-        # No ordering/delivery calendar exists, so there is no honest automatic
-        # date to calculate. Keep the user's explicit activation useful by
-        # creating a one-off reminder one hour from now. It can then be snoozed,
-        # completed, or replaced by supplier rules later.
-        order.reminder_rules_snapshot = {
-            "mode": "manual_fallback",
-            "note": "נוצרה תזכורת חד-פעמית כי לספק אין ימי הזמנה/אספקה מוגדרים.",
-            "created_at": now.isoformat(),
-        }
-        order.next_reminder_at = now + timedelta(hours=1)
+        fallback_candidates = [
+            {"at": (now + timedelta(hours=1)).isoformat(), "label": "מעקב בעוד שעה", "level": "due"},
+            {"at": (now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0).isoformat(), "label": "מעקב מחר בבוקר", "level": "upcoming"},
+            {"at": (now + timedelta(days=2)).replace(hour=9, minute=0, second=0, microsecond=0).isoformat(), "label": "מעקב בעוד יומיים", "level": "upcoming"},
+        ]
+        chosen = ReminderAIService.choose_candidate(order, fallback_candidates, now)
+        chosen_at = chosen["at"] if chosen else fallback_candidates[0]["at"]
+        ai_reason = chosen.get("reason") if chosen else "אין כללי ספק, ולכן נבחר מועד גיבוי בטוח."
+        order.reminder_rules_snapshot = {"mode": "manual_fallback", "note": "נוצרה תזכורת כי לספק אין ימי הזמנה/אספקה מוגדרים.", "ai_reason": ai_reason, "created_at": now.isoformat()}
+        order.next_reminder_at = datetime.fromisoformat(chosen_at)
         order.reminder_state = REMINDER_PENDING
 
     db.session.commit()
-    return jsonify({"success": True, "order": order.to_dict()})
+    calendar_event_id = _sync_google_calendar(order)
+    return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id, "ai_reason": ai_reason})
 
 
 @order_reminders_bp.route("/orders/<int:order_id>/manual", methods=["POST"])
 @login_required
 def create_manual_order_reminder(order_id: int):
-    """Create a one-off reminder when supplier scheduling rules are unavailable."""
     try:
         order = _get_owned_open_order(order_id)
         data = request.get_json(silent=True) or {}
@@ -197,26 +174,25 @@ def create_manual_order_reminder(order_id: int):
         return _json_error(BadRequest(f"Invalid reminder date: {exc}"))
     except HTTPException as exc:
         return _json_error(exc)
-
-    order.reminder_rules_snapshot = {
-        "mode": "manual",
-        "note": note,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
+    order.reminder_rules_snapshot = {"mode": "manual", "note": note, "created_at": datetime.now(timezone.utc).isoformat()}
     order.next_reminder_at = reminder_at
     order.reminder_state = REMINDER_PENDING
     db.session.commit()
-    return jsonify({"success": True, "order": order.to_dict()})
+    calendar_event_id = _sync_google_calendar(order)
+    return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id})
 
 
 @order_reminders_bp.route("/orders/<int:order_id>/complete", methods=["POST"])
 @login_required
 def complete_order_reminder(order_id: int):
-    """Dismiss the current follow-up reminder without changing order status."""
     try:
         order = _get_owned_open_order(order_id)
     except HTTPException as exc:
         return _json_error(exc)
+    try:
+        gcal.delete_order_event(order)
+    except Exception:
+        current_app.logger.exception("Google Calendar reminder delete failed")
     order.reminder_state = REMINDER_COMPLETE
     order.next_reminder_at = None
     db.session.commit()
@@ -226,7 +202,6 @@ def complete_order_reminder(order_id: int):
 @order_reminders_bp.route("/orders/<int:order_id>/snooze", methods=["POST"])
 @login_required
 def snooze_order_reminder(order_id: int):
-    """Move the current reminder forward by a caller-selected number of minutes."""
     try:
         order = _get_owned_open_order(order_id)
         data = request.get_json(silent=True) or {}
@@ -244,4 +219,5 @@ def snooze_order_reminder(order_id: int):
     order.next_reminder_at = max(base, datetime.now(timezone.utc)) + timedelta(minutes=minutes)
     order.reminder_state = REMINDER_PENDING
     db.session.commit()
-    return jsonify({"success": True, "order": order.to_dict()})
+    calendar_event_id = _sync_google_calendar(order)
+    return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id})

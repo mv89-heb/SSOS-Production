@@ -34,20 +34,12 @@ class BaseConfig:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     MAX_CONTENT_LENGTH = int(os.environ.get("MAX_UPLOAD_SIZE", 5 * 1024 * 1024))
     UPLOAD_EXTENSIONS = {".png", ".jpg", ".jpeg", ".pdf", ".tiff", ".bmp"}
-    UPLOAD_MIME_TYPES = {
-        "image/png", "image/jpeg", "image/bmp", "image/tiff", "application/pdf",
-    }
+    UPLOAD_MIME_TYPES = {"image/png", "image/jpeg", "image/bmp", "image/tiff", "application/pdf"}
     IMPORT_UPLOAD_EXTENSIONS = {".xlsx", ".xls", ".csv"}
     IMPORT_UPLOAD_MIME_TYPES = {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "application/vnd.ms-excel",
-        "text/csv",
-        "application/csv",
-        "text/plain",
+        "application/vnd.ms-excel", "text/csv", "application/csv", "text/plain",
     }
-    # Uploads are private application data. The app factory resolves this to
-    # instance/uploads, never app/static/uploads, so Flask's static handler
-    # cannot expose uploaded documents directly.
     PRIVATE_UPLOAD_SUBDIR = "uploads"
     SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "False") == "True"
     SESSION_COOKIE_HTTPONLY = True
@@ -55,19 +47,21 @@ class BaseConfig:
     WTF_CSRF_ENABLED = os.environ.get("WTF_CSRF_ENABLED", "True") == "True"
     RATELIMIT_LOGIN = os.environ.get("RATELIMIT_LOGIN", "10 per minute")
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
-    CORS_ORIGINS = _csv_env(
-        "CORS_ORIGINS",
-        "http://localhost:3000,http://localhost:3100",
-    )
+    CORS_ORIGINS = _csv_env("CORS_ORIGINS", "http://localhost:3000,http://localhost:3100")
 
-    # Optional AI integration. The application remains fully functional when
-    # Gemini is disabled or its API key is absent.
     AI_ENABLED = _env_bool("AI_ENABLED", False)
     AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini").strip().lower()
     GEMINI_ENABLED = _env_bool("GEMINI_ENABLED", False)
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
     GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash").strip()
     GEMINI_TIMEOUT = float(os.environ.get("GEMINI_TIMEOUT", "30"))
+
+    GOOGLE_CALENDAR_CLIENT_ID = os.environ.get("GOOGLE_CALENDAR_CLIENT_ID", "").strip()
+    GOOGLE_CALENDAR_CLIENT_SECRET = os.environ.get("GOOGLE_CALENDAR_CLIENT_SECRET", "").strip()
+    GOOGLE_CALENDAR_REDIRECT_URI = os.environ.get("GOOGLE_CALENDAR_REDIRECT_URI", "").strip()
+    GOOGLE_CALENDAR_TIMEZONE = os.environ.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem").strip()
+    API_PUBLIC_URL = os.environ.get("API_PUBLIC_URL", "").strip()
+    FRONTEND_PUBLIC_URL = os.environ.get("FRONTEND_PUBLIC_URL", "").strip()
 
     @staticmethod
     def init_app(app):
@@ -79,16 +73,13 @@ class ProductionConfig(BaseConfig):
 
     @staticmethod
     def init_app(app):
-        """Load and validate production-only secrets at app creation time."""
         secret_key = _required_env("SECRET_KEY")
         database_url = _normalize_db_url(_required_env("DATABASE_URL"))
         cors_origins = _csv_env("CORS_ORIGINS")
         gemini_api_key = os.environ.get("GEMINI_API_KEY", "").strip()
 
         if not cors_origins:
-            raise RuntimeError(
-                "CORS_ORIGINS must contain at least one allowed origin in production"
-            )
+            raise RuntimeError("CORS_ORIGINS must contain at least one allowed origin in production")
         if not database_url.startswith("postgresql"):
             raise RuntimeError("Production DATABASE_URL must use PostgreSQL/Neon")
 
@@ -97,23 +88,23 @@ class ProductionConfig(BaseConfig):
         app.config["SQLALCHEMY_DATABASE_URI"] = database_url
         app.config["CORS_ORIGINS"] = cors_origins
         app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-            "connect_args": {"sslmode": "require"},
-            "pool_pre_ping": True,
-            "pool_recycle": 300,
+            "connect_args": {"sslmode": "require"}, "pool_pre_ping": True, "pool_recycle": 300,
         }
         app.config["SESSION_COOKIE_SECURE"] = True
         app.config["SESSION_COOKIE_SAMESITE"] = "None"
 
-        # Re-read AI settings when the Flask app is created. This makes the
-        # running Render environment the source of truth instead of relying
-        # only on BaseConfig class attributes. If a Gemini key exists but the
-        # optional enable flags were omitted, Gemini is enabled automatically.
         app.config["GEMINI_API_KEY"] = gemini_api_key
         app.config["AI_PROVIDER"] = os.environ.get("AI_PROVIDER", "gemini").strip().lower()
         app.config["AI_ENABLED"] = _env_bool("AI_ENABLED", bool(gemini_api_key))
         app.config["GEMINI_ENABLED"] = _env_bool("GEMINI_ENABLED", bool(gemini_api_key))
         app.config["GEMINI_MODEL"] = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash").strip()
         app.config["GEMINI_TIMEOUT"] = float(os.environ.get("GEMINI_TIMEOUT", "30"))
+        app.config["GOOGLE_CALENDAR_CLIENT_ID"] = os.environ.get("GOOGLE_CALENDAR_CLIENT_ID", "").strip()
+        app.config["GOOGLE_CALENDAR_CLIENT_SECRET"] = os.environ.get("GOOGLE_CALENDAR_CLIENT_SECRET", "").strip()
+        app.config["GOOGLE_CALENDAR_REDIRECT_URI"] = os.environ.get("GOOGLE_CALENDAR_REDIRECT_URI", "").strip()
+        app.config["GOOGLE_CALENDAR_TIMEZONE"] = os.environ.get("GOOGLE_CALENDAR_TIMEZONE", "Asia/Jerusalem").strip()
+        app.config["API_PUBLIC_URL"] = os.environ.get("API_PUBLIC_URL", "").strip()
+        app.config["FRONTEND_PUBLIC_URL"] = os.environ.get("FRONTEND_PUBLIC_URL", "").strip()
 
 
 class DevelopmentConfig(BaseConfig):
@@ -121,17 +112,11 @@ class DevelopmentConfig(BaseConfig):
 
     @staticmethod
     def init_app(app):
-        db_url = os.environ.get(
-            "DATABASE_URL",
-            f"sqlite:///{os.path.join(BASE_DIR, 'instance', 'ssos_dev.db')}",
-        )
+        db_url = os.environ.get("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'instance', 'ssos_dev.db')}")
         db_url = _normalize_db_url(db_url)
         app.config["SQLALCHEMY_DATABASE_URI"] = db_url
         if db_url.startswith("postgresql"):
-            app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-                "connect_args": {"sslmode": "require"},
-                "pool_pre_ping": True,
-            }
+            app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"connect_args": {"sslmode": "require"}, "pool_pre_ping": True}
 
 
 class TestingConfig(BaseConfig):
@@ -143,11 +128,7 @@ class TestingConfig(BaseConfig):
     RATELIMIT_LOGIN = "10 per minute"
 
 
-CONFIG_MAP = {
-    "production": ProductionConfig,
-    "development": DevelopmentConfig,
-    "testing": TestingConfig,
-}
+CONFIG_MAP = {"production": ProductionConfig, "development": DevelopmentConfig, "testing": TestingConfig}
 
 
 def get_config(name=None):
