@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
 from werkzeug.exceptions import BadRequest, HTTPException, NotFound
 
@@ -54,7 +54,6 @@ def _sync_google_calendar(order: Order) -> str | None:
             db.session.commit()
         return event_id
     except Exception:
-        current_app = __import__("flask").current_app
         current_app.logger.exception("Google Calendar reminder sync failed")
         db.session.rollback()
         return None
@@ -70,12 +69,7 @@ def set_supplier_rules(supplier_id: int):
             rules = {"windows": data["windows"], "remind_minutes_before_close": data.get("remind_minutes_before_close", OrderReminderService.DEFAULT_MINUTES)}
             OrderReminderService.windows_from_rules(rules)
         else:
-            rules = OrderReminderService.build_rules(
-                order_days=data.get("order_days", []),
-                opens_at=data.get("opens_at", "08:00"),
-                closes_at=data.get("closes_at", "16:00"),
-                remind_minutes_before_close=data.get("remind_minutes_before_close"),
-            )
+            rules = OrderReminderService.build_rules(order_days=data.get("order_days", []), opens_at=data.get("opens_at", "08:00"), closes_at=data.get("closes_at", "16:00"), remind_minutes_before_close=data.get("remind_minutes_before_close"))
     except (TypeError, ValueError, KeyError) as exc:
         return _json_error(BadRequest(str(exc)))
     supplier.ordering_rules = rules
@@ -141,7 +135,6 @@ def activate_order_reminder(order_id: int):
         order.next_reminder_at = datetime.fromisoformat(chosen_at) if chosen_at else None
         order.reminder_state = REMINDER_PENDING if chosen_at else REMINDER_COMPLETE
     else:
-        # Gemini may choose only from safe, bounded candidates. It cannot invent a date.
         fallback_candidates = [
             {"at": (now + timedelta(hours=1)).isoformat(), "label": "מעקב בעוד שעה", "level": "due"},
             {"at": (now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0).isoformat(), "label": "מעקב מחר בבוקר", "level": "upcoming"},
@@ -199,7 +192,7 @@ def complete_order_reminder(order_id: int):
     try:
         gcal.delete_order_event(order)
     except Exception:
-        __import__("flask").current_app.logger.exception("Google Calendar reminder delete failed")
+        current_app.logger.exception("Google Calendar reminder delete failed")
     order.reminder_state = REMINDER_COMPLETE
     order.next_reminder_at = None
     db.session.commit()
