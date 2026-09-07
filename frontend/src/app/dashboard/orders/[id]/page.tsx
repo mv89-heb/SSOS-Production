@@ -2,7 +2,8 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Bell, CheckCircle2, FileText, Loader2, Package, Send, ShieldCheck, Truck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Bell, CheckCircle2, FileText, Loader2, Package, Send, ShieldCheck, Trash2, Truck } from "lucide-react";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,12 +13,13 @@ import { ManualReminderPicker } from "@/components/reminders/manual-reminder-pic
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
 import { useActivateOrderReminder, useCompleteOrderReminder, useCreateManualOrderReminder, useSnoozeOrderReminder } from "@/hooks/use-reminders";
-import { useOrder, useUpdateDraftOrder, useSubmitOrder, useApproveOrder, useRejectOrder, useMarkSentOrder, useCompleteOrder } from "@/hooks/use-orders";
+import { useOrder, useDeleteOrder, useUpdateDraftOrder, useSubmitOrder, useApproveOrder, useRejectOrder, useMarkSentOrder, useCompleteOrder } from "@/hooks/use-orders";
 
 const money = (currency: string, value: number) => `${currency} ${value.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const orderId = Number(id);
   const { user } = useAuth();
   const { data: order, isLoading, isError, error } = useOrder(orderId);
@@ -30,6 +32,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [showManualReminder, setShowManualReminder] = useState(false);
 
   const updateDraft = useUpdateDraftOrder(orderId);
+  const deleteOrder = useDeleteOrder();
   const submit = useSubmitOrder(orderId);
   const approve = useApproveOrder(orderId);
   const reject = useRejectOrder(orderId);
@@ -39,9 +42,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const createManualReminder = useCreateManualOrderReminder();
   const completeReminder = useCompleteOrderReminder();
   const snoozeReminder = useSnoozeOrderReminder();
-  const isMutating = updateDraft.isPending || submit.isPending || approve.isPending || reject.isPending || markSent.isPending || complete.isPending || activateReminder.isPending || createManualReminder.isPending || completeReminder.isPending || snoozeReminder.isPending;
+  const isMutating = updateDraft.isPending || deleteOrder.isPending || submit.isPending || approve.isPending || reject.isPending || markSent.isPending || complete.isPending || activateReminder.isPending || createManualReminder.isPending || completeReminder.isPending || snoozeReminder.isPending;
   const canCreateOrEdit = permissions.canCreateOrders(user);
   const isManagerOrAdmin = permissions.canApproveOrders(user);
+  const canDelete = Boolean(user) && (isManagerOrAdmin || (canCreateOrEdit && order?.status === "draft"));
   const reminderActive = order?.reminder_state && order.reminder_state !== "complete";
 
   if (isLoading) return <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="animate-spin" size={16} /> טוען הזמנה...</div>;
@@ -54,12 +58,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const startEditingDraft = () => { setNotesDraft(order.notes ?? ""); setIsEditingDraft(true); };
   const saveDraft = () => updateDraft.mutate({ notes: notesDraft }, { onSuccess: () => setIsEditingDraft(false) });
   const handleReject = () => reject.mutate(rejectReason, { onSuccess: () => { setIsRejecting(false); setRejectReason(""); } });
+  const openReminderEditor = () => { setManualReminderAt(order.next_reminder_at ?? ""); setManualReminderNote(""); setShowManualReminder(true); };
   const handleManualReminder = () => {
     if (!manualReminderAt) return;
     createManualReminder.mutate(
       { orderId, reminderAt: manualReminderAt, note: manualReminderNote.trim() },
       { onSuccess: () => { setShowManualReminder(false); setManualReminderAt(""); setManualReminderNote(""); } },
     );
+  };
+  const handleDelete = () => {
+    if (!window.confirm(`למחוק לצמיתות את ההזמנה ${order.order_number}?\n\nהפעולה אינה ניתנת לביטול.`)) return;
+    deleteOrder.mutate(orderId, { onSuccess: () => router.push("/dashboard/orders") });
   };
 
   return (
@@ -85,12 +94,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       <Card className="border-indigo-100 shadow-sm dark:border-indigo-900/50">
         <CardHeader className="border-b border-indigo-100 dark:border-indigo-900/50"><CardTitle className="flex items-center gap-2 text-base font-extrabold text-slate-900 dark:text-white"><Bell size={18} className="text-indigo-600" /> מעקב ותזכורת</CardTitle></CardHeader>
         <CardContent className="space-y-4 pt-5">
-          {reminderActive ? <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><p className="text-sm font-extrabold text-slate-900 dark:text-white">{order.next_reminder_at ? `התזכורת הבאה: ${new Date(order.next_reminder_at).toLocaleString("he-IL")}` : "תזכורת פעילה"}</p><p className="mt-1 text-xs text-slate-500">אפשר לדחות בשעה או לסמן שטיפלת. ההזמנה עצמה לא משתנה.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={isMutating} onClick={() => snoozeReminder.mutate({ orderId, minutes: 60 })}>דחה בשעה</Button><Button disabled={isMutating} onClick={() => completeReminder.mutate(orderId)}>טופל</Button><Link href="/dashboard/reminders" className="inline-flex items-center rounded-md px-3 text-xs font-bold text-indigo-600 hover:underline">לכל התזכורות</Link></div></div>
+          {reminderActive ? <div className="space-y-4"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><p className="text-sm font-extrabold text-slate-900 dark:text-white">{order.next_reminder_at ? `התזכורת הבאה: ${new Date(order.next_reminder_at).toLocaleString("he-IL")}` : "תזכורת פעילה"}</p><p className="mt-1 text-xs text-slate-500">אפשר לשנות את המועד, לדחות בשעה או לסמן שטיפלת. ההזמנה עצמה לא משתנה.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={isMutating} onClick={openReminderEditor}>שנה תאריך ושעה</Button><Button variant="secondary" disabled={isMutating} onClick={() => snoozeReminder.mutate({ orderId, minutes: 60 })}>דחה בשעה</Button><Button disabled={isMutating} onClick={() => completeReminder.mutate(orderId)}>טופל</Button><Link href="/dashboard/reminders" className="inline-flex items-center rounded-md px-3 text-xs font-bold text-indigo-600 hover:underline">לכל התזכורות</Link></div></div>{showManualReminder && <div className="space-y-3"><ManualReminderPicker value={manualReminderAt} onChange={setManualReminderAt} disabled={isMutating} /><label className="block space-y-1.5"><span className="text-xs font-bold text-slate-700 dark:text-slate-200">הערה (אופציונלי)</span><textarea value={manualReminderNote} onChange={(event) => setManualReminderNote(event.target.value)} maxLength={500} rows={2} disabled={isMutating} placeholder="למשל: לחזור לספק לאחר קבלת תשובה" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900" /></label><div className="flex flex-wrap gap-2"><Button disabled={isMutating || !manualReminderAt} onClick={handleManualReminder}>{createManualReminder.isPending ? "שומר..." : "שמור תזכורת"}</Button><Button variant="ghost" disabled={isMutating} onClick={() => setShowManualReminder(false)}>ביטול</Button></div></div>}</div>
             : order.status !== "sent" && order.status !== "completed" && order.status !== "cancelled" ? <div className="space-y-4"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><p className="text-sm font-extrabold text-slate-900 dark:text-white">אין כרגע תזכורת פעילה</p><p className="mt-1 text-xs text-slate-500">אפשר להפעיל תזכורת אוטומטית לפי כללי הספק או לקבוע בעצמך תאריך ושעה מדויקים.</p></div><div className="flex flex-wrap gap-2"><Button disabled={isMutating} onClick={() => activateReminder.mutate(orderId)}><Bell size={15} /> {activateReminder.isPending ? "מפעיל..." : "הפעל לפי כללים"}</Button><Button variant="secondary" disabled={isMutating} onClick={() => setShowManualReminder((current) => !current)}>קבע תאריך ושעה</Button></div></div>{showManualReminder && <div className="space-y-3"><ManualReminderPicker value={manualReminderAt} onChange={setManualReminderAt} disabled={isMutating} /><label className="block space-y-1.5"><span className="text-xs font-bold text-slate-700 dark:text-slate-200">הערה (אופציונלי)</span><textarea value={manualReminderNote} onChange={(event) => setManualReminderNote(event.target.value)} maxLength={500} rows={2} disabled={isMutating} placeholder="למשל: לחזור לספק לאחר קבלת תשובה" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900" /></label><div className="flex flex-wrap gap-2"><Button disabled={isMutating || !manualReminderAt} onClick={handleManualReminder}>{createManualReminder.isPending ? "שומר..." : "שמור תזכורת"}</Button><Button variant="ghost" disabled={isMutating} onClick={() => setShowManualReminder(false)}>ביטול</Button></div></div>}</div>
             : <p className="text-sm text-slate-500">ההזמנה סגורה, לכן אין צורך בתזכורת.</p>}
         </CardContent>
       </Card>
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:p-5"><div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-sm font-extrabold text-slate-800 dark:text-white">פעולות</span>{canCreateOrEdit && order.status === "draft" && !isEditingDraft && <Button variant="secondary" onClick={startEditingDraft} disabled={isMutating}>עריכת טיוטה</Button>}{canCreateOrEdit && order.status === "draft" && <Button onClick={() => submit.mutate()} disabled={isMutating}>{submit.isPending ? "שולח..." : "שליחה לאישור"}</Button>}{isManagerOrAdmin && order.status === "submitted" && !isRejecting && <><Button onClick={() => approve.mutate()} disabled={isMutating}>{approve.isPending ? "מאשר..." : "אישור הזמנה"}</Button><Button variant="danger" onClick={() => setIsRejecting(true)} disabled={isMutating}>דחייה</Button></>}{isManagerOrAdmin && order.status === "approved" && <Button onClick={() => markSent.mutate()} disabled={isMutating}><Send size={16} /> {markSent.isPending ? "מסמן..." : "סימון כנשלח לספק"}</Button>}{isManagerOrAdmin && order.status === "sent" && <Button onClick={() => complete.mutate()} disabled={isMutating}><CheckCircle2 size={16} /> {complete.isPending ? "משלים..." : "סימון כהושלמה"}</Button>}{isMutating && <span className="inline-flex items-center gap-1 text-xs text-slate-400"><Loader2 size={13} className="animate-spin" /> מעדכן...</span>}</div></section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:p-5"><div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-sm font-extrabold text-slate-800 dark:text-white">פעולות</span>{canCreateOrEdit && order.status === "draft" && !isEditingDraft && <Button variant="secondary" onClick={startEditingDraft} disabled={isMutating}>עריכת טיוטה</Button>}{canCreateOrEdit && order.status === "draft" && <Button onClick={() => submit.mutate()} disabled={isMutating}>{submit.isPending ? "שולח..." : "שליחה לאישור"}</Button>}{isManagerOrAdmin && order.status === "submitted" && !isRejecting && <><Button onClick={() => approve.mutate()} disabled={isMutating}>{approve.isPending ? "מאשר..." : "אישור הזמנה"}</Button><Button variant="danger" onClick={() => setIsRejecting(true)} disabled={isMutating}>דחייה</Button></>}{isManagerOrAdmin && order.status === "approved" && <Button onClick={() => markSent.mutate()} disabled={isMutating}><Send size={16} /> {markSent.isPending ? "מסמן..." : "סימון כנשלח לספק"}</Button>}{isManagerOrAdmin && order.status === "sent" && <Button onClick={() => complete.mutate()} disabled={isMutating}><CheckCircle2 size={16} /> {complete.isPending ? "משלים..." : "סימון כהושלמה"}</Button>}{canDelete && <Button variant="danger" onClick={handleDelete} disabled={isMutating}><Trash2 size={16} /> {deleteOrder.isPending ? "מוחק..." : "מחיקת הזמנה"}</Button>}{isMutating && <span className="inline-flex items-center gap-1 text-xs text-slate-400"><Loader2 size={13} className="animate-spin" /> מעדכן...</span>}</div></section>
       <WhatsAppOrderShare order={order} />
       {isRejecting && <Card className="border-red-200 dark:border-red-900/50"><CardContent className="space-y-3 pt-6"><label className="block text-sm font-bold text-slate-700 dark:text-slate-200">סיבת דחייה</label><textarea autoFocus className="block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900" rows={3} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="כתוב בקצרה למה ההזמנה נדחית..." /><div className="flex flex-wrap gap-2"><Button variant="danger" onClick={handleReject} disabled={isMutating || !rejectReason.trim()}>{reject.isPending ? "דוחה..." : "אישור דחייה"}</Button><Button variant="ghost" onClick={() => setIsRejecting(false)} disabled={isMutating}>ביטול</Button></div></CardContent></Card>}
       {isEditingDraft && <Card><CardHeader><CardTitle className="text-base text-slate-900 dark:text-white">עריכת טיוטה</CardTitle></CardHeader><CardContent className="space-y-3 pt-0"><textarea className="block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900" rows={4} value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} placeholder="הערות להזמנה..." /><div className="flex flex-wrap gap-2"><Button onClick={saveDraft} disabled={isMutating}>{updateDraft.isPending ? "שומר..." : "שמירת טיוטה"}</Button><Button variant="ghost" onClick={() => setIsEditingDraft(false)} disabled={isMutating}>ביטול</Button></div></CardContent></Card>}
@@ -100,5 +109,5 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 }
 
 function MiniMetric({ icon: Icon, label, value }: { icon: typeof Package; label: string; value: string }) {
-  return <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/30"><div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400"><Icon size={13} />{label}</div><div className="mt-1 truncate text-sm font-black text-slate-900 dark:text-white">{value}</div></div>;
+  return <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/30"><div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400"><Icon size={12} />{label}</div><div className="mt-1 truncate text-sm font-black text-slate-900 dark:text-white">{value}</div></div>;
 }
