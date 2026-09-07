@@ -74,28 +74,46 @@ class OrderService:
         AuditService.log_event(self.tenant_id, user.id, "order.updated", f"Order {order.order_number} updated", {"order_id": order.id})
         return order
 
-    def delete_order(self, user, order_id: int) -> None:
-        """Delete only draft orders through the normal workflow."""
+    def delete_order(self, user, order_id: int) -> Order:
+        """Delete an order while preserving normal ownership and role boundaries.
+
+        Drafts may be deleted by their creator or by a manager/admin. Once an
+        order has entered the approval/send lifecycle, only a manager/admin may
+        permanently remove it. The caller commits the transaction and then
+        performs any best-effort external cleanup such as Google Calendar.
+        """
         order = self.repo.get_by_id_for_update(order_id)
         if order is None:
             raise NotFound("Order not found")
-        if order.status != STATUS_DRAFT:
-            raise Conflict(f"Only '{STATUS_DRAFT}' orders can be deleted")
-        if user.role not in (ROLE_MANAGER, ROLE_ADMIN) and order.user_id != user.id:
+        if order.status != STATUS_DRAFT and user.role not in (ROLE_MANAGER, ROLE_ADMIN):
+            raise Conflict("Only a manager or administrator can delete an order after submission")
+        if order.status == STATUS_DRAFT and user.role not in (ROLE_MANAGER, ROLE_ADMIN) and order.user_id != user.id:
             raise Conflict("Only the order creator or a manager can delete this draft")
+
         status = order.status
         number = order.order_number
-        AuditService.log_event(self.tenant_id, user.id, "order.deleted", f"Order {number} deleted", {"order_id": order.id, "order_number": number, "previous_status": status, "administrative_delete": user.role == ROLE_ADMIN})
+        calendar_event_id = order.google_calendar_event_id
+        AuditService.log_event(
+            self.tenant_id,
+            user.id,
+            "order.deleted",
+            f"Order {number} deleted",
+            {
+                "order_id": order.id,
+                "order_number": number,
+                "previous_status": status,
+                "google_calendar_event_id": calendar_event_id,
+                "administrative_delete": status != STATUS_DRAFT or user.role == ROLE_ADMIN,
+            },
+        )
         self.repo.delete(order)
+        return order
 
     def delete_order_as_admin(self, user, order_id: int) -> None:
+        """Backward-compatible explicit administrator deletion entry point."""
         if user.role != ROLE_ADMIN:
             raise Conflict("Only a system administrator can permanently delete an existing order")
-        order = self.repo.get_by_id_for_update(order_id)
-        if order is None: raise NotFound("Order not found")
-        number = order.order_number; status = order.status
-        AuditService.log_event(self.tenant_id, user.id, "admin.order_deleted", f"Order {number} permanently deleted", {"order_id": order.id, "order_number": number, "previous_status": status})
-        self.repo.delete(order)
+        self.delete_order(user, order_id)
 
     def submit_order(self, user, order_id: int) -> Order:
         order = self.repo.get_by_id_for_update(order_id)
