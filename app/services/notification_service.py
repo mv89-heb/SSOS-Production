@@ -13,16 +13,19 @@ class NotificationService:
     def list_for_user(self, user_id: int, unread_only: bool = False):
         return self.repo.list_for_user(user_id, unread_only=unread_only)
 
-    def create(self, user_id: int, title: str, message: str = "") -> Notification:
+    def create(self, user_id: int, title: str, message: str = "", *, action_url: str | None = None, notification_type: str | None = None, commit: bool = True) -> Notification:
         notification = Notification(
             tenant_id=self.tenant_id,
             user_id=user_id,
             title=title,
             message=message,
             status=STATUS_UNREAD,
+            action_url=action_url,
+            notification_type=notification_type,
         )
         self.repo.add(notification)
-        self.repo.commit()
+        if commit:
+            self.repo.commit()
         return notification
 
     def mark_read(self, notification_id: int, user_id: int) -> Notification:

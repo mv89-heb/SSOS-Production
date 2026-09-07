@@ -8,10 +8,7 @@ STATUS_APPROVED = "approved"
 STATUS_SENT = "sent"
 STATUS_COMPLETED = "completed"
 STATUS_CANCELLED = "cancelled"
-VALID_STATUSES = (
-    STATUS_DRAFT, STATUS_SUBMITTED, STATUS_APPROVED,
-    STATUS_SENT, STATUS_COMPLETED, STATUS_CANCELLED,
-)
+VALID_STATUSES = (STATUS_DRAFT, STATUS_SUBMITTED, STATUS_APPROVED, STATUS_SENT, STATUS_COMPLETED, STATUS_CANCELLED)
 
 REMINDER_PENDING = "pending"
 REMINDER_DUE = "due"
@@ -25,47 +22,27 @@ class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
-
     order_number = db.Column(db.String(40), nullable=False, index=True)
-
-    # Supplier information
     supplier_name = db.Column(db.String(200), nullable=False)
     supplier_contact = db.Column(db.String(200))
     supplier_email = db.Column(db.String(255))
-
     status = db.Column(db.String(20), default=STATUS_DRAFT, nullable=False, index=True)
-
-    # Persistent supplier-aware reminder state. The reminder is only completed
-    # when the order itself is marked sent/completed, never when an alert fires.
     reminder_state = db.Column(db.String(20), default=REMINDER_COMPLETE, nullable=False, index=True)
     reminder_rules_snapshot = db.Column(db.JSON, nullable=True)
     next_reminder_at = db.Column(db.DateTime, nullable=True, index=True)
     google_calendar_event_id = db.Column(db.String(255), nullable=True, index=True)
-
-    # Monetary totals
+    google_calendar_event_url = db.Column(db.Text, nullable=True)
     subtotal = db.Column(db.Numeric(12, 2), default=0)
     discount_total = db.Column(db.Numeric(12, 2), default=0)
     tax_total = db.Column(db.Numeric(12, 2), default=0)
     final_total = db.Column(db.Numeric(12, 2), default=0)
     currency = db.Column(db.String(3), default="ILS")
-
-    # Product / line-item information, stored as structured JSON at write time
     items = db.Column(db.JSON, default=list)
-
-    # Immutable snapshot captured once the order is submitted (see SnapshotService).
-    # Freezes prices/names/promotions as they were at that moment for historical accuracy.
     snapshot = db.Column(db.JSON, nullable=True)
     snapshot_taken_at = db.Column(db.DateTime, nullable=True)
-
     notes = db.Column(db.Text)
-
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = db.Column(
-        db.DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     tenant = db.relationship("Tenant", back_populates="orders")
     user = db.relationship("User")
@@ -84,6 +61,7 @@ class Order(db.Model):
             "reminder_rules_snapshot": self.reminder_rules_snapshot,
             "next_reminder_at": self.next_reminder_at.isoformat() if self.next_reminder_at else None,
             "google_calendar_event_id": self.google_calendar_event_id,
+            "google_calendar_event_url": self.google_calendar_event_url,
             "subtotal": float(self.subtotal) if self.subtotal is not None else 0.0,
             "discount_total": float(self.discount_total) if self.discount_total is not None else 0.0,
             "tax_total": float(self.tax_total) if self.tax_total is not None else 0.0,
