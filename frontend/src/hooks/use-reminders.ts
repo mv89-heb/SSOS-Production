@@ -28,8 +28,21 @@ export function useOpenReminders() {
   });
 }
 
+export function useReminderConfiguration(orderId: number, enabled = true) {
+  return useQuery({
+    queryKey: ["order-reminder-configuration", orderId],
+    queryFn: () => reminderService.getConfiguration(orderId),
+    enabled,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useActivateOrderReminder() {
   return useReminderMutation(reminderService.activate);
+}
+
+export function useCreateManualOrderReminder() {
+  return useReminderMutation((orderId) => reminderService.createManual(orderId, "", ""));
 }
 
 export function useCompleteOrderReminder() {
