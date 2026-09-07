@@ -32,3 +32,27 @@ def test_google_calendar_event_payload_uses_local_timezone():
     assert payload["start"]["dateTime"].endswith("+03:00")
     assert "/dashboard/orders/7" in payload["description"]
     assert payload["reminders"]["overrides"][0] == {"method": "popup", "minutes": 10}
+    assert payload["extendedProperties"]["private"]["ssos_order_id"] == "7"
+
+
+def test_find_existing_order_event_uses_private_extended_property(monkeypatch):
+    app = create_app("testing")
+    app.config["SECRET_KEY"] = "test-secret"
+
+    class Connection:
+        calendar_id = "primary"
+
+    calls = []
+
+    def fake_api(_connection, path, **kwargs):
+        calls.append((path, kwargs))
+        return {"items": [{"id": "event-7"}]}
+
+    monkeypatch.setattr(gcal, "_api", fake_api)
+
+    with app.app_context():
+        event_id = gcal._find_existing_order_event(Connection(), 7)
+
+    assert event_id == "event-7"
+    assert "privateExtendedProperty=ssos_order_id%3D7" in calls[0][0]
+    assert "maxResults=10" in calls[0][0]
