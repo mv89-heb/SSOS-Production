@@ -5,7 +5,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3, FileSearch, Bell } from "lucide-react";
+import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3, FileSearch, Bell, CalendarDays } from "lucide-react";
 
 const ORGANIZATION_NAME = "ישיבת אוהבי ירושלים - ראשית";
 const navigation = [
@@ -16,6 +16,7 @@ const navigation = [
   { name: "ניתוח מסמכים עם Gemini", href: "/dashboard/gemini", icon: FileSearch },
   { name: "הזמנות רכש", href: "/dashboard/orders", icon: ShoppingCart },
   { name: "תזכורות", href: "/dashboard/reminders", icon: Bell },
+  { name: "Google Calendar", href: "/dashboard/settings/google-calendar", icon: CalendarDays },
   { name: "לוג ביקורת", href: "/dashboard/audit", icon: History },
   { name: "הגדרות מערכת", href: "/dashboard/settings", icon: Settings },
 ];
