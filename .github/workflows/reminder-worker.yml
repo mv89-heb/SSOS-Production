@@ -22,6 +22,7 @@ jobs:
     env:
       FLASK_ENV: production
       FLASK_APP: wsgi.py
+      PYTHONPATH: .
       SECRET_KEY: ${{ secrets.SSOS_SECRET_KEY }}
       DATABASE_URL: ${{ secrets.SSOS_DATABASE_URL }}
       CORS_ORIGINS: ${{ secrets.SSOS_CORS_ORIGINS }}
@@ -31,10 +32,10 @@ jobs:
       PYTHON_VERSION: "3.11.9"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip
