@@ -1,0 +1,54 @@
+name: SSOS Reminder Worker
+
+on:
+  schedule:
+    # GitHub Actions supports scheduled workflows at a minimum 5-minute interval.
+    # Offset from the top of the hour to reduce scheduler contention.
+    - cron: '2-57/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ssos-reminder-worker
+  cancel-in-progress: false
+
+jobs:
+  reminder-worker:
+    name: Process due order reminders
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    env:
+      FLASK_ENV: production
+      FLASK_APP: wsgi.py
+      SECRET_KEY: ${{ secrets.SSOS_SECRET_KEY }}
+      DATABASE_URL: ${{ secrets.SSOS_DATABASE_URL }}
+      CORS_ORIGINS: ${{ secrets.SSOS_CORS_ORIGINS }}
+      SESSION_COOKIE_SECURE: "True"
+      MAX_UPLOAD_SIZE: "5242880"
+      WTF_CSRF_ENABLED: "True"
+      PYTHON_VERSION: "3.11.9"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SECRET_KEY" || { echo 'Missing SSOS_SECRET_KEY repository secret.'; exit 1; }
+          test -n "$DATABASE_URL" || { echo 'Missing SSOS_DATABASE_URL repository secret.'; exit 1; }
+          test -n "$CORS_ORIGINS" || { echo 'Missing SSOS_CORS_ORIGINS repository secret.'; exit 1; }
+
+      - name: Process due reminders
+        run: python scripts/reminder_worker.py
