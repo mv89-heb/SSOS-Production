@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
@@ -12,51 +12,72 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 export default function ReminderPushRegistration() {
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [busy, setBusy] = useState(false);
+
   useEffect(() => {
-    let cancelled = false;
-
-    async function register() {
-      if (cancelled || typeof window === "undefined") return;
-      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
-      if (!API_URL) return;
-
-      try {
-        const publicKeyResponse = await fetch(`${API_URL}/api/push/public-key`, { credentials: "include" });
-        if (!publicKeyResponse.ok) return;
-        const { public_key: publicKey } = await publicKeyResponse.json();
-        if (!publicKey) return;
-
-        const permission = Notification.permission === "default"
-          ? await Notification.requestPermission()
-          : Notification.permission;
-        if (permission !== "granted") return;
-
-        const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-        await navigator.serviceWorker.ready;
-        let subscription = await registration.pushManager.getSubscription();
-        if (!subscription) {
-          subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(publicKey),
-          });
-        }
-
-        await fetch(`${API_URL}/api/push/subscribe`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(subscription.toJSON()),
-        });
-      } catch {
-        // Push is an enhancement; never block the application if a device/browser rejects it.
-      }
+    if (typeof window === "undefined" || !("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setPermission("unsupported");
+      return;
     }
+    setPermission(Notification.permission);
 
-    void register();
-    return () => {
-      cancelled = true;
-    };
+    if (Notification.permission === "granted") {
+      void subscribe(false);
+    }
   }, []);
 
-  return null;
+  async function subscribe(requestPermission: boolean) {
+    if (busy || !API_URL || typeof window === "undefined") return;
+    setBusy(true);
+    try {
+      if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+
+      const nextPermission = requestPermission
+        ? await Notification.requestPermission()
+        : Notification.permission;
+      setPermission(nextPermission);
+      if (nextPermission !== "granted") return;
+
+      const publicKeyResponse = await fetch(`${API_URL}/api/push/public-key`, { credentials: "include" });
+      if (!publicKeyResponse.ok) return;
+      const { public_key: publicKey } = await publicKeyResponse.json();
+      if (!publicKey) return;
+
+      const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
+      }
+
+      await fetch(`${API_URL}/api/push/subscribe`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+    } catch {
+      // Push is an enhancement; never block the application if a device/browser rejects it.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (permission === "unsupported" || permission === "granted") return null;
+
+  return (
+    <button
+      type="button"
+      onClick={() => void subscribe(true)}
+      disabled={busy}
+      className="fixed bottom-4 left-4 z-50 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-slate-800 disabled:opacity-60"
+      aria-label="הפעל התראות תזכורות בנייד"
+    >
+      {busy ? "מפעיל התראות…" : permission === "denied" ? "אפשר התראות בהגדרות" : "🔔 הפעל התראות תזכורות בנייד"}
+    </button>
+  );
 }
