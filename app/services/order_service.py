@@ -1,4 +1,4 @@
-from werkzeug.exceptions import BadRequest, Conflict, NotFound
+from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound
 
 from app.models.user import ROLE_ADMIN, ROLE_MANAGER
 from app.models.order import (
@@ -86,9 +86,9 @@ class OrderService:
         if order is None:
             raise NotFound("Order not found")
         if order.status != STATUS_DRAFT and user.role not in (ROLE_MANAGER, ROLE_ADMIN):
-            raise Conflict("Only a manager or administrator can delete an order after submission")
+            raise Forbidden("Only a manager or administrator can delete an order after submission")
         if order.status == STATUS_DRAFT and user.role not in (ROLE_MANAGER, ROLE_ADMIN) and order.user_id != user.id:
-            raise Conflict("Only the order creator or a manager can delete this draft")
+            raise Forbidden("Only the order creator or a manager can delete this draft")
 
         status = order.status
         number = order.order_number
@@ -112,7 +112,7 @@ class OrderService:
     def delete_order_as_admin(self, user, order_id: int) -> None:
         """Backward-compatible explicit administrator deletion entry point."""
         if user.role != ROLE_ADMIN:
-            raise Conflict("Only a system administrator can permanently delete an existing order")
+            raise Forbidden("Only a system administrator can permanently delete an existing order")
         self.delete_order(user, order_id)
 
     def submit_order(self, user, order_id: int) -> Order:
