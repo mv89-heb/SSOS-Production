@@ -30,6 +30,11 @@ class BaseRepository:
         stmt = self._tenant_select().where(self.model.id == entity_id)
         return db.session.execute(stmt).scalar_one_or_none()
 
+    def get_by_id_for_update(self, entity_id: int) -> Optional[object]:
+        """Load a tenant-scoped entity while holding a PostgreSQL row lock."""
+        stmt = self._tenant_select().where(self.model.id == entity_id).with_for_update()
+        return db.session.execute(stmt).scalar_one_or_none()
+
     def get_by_id_or_404(self, entity_id: int):
         entity = self.get_by_id(entity_id)
         if entity is None:
