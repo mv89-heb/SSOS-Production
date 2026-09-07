@@ -43,10 +43,27 @@ services:
           name: ssos-frontend
           type: web
           envVarKey: RENDER_EXTERNAL_URL
+      - key: API_PUBLIC_URL
+        fromService:
+          name: ssos-platform
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: FRONTEND_PUBLIC_URL
+        fromService:
+          name: ssos-frontend
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: GOOGLE_CALENDAR_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CALENDAR_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALENDAR_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_CALENDAR_TIMEZONE
+        value: Asia/Jerusalem
 
   # -------------------------------------------------------------------
   # Reminder worker — runs independently of browser activity.
-  # It changes pending reminders to due and creates an in-app notification.
   # -------------------------------------------------------------------
   - type: cron
     name: ssos-reminder-worker
