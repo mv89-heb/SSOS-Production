@@ -42,7 +42,16 @@ export function useActivateOrderReminder() {
 }
 
 export function useCreateManualOrderReminder() {
-  return useReminderMutation((orderId) => reminderService.createManual(orderId, "", ""));
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId, reminderAt, note }: { orderId: number; reminderAt: string; note: string }) =>
+      reminderService.createManual(orderId, reminderAt, note),
+    onSuccess: (order) => {
+      queryClient.setQueryData(orderKey(order.id), order);
+      queryClient.invalidateQueries({ queryKey: REMINDERS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+  });
 }
 
 export function useCompleteOrderReminder() {
