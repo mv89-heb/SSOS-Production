@@ -25,7 +25,7 @@ def _create_index_if_missing(table_name, index_name, columns, unique=False):
 
 
 def upgrade():
-    indexes = [
+    for table_name, index_name, columns, unique in [
         ("audit_logs", "ix_audit_logs_hash_chain", ["hash_chain"], True),
         ("audit_logs", "ix_audit_logs_tenant_id", ["tenant_id"], False),
         ("audit_logs", "ix_audit_logs_user_id", ["user_id"], False),
@@ -37,14 +37,12 @@ def upgrade():
         ("orders", "ix_orders_user_id", ["user_id"], False),
         ("products", "ix_products_supplier_id", ["supplier_id"], False),
         ("users", "ix_users_tenant_id", ["tenant_id"], False),
-    ]
-    for table_name, index_name, columns, unique in indexes:
+    ]:
         _create_index_if_missing(table_name, index_name, columns, unique)
 
 
 def downgrade():
     bind = op.get_bind()
-    inspector = sa.inspect(bind)
     for table_name, index_name in [
         ("users", "ix_users_tenant_id"),
         ("products", "ix_products_supplier_id"),
@@ -58,7 +56,6 @@ def downgrade():
         ("audit_logs", "ix_audit_logs_tenant_id"),
         ("audit_logs", "ix_audit_logs_hash_chain"),
     ]:
-        existing = {index["name"] for index in inspector.get_indexes(table_name)}
+        existing = {index["name"] for index in sa.inspect(bind).get_indexes(table_name)}
         if index_name in existing:
             op.drop_index(index_name, table_name=table_name)
-        inspector = sa.inspect(bind)
