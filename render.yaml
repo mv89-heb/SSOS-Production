@@ -8,13 +8,6 @@ services:
     plan: starter
     pythonVersion: "3.11.9"
     healthCheckPath: /health
-    # Database migrations belong in Render's pre-deploy phase so they run
-    # against the target database immediately before the new version starts.
-    # The production entrypoint is also migration-safe for existing Render
-    # services whose dashboard start command has not been synchronized with
-    # this Blueprint yet.
-    # The repository currently has multiple Alembic heads, so target all heads
-    # explicitly; `db upgrade`/`head` fails with Multiple head revisions.
     buildCommand: "pip install -r requirements.txt"
     preDeployCommand: "python -m flask --app app:create_app() db upgrade heads"
     startCommand: "python scripts/start_production.py"
@@ -35,8 +28,6 @@ services:
         value: "True"
       - key: PYTHON_VERSION
         value: "3.11.9"
-      # Optional Gemini integration. The API key is intentionally not stored
-      # in Git; Render Dashboard must supply GEMINI_API_KEY as a secret.
       - key: AI_ENABLED
         value: "true"
       - key: AI_PROVIDER
@@ -47,15 +38,51 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-3.6-flash
-      # The browser sends the Flask-Login session cookie cross-origin
-      # (see CORS_ORIGINS comment in app/config.py) — without the
-      # frontend's real deployed origin here, every authenticated
-      # request from the frontend is blocked at the CORS layer.
       - key: CORS_ORIGINS
         fromService:
           name: ssos-frontend
           type: web
           envVarKey: RENDER_EXTERNAL_URL
+
+  # -------------------------------------------------------------------
+  # Reminder worker — runs independently of browser activity.
+  # It changes pending reminders to due and creates an in-app notification.
+  # -------------------------------------------------------------------
+  - type: cron
+    name: ssos-reminder-worker
+    env: python
+    plan: starter
+    schedule: "* * * * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python scripts/reminder_worker.py"
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: FLASK_APP
+        value: wsgi.py
+      - key: SECRET_KEY
+        fromService:
+          name: ssos-platform
+          type: web
+          envVarKey: SECRET_KEY
+      - key: DATABASE_URL
+        fromService:
+          name: ssos-platform
+          type: web
+          envVarKey: DATABASE_URL
+      - key: CORS_ORIGINS
+        fromService:
+          name: ssos-platform
+          type: web
+          envVarKey: CORS_ORIGINS
+      - key: SESSION_COOKIE_SECURE
+        value: "True"
+      - key: MAX_UPLOAD_SIZE
+        value: "5242880"
+      - key: WTF_CSRF_ENABLED
+        value: "True"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
 
   # -------------------------------------------------------------------
   # Frontend — Next.js 15 App Router (frontend/)
@@ -71,8 +98,6 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22.22.2"
-      # Browser-visible base URL for every apiClient call
-      # (see frontend/src/services/api-client.ts).
       - key: NEXT_PUBLIC_API_URL
         fromService:
           name: ssos-platform
