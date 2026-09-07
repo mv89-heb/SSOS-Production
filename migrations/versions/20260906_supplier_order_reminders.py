@@ -1,12 +1,12 @@
 """supplier-aware order reminder rules
 
-Revision ID: 20260906_supplier_order_reminders
+Revision ID: 20260906_supplier_reminders
 Revises: 20260903_document_temp_path
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "20260906_supplier_order_reminders"
+revision = "20260906_supplier_reminders"
 down_revision = "20260903_document_temp_path"
 branch_labels = None
 depends_on = None
