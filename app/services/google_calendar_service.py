@@ -20,7 +20,10 @@ from app.models.google_calendar import GoogleCalendarConnection
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 CALENDAR_API = "https://www.googleapis.com/calendar/v3"
-CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar"
+# Request only the permissions SSOS actually needs: create/update/delete events
+# and read the user's subscribed calendar list for calendar selection.
+CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events"
+CALENDAR_LIST_SCOPE = "https://www.googleapis.com/auth/calendar.calendarlist.readonly"
 
 
 def _client_id() -> str:
@@ -80,7 +83,7 @@ def authorization_url(user_id: int) -> str:
         "client_id": _client_id(),
         "redirect_uri": redirect_uri(),
         "response_type": "code",
-        "scope": CALENDAR_SCOPE + " openid email",
+        "scope": " ".join((CALENDAR_SCOPE, CALENDAR_LIST_SCOPE, "openid", "email")),
         "access_type": "offline",
         "prompt": "consent",
         "state": state,
