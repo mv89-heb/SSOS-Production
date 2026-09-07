@@ -30,10 +30,26 @@ def _json_error(exc: HTTPException):
     return jsonify({"success": False, "error": exc.name.lower().replace(" ", "_"), "message": exc.description}), exc.code
 
 
-def _unexpected_error(message: str, exc: Exception):
-    current_app.logger.exception(message, exc_info=exc)
-    db.session.rollback()
-    return jsonify({"success": False, "error": "internal_server_error", "message": "אירעה שגיאה בהפעלת התזכורת. נסה שוב."}), 500
+def _unexpected_error(message: str, exc: Exception, stage: str | None = None):
+    request_id = request.headers.get("Rndr-Id")
+    current_app.logger.exception(
+        "Reminder activation error stage=%s order_id=%s request_id=%s",
+        stage or "unknown",
+        request.view_args.get("order_id") if request.view_args else None,
+        request_id or "unknown",
+        exc_info=exc,
+    )
+    try:
+        db.session.rollback()
+    except Exception:
+        current_app.logger.exception("Reminder transaction rollback failed")
+    return jsonify({
+        "success": False,
+        "error": "internal_server_error",
+        "message": "אירעה שגיאה בהפעלת התזכורת. נסה שוב.",
+        "stage": stage or "unknown",
+        "request_id": request_id,
+    }), 500
 
 
 def _get_owned_open_order(order_id: int):
@@ -126,12 +142,13 @@ def reminder_configuration(order_id: int):
     except HTTPException as exc:
         return _json_error(exc)
     except Exception as exc:
-        return _unexpected_error("Reminder configuration lookup failed", exc)
+        return _unexpected_error("Reminder configuration lookup failed", exc, "configuration")
 
 
 @order_reminders_bp.route("/orders/<int:order_id>/activate", methods=["POST"])
 @login_required
 def activate_order_reminder(order_id: int):
+    stage = "load_order"
     try:
         repo = OrderReminderRepository(tenant_id=current_user.tenant_id)
         order = repo.get_by_id_for_update(order_id)
@@ -140,47 +157,58 @@ def activate_order_reminder(order_id: int):
         if order.status in ("sent", "completed", "cancelled"):
             return _json_error(BadRequest("Reminder cannot be activated for a closed order"))
 
+        stage = "load_supplier_rules"
         rules = _get_supplier_rules(order)
         now = datetime.now(timezone.utc)
+        chosen = None
+        ai_reason = None
 
         if rules:
+            stage = "plan_reminders"
             points = OrderReminderService.plan_reminders(now, rules)
             candidates = [{"at": point.at.isoformat(), "level": point.level, "label": point.label} for point in points]
-            if candidates:
-                chosen = ReminderAIService.choose_candidate(order, candidates, now)
-                chosen_at = chosen["at"] if chosen else candidates[0]["at"]
-                ai_reason = chosen.get("reason") if chosen else "נבחר מועד המעקב הראשון לפי כללי הספק."
-                mode = "supplier_rules"
-                snapshot = {"mode": mode, "rules": rules, "ai_reason": ai_reason}
-            else:
+            if not candidates:
                 candidates = _fallback_candidates(now)
-                chosen = ReminderAIService.choose_candidate(order, candidates, now)
-                chosen_at = chosen["at"] if chosen else candidates[0]["at"]
-                ai_reason = chosen.get("reason") if chosen else "כללי הספק לא יצרו מועד עתידי, ולכן נבחר מועד גיבוי."
-                snapshot = {"mode": "supplier_rules_fallback", "rules": rules, "ai_reason": ai_reason}
+                mode = "supplier_rules_fallback"
+                fallback_note = "כללי הספק לא יצרו מועד עתידי, ולכן נבחר מועד גיבוי."
+            else:
+                mode = "supplier_rules"
+                fallback_note = None
         else:
             candidates = _fallback_candidates(now)
-            chosen = ReminderAIService.choose_candidate(order, candidates, now)
-            chosen_at = chosen["at"] if chosen else candidates[0]["at"]
-            ai_reason = chosen.get("reason") if chosen else "אין כללי ספק, ולכן נבחר מועד גיבוי בטוח."
-            snapshot = {"mode": "manual_fallback", "note": "נוצרה תזכורת כי לספק אין ימי הזמנה/אספקה מוגדרים.", "ai_reason": ai_reason, "created_at": now.isoformat()}
+            mode = "manual_fallback"
+            fallback_note = "נוצרה תזכורת כי לספק אין ימי הזמנה/אספקה מוגדרים."
 
+        stage = "choose_candidate"
+        chosen = ReminderAIService.choose_candidate(order, candidates, now)
+        chosen_at = chosen.get("at") if chosen else candidates[0]["at"]
+        ai_reason = chosen.get("reason") if chosen else fallback_note or "נבחר מועד המעקב הראשון לפי כללי הספק."
+
+        stage = "persist_reminder"
         next_at = datetime.fromisoformat(chosen_at)
         if next_at.tzinfo is None:
             next_at = next_at.replace(tzinfo=timezone.utc)
-        order.reminder_rules_snapshot = snapshot
+        order.reminder_rules_snapshot = {
+            "mode": mode,
+            **({"rules": rules} if rules else {}),
+            **({"note": fallback_note} if fallback_note else {}),
+            "ai_reason": ai_reason,
+            "created_at": now.isoformat(),
+        }
         order.next_reminder_at = next_at.astimezone(timezone.utc)
         order.reminder_state = REMINDER_PENDING
         db.session.commit()
 
+        stage = "google_calendar"
         calendar_event_id = _sync_google_calendar(order)
-        return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id, "ai_reason": ai_reason})
+
+        stage = "serialize_response"
+        response_order = order.to_dict()
+        return jsonify({"success": True, "order": response_order, "calendar_event_id": calendar_event_id, "ai_reason": ai_reason})
     except HTTPException as exc:
         return _json_error(exc)
-    except (TypeError, ValueError, KeyError) as exc:
-        return _unexpected_error("Reminder activation data processing failed", exc)
     except Exception as exc:
-        return _unexpected_error("Reminder activation failed", exc)
+        return _unexpected_error("Reminder activation failed", exc, stage)
 
 
 @order_reminders_bp.route("/orders/<int:order_id>/manual", methods=["POST"])
@@ -213,7 +241,7 @@ def create_manual_order_reminder(order_id: int):
         calendar_event_id = _sync_google_calendar(order)
         return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id})
     except Exception as exc:
-        return _unexpected_error("Manual reminder creation failed", exc)
+        return _unexpected_error("Manual reminder creation failed", exc, "manual")
 
 
 @order_reminders_bp.route("/orders/<int:order_id>/complete", methods=["POST"])
@@ -230,7 +258,7 @@ def complete_order_reminder(order_id: int):
         db.session.commit()
         return jsonify({"success": True, "order": order.to_dict()})
     except Exception as exc:
-        return _unexpected_error("Completing reminder failed", exc)
+        return _unexpected_error("Completing reminder failed", exc, "complete")
 
 
 @order_reminders_bp.route("/orders/<int:order_id>/snooze", methods=["POST"])
@@ -256,4 +284,4 @@ def snooze_order_reminder(order_id: int):
         calendar_event_id = _sync_google_calendar(order)
         return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id})
     except Exception as exc:
-        return _unexpected_error("Snoozing reminder failed", exc)
+        return _unexpected_error("Snoozing reminder failed", exc, "snooze")
