@@ -5,6 +5,7 @@ import uuid
 from flask import Flask, g, jsonify, request
 from sqlalchemy import select
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.config import get_config
 from app.extensions import db, migrate, login_manager, csrf, limiter, swagger, cors
@@ -25,6 +26,11 @@ def create_app(config_name=None):
             raise RuntimeError("Missing required production configuration: " + ", ".join(missing))
         if not app.config["CORS_ORIGINS"]:
             raise RuntimeError("CORS_ORIGINS must contain at least one allowed origin in production")
+
+    # Render terminates TLS at its edge proxy. Trust exactly one proxy hop so
+    # request.is_secure and client IP based controls reflect the original
+    # request without blindly trusting arbitrary forwarded headers.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     _ensure_directories(app)
     _init_extensions(app)
@@ -57,7 +63,8 @@ def _init_extensions(app):
     csrf.init_app(app)
     limiter.init_app(app)
     cors.init_app(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}}, supports_credentials=True)
-    swagger.init_app(app)
+    if app.config.get("DEBUG"):
+        swagger.init_app(app)
 
     @login_manager.unauthorized_handler
     def unauthorized():
