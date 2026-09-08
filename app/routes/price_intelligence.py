@@ -73,6 +73,83 @@ def price_changes():
     return jsonify({"success": True, "changes": changes})
 
 
+@price_intelligence_bp.route("/summary", methods=["GET"])
+@login_required
+def portfolio_summary():
+    """Return a deterministic tenant-scoped procurement snapshot for the dashboard."""
+    try:
+        limit = max(1, min(request.args.get("limit", default=10, type=int), 50))
+        result = PriceIntelligenceService(current_user.tenant_id).get_portfolio_summary(opportunity_limit=limit)
+        return jsonify({"success": True, **result})
+    except (TypeError, ValueError) as exc:
+        return _handle(BadRequest(str(exc)))
+    except HTTPException as exc:
+        return _handle(exc)
+
+
+@price_intelligence_bp.route("/supplier-scores", methods=["GET"])
+@login_required
+def supplier_price_scores():
+    """Rank suppliers by price competitiveness and catalog coverage only."""
+    try:
+        limit = max(1, min(request.args.get("limit", default=10, type=int), 50))
+        result = PriceIntelligenceService(current_user.tenant_id).get_supplier_price_scores(limit=limit)
+        return jsonify({"success": True, **result})
+    except (TypeError, ValueError) as exc:
+        return _handle(BadRequest(str(exc)))
+    except HTTPException as exc:
+        return _handle(exc)
+
+
+def _build_briefing_prompt(summary: dict, supplier_scores: dict) -> str:
+    return (
+        "You are the executive procurement briefing layer inside SSOS. Analyze ONLY the supplied deterministic facts. "
+        "Do not invent market prices, supplier quality, delivery times, stock, contracts, or savings beyond the supplied numbers. "
+        "Return valid JSON only with keys: headline, highlights, risks, actions. "
+        "All values must be concise Hebrew strings; arrays must contain short actionable strings.\n\n"
+        f"PORTFOLIO SUMMARY: {summary}\n"
+        f"SUPPLIER PRICE SCORES: {supplier_scores}\n"
+    )
+
+
+@price_intelligence_bp.route("/ai-briefing", methods=["POST"])
+@login_required
+def portfolio_ai_briefing():
+    """Generate a read-only Gemini executive briefing from deterministic portfolio facts."""
+    try:
+        intelligence = PriceIntelligenceService(current_user.tenant_id)
+        summary = intelligence.get_portfolio_summary(opportunity_limit=10)
+        supplier_scores = intelligence.get_supplier_price_scores(limit=10)
+        ai = AIService.from_config(current_app.config)
+        if not ai.is_available():
+            raise ServiceUnavailable("Gemini is not configured for this environment")
+        result = ai.generate_text(_build_briefing_prompt(summary, supplier_scores))
+        if not result.success:
+            raise ServiceUnavailable("Gemini could not generate the briefing right now")
+        import json
+        try:
+            briefing = json.loads(result.text or "{}")
+        except json.JSONDecodeError:
+            raise ServiceUnavailable("Gemini returned an invalid briefing")
+        if not isinstance(briefing, dict):
+            raise ServiceUnavailable("Gemini returned an invalid briefing")
+        return jsonify({
+            "success": True,
+            "provider": result.provider,
+            "model": result.model,
+            "briefing": {
+                "headline": str(briefing.get("headline") or "אין סיכום זמין כרגע"),
+                "highlights": briefing.get("highlights") if isinstance(briefing.get("highlights"), list) else [],
+                "risks": briefing.get("risks") if isinstance(briefing.get("risks"), list) else [],
+                "actions": briefing.get("actions") if isinstance(briefing.get("actions"), list) else [],
+            },
+        })
+    except ServiceUnavailable as exc:
+        return _handle(exc)
+    except HTTPException as exc:
+        return _handle(exc)
+
+
 def _build_gemini_prompt(comparison: dict, history: list[dict], quantity: float) -> str:
     product = comparison.get("product") or {}
     current = comparison.get("current")
