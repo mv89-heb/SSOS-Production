@@ -94,7 +94,10 @@ def test_due_reminder_is_persisted_before_push(app, db, monkeypatch):
     order, user, _ = _seed_order(
         db.session,
         next_reminder_at=now - timedelta(seconds=1),
-        rules={"ai": {"urgency": "high", "score": 87, "reason": "Supplier follow-up is due."}},
+        rules={
+            "ai": {"urgency": "high", "score": 87, "reason": "Supplier follow-up is due."},
+            "recurrence": {"every_minutes": 15, "max_occurrences": 1},
+        },
     )
     monkeypatch.setattr(reminder_worker, "_wait_for_nearby_reminders", lambda: None)
     push_payloads = []
@@ -171,7 +174,7 @@ def test_escalation_notifies_active_managers(app, db, monkeypatch):
     order, _, manager = _seed_order(
         db.session,
         next_reminder_at=now - timedelta(seconds=1),
-        rules={"escalation": {"after_occurrences": 1}},
+        rules={"escalation": {"after_occurrences": 1}, "recurrence": {"every_minutes": 15, "max_occurrences": 1}},
     )
     monkeypatch.setattr(reminder_worker, "_wait_for_nearby_reminders", lambda: None)
     pushed = []
@@ -192,7 +195,11 @@ def test_push_failure_does_not_rollback_reminder(app, db, monkeypatch):
     from scripts import reminder_worker
 
     now = datetime.now(timezone.utc)
-    order, _, _ = _seed_order(db.session, next_reminder_at=now - timedelta(seconds=1))
+    order, _, _ = _seed_order(
+        db.session,
+        next_reminder_at=now - timedelta(seconds=1),
+        rules={"recurrence": {"every_minutes": 15, "max_occurrences": 1}},
+    )
     monkeypatch.setattr(reminder_worker, "_wait_for_nearby_reminders", lambda: None)
 
     def failing_push(*_args, **_kwargs):
