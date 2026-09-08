@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 
-def test_activate_reminder_survives_google_calendar_failure(monkeypatch, logged_in_client_a, make_order):
+def test_activate_reminder_survives_google_calendar_failure(monkeypatch, logged_in_client_a, make_order, db):
     response, _, _ = make_order(logged_in_client_a, supplier_name="Calendar Failure Supplier")
     assert response.status_code == 201, response.get_json()
     order_id = response.get_json()["order"]["id"]
@@ -59,10 +59,14 @@ def test_manual_reminder_rejects_past_datetime(logged_in_client_a, make_order):
     assert result.get_json()["success"] is False
 
 
-def test_ai_analysis_uses_deterministic_urgency_baseline(logged_in_client_a, make_order):
-    response, _, _ = make_order(logged_in_client_a, supplier_name="Urgent Supplier", notes="דחוף, זה עוצר עבודה")
+def test_ai_analysis_uses_deterministic_urgency_baseline(logged_in_client_a, make_order, db):
+    response, _, _ = make_order(logged_in_client_a, supplier_name="Urgent Supplier")
     assert response.status_code == 201, response.get_json()
     order_id = response.get_json()["order"]["id"]
+    from app.models.order import Order
+    order = db.session.get(Order, order_id)
+    order.notes = "דחוף, זה עוצר עבודה"
+    db.session.commit()
 
     result = logged_in_client_a.post(
         f"/api/order-reminders/orders/{order_id}/ai-analysis",
