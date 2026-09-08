@@ -9,6 +9,7 @@ export interface PriceOfferComparison {
   comparison_unit: string | null;
   normalized_price: number;
   primary: boolean;
+  incomparable_reason?: string;
 }
 
 export interface ProductComparison {
