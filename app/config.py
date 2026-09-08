@@ -33,6 +33,8 @@ class BaseConfig:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key-change-me")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     MAX_CONTENT_LENGTH = int(os.environ.get("MAX_UPLOAD_SIZE", 5 * 1024 * 1024))
+    MAX_IMPORT_ROWS = int(os.environ.get("MAX_IMPORT_ROWS", 25000))
+    MAX_IMPORT_COLUMNS = int(os.environ.get("MAX_IMPORT_COLUMNS", 200))
     UPLOAD_EXTENSIONS = {".png", ".jpg", ".jpeg", ".pdf", ".tiff", ".bmp"}
     UPLOAD_MIME_TYPES = {"image/png", "image/jpeg", "image/bmp", "image/tiff", "application/pdf"}
     IMPORT_UPLOAD_EXTENSIONS = {".xlsx", ".xls", ".csv"}
