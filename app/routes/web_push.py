@@ -7,7 +7,7 @@ from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import select
 
-from app.extensions import db
+from app.extensions import db, limiter
 from app.models.notification import Notification
 from app.models.order import Order
 from app.services.audit_service import AuditService
@@ -25,6 +25,7 @@ def get_public_key():
 
 @web_push_bp.route("/subscribe", methods=["POST"])
 @login_required
+@limiter.limit("20/minute", methods=["POST"])
 def subscribe():
     payload = request.get_json(silent=True) or {}
     try:
@@ -36,6 +37,7 @@ def subscribe():
 
 @web_push_bp.route("/unsubscribe", methods=["POST"])
 @login_required
+@limiter.limit("20/minute", methods=["POST"])
 def unsubscribe():
     payload = request.get_json(silent=True) or {}
     endpoint = str(payload.get("endpoint") or "").strip()
@@ -71,9 +73,7 @@ def reminder_change_push(response):
 
         notification_type = "reminder_created" if operation in ("activate", "manual") else "reminder_rescheduled"
         title = "התזכורת נוצרה" if notification_type == "reminder_created" else "התזכורת עודכנה"
-        local_time = order.next_reminder_at.replace(tzinfo=timezone.utc).astimezone(
-            timezone.utc
-        ).strftime("%d/%m/%Y %H:%M")
+        local_time = order.next_reminder_at.replace(tzinfo=timezone.utc).astimezone(timezone.utc).strftime("%d/%m/%Y %H:%M")
         message = (
             f"התזכורת להזמנה {order.order_number} נוספה ל-Google Calendar."
             if notification_type == "reminder_created"
