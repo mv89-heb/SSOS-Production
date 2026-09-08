@@ -18,7 +18,10 @@ jobs:
   reminder-worker:
     name: Process due order reminders
     runs-on: ubuntu-22.04
-    timeout-minutes: 5
+    # The worker may wait up to 5 minutes when a scheduled run starts just
+    # before a reminder target time. Dependency installation needs its own
+    # time, so keep the overall job timeout above that scheduling window.
+    timeout-minutes: 10
     env:
       FLASK_ENV: production
       FLASK_APP: wsgi.py
