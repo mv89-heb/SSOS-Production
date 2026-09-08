@@ -5,6 +5,8 @@ from app.extensions import db
 from app.repositories.product_repository import ProductRepository
 from app.repositories.price_history_repository import PriceHistoryRepository
 from app.repositories.price_observation_repository import PriceObservationRepository
+from app.repositories.supplier_repository import SupplierRepository
+from app.repositories.supplier_offer_repository import SupplierOfferRepository
 from app.models.price_history import PriceHistory
 
 
@@ -26,12 +28,14 @@ class PriceIntelligenceService:
         "G": ("KG", Decimal("0.001")), "KG": ("KG", Decimal("1")),
         "ML": ("L", Decimal("0.001")), "L": ("L", Decimal("1")),
         "M": ("M", Decimal("1")), "UNIT": ("UNIT", Decimal("1")),
-        "PACK": ("PACK", Decimal("1")),
+        "PACK": ("PACK", Decimal("1")), "CARTON": ("CARTON", Decimal("1")),
     }
 
     def __init__(self, tenant_id: int):
         self.tenant_id = tenant_id
         self.product_repo = ProductRepository(tenant_id)
+        self.supplier_repo = SupplierRepository(tenant_id)
+        self.offer_repo = SupplierOfferRepository(tenant_id)
         self.history_repo = PriceHistoryRepository(tenant_id)
         self.observation_repo = PriceObservationRepository(tenant_id)
 
@@ -81,40 +85,85 @@ class PriceIntelligenceService:
             "primary": primary,
         }
 
+    @staticmethod
+    def _incomparable_reason(left, right) -> str | None:
+        if left["currency"] != right["currency"]:
+            return "מטבע שונה — נדרש שער המרה לפני השוואה"
+        if left["comparison_unit"] != right["comparison_unit"]:
+            return "יחידת השוואה שונה — לא ניתן להשוות מחיר ישירות"
+        if left["comparison_unit"] is None:
+            return "חסרה יחידת השוואה"
+        return None
+
     def compare_product(self, product_id: int):
         product = self.product_repo.get_by_id_or_404(product_id)
         default_unit = self.normalize_unit(product.unit) or "UNIT"
         by_supplier = {}
+
         if product.current_price is not None and self._decimal(product.current_price) > 0:
+            primary_supplier = self.supplier_repo.get_by_id(product.supplier_id)
             by_supplier[product.supplier_id] = self._price_payload(
-                product.supplier_id, product.supplier.name if product.supplier else None,
-                product.current_price, product.unit or default_unit, product.units_per_carton,
-                product.currency, primary=True,
+                product.supplier_id,
+                primary_supplier.name if primary_supplier else None,
+                product.current_price,
+                product.unit or default_unit,
+                product.units_per_carton,
+                product.currency,
+                primary=True,
             )
-        for offer in product.supplier_offers:
+
+        # Product.supplier_offers is not tenant-filtered at relationship level.
+        # Read through the tenant-scoped repository so malformed cross-tenant rows
+        # can never leak into the comparison result.
+        for offer in self.offer_repo.get_by_product(product_id):
             if not offer.active or self._decimal(offer.price) <= 0 or offer.supplier_id == product.supplier_id:
                 continue
+            supplier = self.supplier_repo.get_by_id(offer.supplier_id)
+            if supplier is None:
+                continue
             by_supplier[offer.supplier_id] = self._price_payload(
-                offer.supplier_id, offer.supplier.name if offer.supplier else None,
-                offer.price, offer.unit or product.unit or default_unit,
-                offer.units_per_carton, offer.currency,
+                offer.supplier_id,
+                supplier.name,
+                offer.price,
+                offer.unit or product.unit or default_unit,
+                offer.units_per_carton,
+                offer.currency,
             )
+
         offers = list(by_supplier.values())
-        currencies = {row["currency"] for row in offers}
+        current = by_supplier.get(product.supplier_id)
         comparable = []
-        if len(currencies) == 1 and offers:
-            units = {row["comparison_unit"] for row in offers}
-            if len(units) == 1 and None not in units:
-                comparable = offers
+        incomparable = []
+
+        if current is not None:
+            for row in offers:
+                reason = self._incomparable_reason(current, row)
+                if reason is None:
+                    comparable.append(row)
+                else:
+                    incomparable.append({**row, "incomparable_reason": reason})
+        elif offers:
+            # In an incomplete catalog there may be no current price. Still compare
+            # alternate offers against each other so the screen remains useful.
+            anchor = offers[0]
+            for row in offers:
+                reason = self._incomparable_reason(anchor, row)
+                if reason is None:
+                    comparable.append(row)
+                else:
+                    incomparable.append({**row, "incomparable_reason": reason})
+
         comparable.sort(key=lambda row: row["normalized_price"])
         result = {
-            "product": product.to_dict(), "current": by_supplier.get(product.supplier_id),
+            "product": product.to_dict(),
+            "current": current,
             "offers": comparable,
-            "incomparable_offers": [row for row in offers if row not in comparable],
+            "incomparable_offers": incomparable,
             "best_offer": comparable[0] if comparable else None,
-            "saving_per_unit": 0.0, "saving_percent": 0.0,
+            "saving_per_unit": 0.0,
+            "saving_percent": 0.0,
         }
-        best, current = result["best_offer"], result["current"]
+        best = result["best_offer"]
         if current and best and current["normalized_price"] > 0:
             saving = self._decimal(current["normalized_price"]) - self._decimal(best["normalized_price"])
             if saving > 0:
@@ -127,17 +176,30 @@ class PriceIntelligenceService:
         qty = self._decimal(quantity)
         current, best = comparison["current"], comparison["best_offer"]
         if qty <= 0 or not current or not best:
-            return {"product_id": product_id, "quantity": float(qty), "current_cost": 0.0,
-                    "best_cost": 0.0, "savings": 0.0, "savings_percent": 0.0,
-                    "best_supplier_id": best["supplier_id"] if best else None}
+            return {
+                "product_id": product_id,
+                "quantity": float(qty),
+                "current_cost": 0.0,
+                "best_cost": 0.0,
+                "savings": 0.0,
+                "savings_percent": 0.0,
+                "best_supplier_id": best["supplier_id"] if best else None,
+                "best_supplier_name": best["supplier_name"] if best else None,
+            }
         current_cost = self._decimal(current["normalized_price"]) * qty
         best_cost = self._decimal(best["normalized_price"]) * qty
         savings = max(Decimal("0"), current_cost - best_cost)
         percent = savings / current_cost * Decimal("100") if current_cost > 0 else Decimal("0")
-        return {"product_id": product_id, "quantity": float(qty), "current_cost": round(float(current_cost), 2),
-                "best_cost": round(float(best_cost), 2), "savings": round(float(savings), 2),
-                "savings_percent": round(float(percent), 4), "best_supplier_id": best["supplier_id"],
-                "best_supplier_name": best["supplier_name"]}
+        return {
+            "product_id": product_id,
+            "quantity": float(qty),
+            "current_cost": round(float(current_cost), 2),
+            "best_cost": round(float(best_cost), 2),
+            "savings": round(float(savings), 2),
+            "savings_percent": round(float(percent), 4),
+            "best_supplier_id": best["supplier_id"],
+            "best_supplier_name": best["supplier_name"],
+        }
 
     def record_observation(self, *, product_id: int, supplier_id: int, observed_price, currency="ILS",
                            unit=None, package_quantity=None, comparison_unit=None, price_basis="NET",
