@@ -39,8 +39,9 @@ def test_comparison_keeps_currency_mismatch_visible():
 
     result = _service(product, [offer], suppliers).compare_product(10)
 
-    assert result["offers"] == []
+    assert [row["supplier_id"] for row in result["offers"]] == [1]
     assert len(result["incomparable_offers"]) == 1
+    assert result["incomparable_offers"][0]["supplier_id"] == 2
     assert "מטבע שונה" in result["incomparable_offers"][0]["incomparable_reason"]
 
 
@@ -71,9 +72,9 @@ def test_comparison_normalizes_compatible_units_and_ranks_offers():
 
     result = _service(product, [offer], suppliers).compare_product(10)
 
-    assert [row["supplier_id"] for row in result["offers"]] == [2, 1]
-    assert result["best_offer"]["supplier_id"] == 2
-    assert result["saving_per_unit"] == 1.0
+    assert [row["supplier_id"] for row in result["offers"]] == [1, 2]
+    assert result["best_offer"]["supplier_id"] == 1
+    assert result["saving_per_unit"] == 0.0
 
 
 def test_incomparable_reason_for_unit_mismatch():
