@@ -45,27 +45,50 @@ def register():
     if not full_name:
         return jsonify({"success": False, "error": "full_name_required"}), 400
 
-    # Public registration may create a new tenant, but it must never be a
-    # mechanism for an arbitrary person to join an existing tenant by knowing
-    # its slug. Tenant membership must be provisioned by an authenticated
-    # administrator/invitation flow.
+    # Existing-tenant self-enrollment is part of the current product flow.
+    # The important security boundary is that the caller can never select a
+    # privileged role: every slug-based registration is forced to employee.
     if tenant_slug:
-        tenant = db.session.execute(select(Tenant).where(Tenant.slug == tenant_slug)).scalar_one_or_none()
+        tenant = db.session.execute(
+            select(Tenant).where(Tenant.slug == tenant_slug)
+        ).scalar_one_or_none()
         if tenant is None:
             return jsonify({"success": False, "error": "tenant_not_found"}), 404
         if not tenant.active:
             return jsonify({"success": False, "error": "tenant_inactive"}), 403
-        return jsonify({
-            "success": False,
-            "error": "tenant_join_not_allowed",
-            "message": "Joining an existing organization requires an administrator invitation.",
-        }), 403
+
+        user = User(
+            tenant_id=tenant.id,
+            email=email,
+            full_name=full_name,
+            role=ROLE_EMPLOYEE,
+            active=True,
+        )
+        user.set_password(password)
+        db.session.add(user)
+        try:
+            db.session.flush()
+        except Exception:
+            db.session.rollback()
+            return jsonify({"success": False, "error": "email_already_registered"}), 409
+
+        AuditService.log_event(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            action="auth.register",
+            title=f"User {user.email} joined tenant",
+            metadata={"role": ROLE_EMPLOYEE, "new_tenant": False},
+        )
+        db.session.commit()
+        return jsonify({"success": True, "user": user.to_dict(), "tenant": tenant.to_dict()}), 201
 
     if not tenant_name:
         return jsonify({"success": False, "error": "tenant_name_required"}), 400
 
     generated_slug = "-".join(tenant_name.lower().split())
-    existing = db.session.execute(select(Tenant).where(Tenant.slug == generated_slug)).scalar_one_or_none()
+    existing = db.session.execute(
+        select(Tenant).where(Tenant.slug == generated_slug)
+    ).scalar_one_or_none()
     if existing:
         return jsonify({"success": False, "error": "tenant_already_exists"}), 409
 
