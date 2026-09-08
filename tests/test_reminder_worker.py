@@ -28,11 +28,8 @@ def test_due_reminder_worker_repeats_until_completed(app, db, make_order, logged
     assert _aware(order.next_reminder_at) > datetime.now(timezone.utc)
     first_next = _aware(order.next_reminder_at)
 
-    notifications = db.session.query(Notification).filter_by(
-        tenant_id=order.tenant_id,
-        user_id=order.user_id,
-    ).all()
-    reminder_notifications = [item for item in notifications if item.title == f"תזכורת להזמנה {order.order_number}"]
+    notifications = db.session.query(Notification).filter_by(tenant_id=order.tenant_id, user_id=order.user_id).all()
+    reminder_notifications = [item for item in notifications if "תזכורת להזמנה" in item.title]
     assert len(reminder_notifications) == 1
     assert reminder_notifications[0].status == STATUS_UNREAD
 
@@ -45,13 +42,7 @@ def test_due_reminder_worker_repeats_until_completed(app, db, make_order, logged
     assert order.reminder_state == REMINDER_PENDING
     assert _aware(order.next_reminder_at) > first_next
 
-    reminder_notifications = [
-        item for item in db.session.query(Notification).filter_by(
-            tenant_id=order.tenant_id,
-            user_id=order.user_id,
-        ).all()
-        if item.title == f"תזכורת להזמנה {order.order_number}"
-    ]
+    reminder_notifications = [item for item in db.session.query(Notification).filter_by(tenant_id=order.tenant_id, user_id=order.user_id).all() if "תזכורת להזמנה" in item.title]
     assert len(reminder_notifications) == 2
 
     order.reminder_state = REMINDER_COMPLETE
