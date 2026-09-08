@@ -1,6 +1,7 @@
 """Process due order reminders with locking, recurrence, escalation and push delivery."""
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import time
 
 from sqlalchemy import select
 
@@ -13,6 +14,12 @@ from app.services.audit_service import AuditService
 from app.services.web_push_service import send_to_user
 
 DEFAULT_NAG_MINUTES = 60
+# GitHub Actions invokes this worker every 5 minutes. We use the next run's
+# five-minute cadence as a scheduling window, but keep the database timestamp
+# as the authoritative target time. The worker may wait briefly so a run that
+# starts before the target can deliver close to the requested minute.
+EXECUTION_WINDOW_MINUTES = 5
+MAX_WAIT_SECONDS = EXECUTION_WINDOW_MINUTES * 60
 
 
 def _dashboard_url(order):
@@ -28,7 +35,48 @@ def _urgency_text(rules: dict) -> tuple[str, str]:
     return labels.get(urgency, labels["normal"]), f" (ציון {score})" if score is not None else ""
 
 
+def _wait_for_nearby_reminders() -> None:
+    """Wait until the earliest reminder in the next five-minute window.
+
+    We deliberately do not hold database row locks while sleeping. After the
+    wait, process_due_reminders() performs the authoritative locked query.
+    """
+    now = datetime.now(timezone.utc)
+    window_end = now + timedelta(minutes=EXECUTION_WINDOW_MINUTES)
+
+    upcoming = db.session.execute(
+        select(Order.next_reminder_at)
+        .where(
+            Order.next_reminder_at.is_not(None),
+            Order.next_reminder_at > now,
+            Order.next_reminder_at <= window_end,
+            Order.reminder_state == REMINDER_PENDING,
+            Order.status.notin_((STATUS_SENT, STATUS_COMPLETED, STATUS_CANCELLED)),
+        )
+        .order_by(Order.next_reminder_at.asc())
+        .limit(1)
+    ).scalar_one_or_none()
+    db.session.rollback()
+
+    if upcoming is None:
+        return
+
+    wait_seconds = (upcoming - datetime.now(timezone.utc)).total_seconds()
+    if wait_seconds <= 0:
+        return
+
+    # Never sleep beyond the worker's scheduling window. GitHub Actions may
+    # itself delay scheduled runs, so the final due query remains the source
+    # of truth and will catch anything that became due meanwhile.
+    time.sleep(min(wait_seconds, MAX_WAIT_SECONDS))
+
+
 def process_due_reminders() -> int:
+    # If a run starts a few minutes before the target, wait until the target
+    # rather than firing the notification early. If GitHub starts late, the
+    # normal <= now query below catches the reminder immediately.
+    _wait_for_nearby_reminders()
+
     now = datetime.now(timezone.utc)
     due_orders = list(
         db.session.execute(
