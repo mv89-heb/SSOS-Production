@@ -1,4 +1,5 @@
 from app.extensions import db
+from app.models.product import Product
 from app.models.supplier_offer import SupplierProductOffer
 from app.services.ai_service import AIResult
 
@@ -29,10 +30,15 @@ def test_gemini_insight_uses_deterministic_comparison(logged_in_client_a, db, mo
         "currency": "ILS",
         "unit": "unit",
     }).get_json()["product"]
-
+    persisted_product = db.session.get(Product, product["id"])
     db.session.add(SupplierProductOffer(
-        tenant_id=product["tenant_id"], product_id=product["id"], supplier_id=supplier_b,
-        price=9, currency="ILS", unit="unit", active=True,
+        tenant_id=persisted_product.tenant_id,
+        product_id=product["id"],
+        supplier_id=supplier_b,
+        price=9,
+        currency="ILS",
+        unit="unit",
+        active=True,
     ))
     db.session.commit()
 
