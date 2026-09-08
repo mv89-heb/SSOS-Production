@@ -1,6 +1,8 @@
 import os
 import csv
 
+from flask import current_app
+
 from app.repositories.import_session_repository import ImportSessionRepository
 from app.repositories.import_row_repository import ImportRowRepository
 from app.repositories.supplier_repository import SupplierRepository
@@ -64,6 +66,11 @@ class ImportService:
                 f"Failed to parse {filename}: {exc}",
                 {"import_session_id": session.id},
             )
+            try:
+                os.remove(storage_path)
+                session.storage_path = None
+            except OSError:
+                pass
             return session
 
         row_entities = [
@@ -88,6 +95,32 @@ class ImportService:
             {"import_session_id": session.id, "row_count": len(data_rows)},
         )
         return session
+
+    @staticmethod
+    def _max_rows() -> int:
+        return int(current_app.config.get("MAX_IMPORT_ROWS", 25000))
+
+    @staticmethod
+    def _max_columns() -> int:
+        return int(current_app.config.get("MAX_IMPORT_COLUMNS", 200))
+
+    @staticmethod
+    def _bounded_rows(rows_iter):
+        """Materialize only the bounded number of rows needed by analysis."""
+        max_rows = ImportService._max_rows()
+        rows = []
+        for index, row in enumerate(rows_iter):
+            if index >= max_rows:
+                raise ImportParseError(
+                    f"Import exceeds the maximum of {max_rows:,} rows"
+                )
+            row = tuple(row)
+            if len(row) > ImportService._max_columns():
+                raise ImportParseError(
+                    f"Import exceeds the maximum of {ImportService._max_columns():,} columns"
+                )
+            rows.append(row)
+        return rows
 
     @staticmethod
     def _parse_file(path: str, sheet_name: str = None):
@@ -181,18 +214,18 @@ class ImportService:
     def _parse_csv(path: str):
         try:
             with open(path, newline="", encoding="utf-8-sig") as f:
-                rows = list(csv.reader(f))
+                rows = csv.reader(f)
+                headers, data_rows, data_rows_values = ImportService._rows_to_dicts(rows)
         except UnicodeDecodeError as exc:
             raise ImportParseError(f"Could not read CSV as UTF-8: {exc}") from exc
         except OSError as exc:
             raise ImportParseError(f"Could not open .csv file: {exc}") from exc
 
-        headers, data_rows, data_rows_values = ImportService._rows_to_dicts(iter(rows))
         return headers, data_rows, data_rows_values, "CSV"
 
     @staticmethod
     def _rows_to_dicts(rows_iter):
-        rows_list = list(rows_iter)
+        rows_list = ImportService._bounded_rows(rows_iter)
 
         if not any(row and any(cell not in (None, "") for cell in row) for row in rows_list):
             return [], [], []
