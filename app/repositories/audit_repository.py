@@ -15,3 +15,10 @@ class AuditRepository(BaseRepository):
     def all_ordered(self):
         stmt = self._tenant_select().order_by(AuditLog.id.asc())
         return list(db.session.execute(stmt).scalars().all())
+
+    def list_all(self, limit: int = 100, offset: int = 0, action: str | None = None):
+        stmt = self._tenant_select()
+        if action:
+            stmt = stmt.where(AuditLog.action.ilike(f"%{action}%"))
+        stmt = stmt.order_by(AuditLog.id.desc()).limit(limit).offset(offset)
+        return list(db.session.execute(stmt).scalars().all())
