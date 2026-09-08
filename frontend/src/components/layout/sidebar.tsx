@@ -12,10 +12,11 @@ const navigation = [
   { name: "לוח בקרה", href: "/dashboard", icon: LayoutDashboard },
   { name: "ניהול ספקים", href: "/dashboard/suppliers", icon: Users },
   { name: "קטלוג מוצרים", href: "/dashboard/catalog", icon: Package },
+  { name: "הזמנות רכש", href: "/dashboard/orders", icon: ShoppingCart },
+  // Reminders is intentionally kept near the primary workflow so it is visible without scrolling.
+  { name: "תזכורות", href: "/dashboard/reminders", icon: Bell },
   { name: "השוואת ספקים", href: "/dashboard/price-intelligence", icon: BarChart3 },
   { name: "ניתוח מסמכים עם Gemini", href: "/dashboard/gemini", icon: FileSearch },
-  { name: "הזמנות רכש", href: "/dashboard/orders", icon: ShoppingCart },
-  { name: "תזכורות", href: "/dashboard/reminders", icon: Bell },
   { name: "Google Calendar", href: "/dashboard/settings/google-calendar", icon: CalendarDays },
   { name: "לוג ביקורת", href: "/dashboard/audit", icon: History },
   { name: "הגדרות מערכת", href: "/dashboard/settings", icon: Settings },
