@@ -1,7 +1,8 @@
 import logging
 import os
+import uuid
 
-from flask import Flask, jsonify
+from flask import Flask, g, jsonify, request
 from sqlalchemy import select
 from werkzeug.exceptions import HTTPException
 
@@ -18,7 +19,7 @@ def create_app(config_name=None):
     config_class.init_app(app)
 
     if config_class.__name__ == "ProductionConfig":
-        required = ("SECRET_KEY", "DATABASE_URL", "CORS_ORIGINS", "SQLALCHEMY_DATABASE_URI")
+        required = ("SECRET_KEY", "DATABASE_URL", "CORS_ORIGINS", "SQLALCHEMY_DATABASE_URI", "RATELIMIT_STORAGE_URI")
         missing = [name for name in required if not app.config.get(name)]
         if missing:
             raise RuntimeError("Missing required production configuration: " + ", ".join(missing))
@@ -29,6 +30,8 @@ def create_app(config_name=None):
     _init_extensions(app)
     _install_import_analysis_patches()
     _register_blueprints(app)
+    _register_request_context(app)
+    _register_security_headers(app)
     _register_error_handlers(app)
     return app
 
@@ -71,6 +74,32 @@ def _init_extensions(app):
             return None
         stmt = select(User).join(User.tenant).where(User.id == parsed_id, User.active.is_(True), Tenant.active.is_(True))
         return db.session.execute(stmt).scalar_one_or_none()
+
+
+def _register_request_context(app):
+    @app.before_request
+    def attach_request_id():
+        request_id = request.headers.get("X-Request-ID", "").strip()
+        if not request_id or len(request_id) > 128:
+            request_id = uuid.uuid4().hex
+        g.request_id = request_id
+
+    @app.after_request
+    def add_request_id(response):
+        response.headers["X-Request-ID"] = getattr(g, "request_id", uuid.uuid4().hex)
+        return response
+
+
+def _register_security_headers(app):
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        if not app.debug and request.is_secure:
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        return response
 
 
 def _register_blueprints(app):
@@ -117,3 +146,14 @@ def _register_error_handlers(app):
     @app.errorhandler(HTTPException)
     def handle_exception(e):
         return jsonify({"success": False, "error": e.name.lower().replace(" ", "_"), "message": e.description}), e.code
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_exception(e):
+        request_id = getattr(g, "request_id", "unknown")
+        logger.exception("Unhandled exception request_id=%s method=%s path=%s", request_id, request.method, request.path)
+        return jsonify({
+            "success": False,
+            "error": "internal_server_error",
+            "message": "אירעה שגיאה פנימית בשרת.",
+            "request_id": request_id,
+        }), 500
