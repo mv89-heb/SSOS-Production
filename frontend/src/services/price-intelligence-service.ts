@@ -14,7 +14,7 @@ export interface PriceOfferComparison {
 
 export interface ProductComparison {
   success?: boolean;
-  product: { id: number; name: string; current_price: number; currency: string; supplier_id: number };
+  product: { id: number; name: string; current_price: number; currency: string; supplier_id: number; sku?: string | null };
   current: PriceOfferComparison | null;
   offers: PriceOfferComparison[];
   incomparable_offers: PriceOfferComparison[];
@@ -50,6 +50,15 @@ export interface PriceHistoryRow {
   change_percent: number | null;
 }
 
+export interface GeminiInsight {
+  recommendation: string | null;
+  confidence: number;
+  reasons: string[];
+  risks: string[];
+  trend: string;
+  actions: string[];
+}
+
 export const priceIntelligenceService = {
   compareProduct: async (productId: number) => {
     const { data } = await apiClient.get<ProductComparison>(`/api/price-intelligence/products/${productId}/comparison`);
@@ -66,5 +75,12 @@ export const priceIntelligenceService = {
   getChanges: async (limit = 100) => {
     const { data } = await apiClient.get<{ success: boolean; changes: PriceHistoryRow[] }>("/api/price-intelligence/changes", { params: { limit } });
     return data.changes;
+  },
+  getGeminiInsight: async (productId: number, quantity: number) => {
+    const { data } = await apiClient.post<{ success: boolean; provider: string; model: string; insight: GeminiInsight }>(
+      `/api/price-intelligence/products/${productId}/ai-insight`,
+      { quantity },
+    );
+    return data;
   },
 };
