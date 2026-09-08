@@ -1,37 +1,15 @@
 """Production entrypoint for Render.
 
-Render services created before the Blueprint pre-deploy setting existed may
-continue using their dashboard-configured start command. This entrypoint makes
-schema migration part of the executable that Render starts, so an old service
-configuration cannot boot the application against an outdated database.
+Database migrations are owned by Render's preDeployCommand in render.yaml.
+Keeping schema changes out of the web process prevents every Gunicorn worker
+from attempting migration work during application startup.
 """
 from __future__ import annotations
 
 import os
-import subprocess
-import sys
 
 
 def main() -> None:
-    env = os.environ.copy()
-    env.setdefault("FLASK_APP", "app:create_app()")
-
-    print("[production] Running database migrations before Gunicorn", flush=True)
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "flask",
-            "--app",
-            "app:create_app()",
-            "db",
-            "upgrade",
-            "heads",
-        ],
-        env=env,
-        check=True,
-    )
-
     port = os.environ.get("PORT", "10000")
     workers = os.environ.get("WEB_CONCURRENCY", "4")
     print(f"[production] Starting Gunicorn on port {port} with {workers} workers", flush=True)
@@ -46,6 +24,10 @@ def main() -> None:
             "wsgi:app",
             "--timeout",
             "120",
+            "--access-logfile",
+            "-",
+            "--error-logfile",
+            "-",
         ],
     )
 
