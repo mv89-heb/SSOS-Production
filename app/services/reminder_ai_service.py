@@ -65,18 +65,7 @@ class ReminderAIService:
 
     @classmethod
     def _schema(cls) -> dict:
-        return {
-            "type": "OBJECT",
-            "properties": {
-                "urgency": {"type": "STRING", "enum": ["low", "normal", "high", "critical"]},
-                "score": {"type": "INTEGER", "minimum": 0, "maximum": 100},
-                "reason": {"type": "STRING"},
-                "first_reminder_minutes": {"type": "INTEGER", "minimum": 5, "maximum": 10080},
-                "repeat_minutes": {"type": "INTEGER", "minimum": 5, "maximum": 10080},
-                "escalate_after_occurrences": {"type": "INTEGER", "minimum": 0, "maximum": 100},
-            },
-            "required": ["urgency", "score", "reason", "first_reminder_minutes", "repeat_minutes", "escalate_after_occurrences"],
-        }
+        return {"type": "OBJECT", "properties": {"urgency": {"type": "STRING", "enum": ["low", "normal", "high", "critical"]}, "score": {"type": "INTEGER", "minimum": 0, "maximum": 100}, "reason": {"type": "STRING"}, "first_reminder_minutes": {"type": "INTEGER", "minimum": 5, "maximum": 10080}, "repeat_minutes": {"type": "INTEGER", "minimum": 5, "maximum": 10080}, "escalate_after_occurrences": {"type": "INTEGER", "minimum": 0, "maximum": 100}}, "required": ["urgency", "score", "reason", "first_reminder_minutes", "repeat_minutes", "escalate_after_occurrences"]}
 
     @classmethod
     def _call_gemini(cls, payload: dict, schema: dict) -> dict | None:
@@ -85,23 +74,9 @@ class ReminderAIService:
         try:
             from google import genai
             from google.genai import types
-            client = genai.Client(
-                api_key=current_app.config["GEMINI_API_KEY"],
-                http_options=types.HttpOptions(
-                    timeout=int(float(current_app.config.get("GEMINI_TIMEOUT", 30)) * 1000),
-                    retry_options=types.HttpRetryOptions(attempts=1),
-                ),
-            )
-            system_instruction = (
-                "אתה יועץ תזכורות למערכת רכש. קבע דחיפות ותדירות מעקב על סמך הנתונים בלבד. "
-                "אל תמציא דדליין או עובדות. אם אין ודאות, העדף תדירות מתונה. "
-                "התזכורת חייבת להמשיך עד שההזמנה מסומנת טופל. החזר JSON בלבד."
-            )
-            response = client.models.generate_content(
-                model=current_app.config.get("GEMINI_MODEL", "gemini-3.6-flash"),
-                contents=json.dumps(payload, ensure_ascii=False, default=str),
-                config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema, system_instruction=system_instruction),
-            )
+            client = genai.Client(api_key=current_app.config["GEMINI_API_KEY"], http_options=types.HttpOptions(timeout=int(float(current_app.config.get("GEMINI_TIMEOUT", 30)) * 1000), retry_options=types.HttpRetryOptions(attempts=1)))
+            system_instruction = "אתה יועץ תזכורות למערכת רכש. קבע דחיפות ותדירות מעקב על סמך הנתונים בלבד. אל תמציא דדליין או עובדות. אם אין ודאות, העדף תדירות מתונה. התזכורת חייבת להמשיך עד שההזמנה מסומנת טופל. החזר JSON בלבד."
+            response = client.models.generate_content(model=current_app.config.get("GEMINI_MODEL", "gemini-3.6-flash"), contents=json.dumps(payload, ensure_ascii=False, default=str), config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema, system_instruction=system_instruction))
             return json.loads(response.text or "{}")
         except Exception:
             current_app.logger.exception("Gemini reminder intelligence failed; deterministic rules remain active")
@@ -111,14 +86,7 @@ class ReminderAIService:
     def analyze(cls, order, now: datetime | None = None, user_text: str = "", deadline: datetime | None = None) -> dict:
         now = now or datetime.now(timezone.utc)
         baseline = cls.deterministic_score(order, now, user_text, deadline)
-        payload = {
-            "task": "Assess urgency and reminder strategy for this procurement order.",
-            "order": {"order_number": order.order_number, "supplier_name": order.supplier_name, "status": order.status, "notes": order.notes, "items": order.items or [], "final_total": float(order.final_total or 0)},
-            "user_text": user_text,
-            "deadline": deadline.isoformat() if deadline else None,
-            "now": now.isoformat(),
-            "deterministic_baseline_score": baseline,
-        }
+        payload = {"task": "Assess urgency and reminder strategy for this procurement order.", "order": {"order_number": order.order_number, "supplier_name": order.supplier_name, "status": order.status, "notes": order.notes, "items": order.items or [], "final_total": float(order.final_total or 0)}, "user_text": user_text, "deadline": deadline.isoformat() if deadline else None, "now": now.isoformat(), "deterministic_baseline_score": baseline}
         result = cls._call_gemini(payload, cls._schema())
         try:
             ai_score = int(result.get("score", baseline)) if isinstance(result, dict) else baseline
@@ -137,11 +105,9 @@ class ReminderAIService:
         first = max(5, min(10080, first))
         escalate = max(0, min(100, escalate))
         if urgency == "critical":
-            repeat = min(repeat, 60)
-            escalate = max(escalate, 2)
+            repeat, escalate = min(repeat, 60), max(escalate, 2)
         elif urgency == "high":
-            repeat = min(repeat, 120)
-            escalate = max(escalate, 3)
+            repeat, escalate = min(repeat, 120), max(escalate, 3)
         elif escalate == 0:
             escalate = cls.DEFAULT_ESCALATE_AFTER
         return {"urgency": urgency, "score": score, "reason": reason, "first_reminder_minutes": first, "repeat_minutes": repeat, "escalate_after_occurrences": escalate, "source": "gemini+rules" if result else "rules", "analyzed_at": now.isoformat()}
@@ -175,7 +141,16 @@ class ReminderAIService:
             escalate = max(0, min(100, int(result.get("escalate_after_occurrences") or analysis["escalate_after_occurrences"])))
         else:
             lower = text.casefold()
-            first = 60 if "שעה" in lower else (30 if "חצי שעה" in lower else (120 if "שעתיים" in lower else 1440 if "מחר" in lower else analysis["first_reminder_minutes"]))
+            if "חצי שעה" in lower:
+                first = 30
+            elif "שעתיים" in lower:
+                first = 120
+            elif "שעה" in lower:
+                first = 60
+            elif "מחר" in lower:
+                first = 1440
+            else:
+                first = analysis["first_reminder_minutes"]
             repeat, escalate = analysis["repeat_minutes"], analysis["escalate_after_occurrences"]
         return {**analysis, "first_reminder_at": (now + timedelta(minutes=first)).isoformat(), "first_reminder_minutes": first, "repeat_minutes": repeat, "escalate_after_occurrences": escalate, "interpretation": text}
 
