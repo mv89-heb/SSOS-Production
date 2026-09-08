@@ -43,6 +43,7 @@ def test_production_init_app_populates_runtime_config(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgres://user:pass@host/db")
     monkeypatch.setenv("CORS_ORIGINS", "https://example.com, https://admin.example.com")
     monkeypatch.setenv("RATELIMIT_STORAGE_URI", "redis://localhost:6379/0")
+    monkeypatch.setenv("REMINDER_EXECUTION_WINDOW_MINUTES", "4")
 
     class DummyApp:
         config = {}
@@ -59,6 +60,7 @@ def test_production_init_app_populates_runtime_config(monkeypatch):
     assert app.config["RATELIMIT_STORAGE_URI"] == "redis://localhost:6379/0"
     assert app.config["SESSION_COOKIE_SECURE"] is True
     assert app.config["SESSION_COOKIE_SAMESITE"] == "None"
+    assert app.config["REMINDER_EXECUTION_WINDOW_MINUTES"] == 4
 
 
 def test_production_init_app_rejects_memory_rate_limit_storage(monkeypatch):
@@ -89,3 +91,10 @@ def test_development_config_uses_database_environment(monkeypatch):
     DevelopmentConfig.init_app(app)
     assert app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql://")
     assert app.config["SQLALCHEMY_ENGINE_OPTIONS"]["pool_pre_ping"] is True
+
+
+def test_invalid_reminder_execution_window_fails_fast(monkeypatch):
+    monkeypatch.setenv("REMINDER_EXECUTION_WINDOW_MINUTES", "-1")
+    with pytest.raises(ValueError, match="REMINDER_EXECUTION_WINDOW_MINUTES"):
+        from app.config import _env_int
+        _env_int("REMINDER_EXECUTION_WINDOW_MINUTES", 5, minimum=0)

@@ -3,6 +3,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import time
 
+from flask import current_app
 from sqlalchemy import select
 
 from app import create_app
@@ -14,16 +15,10 @@ from app.services.audit_service import AuditService
 from app.services.web_push_service import send_to_user
 
 DEFAULT_NAG_MINUTES = 60
-# GitHub Actions invokes this worker every 5 minutes. We use the next run's
-# five-minute cadence as a scheduling window, but keep the database timestamp
-# as the authoritative target time. The worker may wait briefly so a run that
-# starts before the target can deliver close to the requested minute.
-EXECUTION_WINDOW_MINUTES = 5
-MAX_WAIT_SECONDS = EXECUTION_WINDOW_MINUTES * 60
+DEFAULT_EXECUTION_WINDOW_MINUTES = 5
 
 
 def _dashboard_url(order):
-    from flask import current_app
     return current_app.config.get("FRONTEND_PUBLIC_URL", "").rstrip("/") + f"/dashboard/orders/{order.id}"
 
 
@@ -35,14 +30,34 @@ def _urgency_text(rules: dict) -> tuple[str, str]:
     return labels.get(urgency, labels["normal"]), f" (ציון {score})" if score is not None else ""
 
 
-def _wait_for_nearby_reminders() -> None:
-    """Wait until the earliest reminder in the next five-minute window.
+def _execution_window_minutes() -> int:
+    try:
+        value = int(current_app.config.get("REMINDER_EXECUTION_WINDOW_MINUTES", DEFAULT_EXECUTION_WINDOW_MINUTES))
+    except (TypeError, ValueError):
+        value = DEFAULT_EXECUTION_WINDOW_MINUTES
+    return max(0, value)
 
-    We deliberately do not hold database row locks while sleeping. After the
-    wait, process_due_reminders() performs the authoritative locked query.
+
+def _as_utc(value: datetime) -> datetime:
+    """Return an aware UTC datetime for both PostgreSQL and SQLite values."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _wait_for_nearby_reminders() -> None:
+    """Wait for the earliest reminder inside the configured execution window.
+
+    Database timestamps remain authoritative. The worker never holds row locks
+    while sleeping; after the wait, the due query re-checks state and status so
+    a reminder cancelled or completed during the wait is not delivered.
     """
+    window_minutes = _execution_window_minutes()
+    if window_minutes <= 0:
+        return
+
     now = datetime.now(timezone.utc)
-    window_end = now + timedelta(minutes=EXECUTION_WINDOW_MINUTES)
+    window_end = now + timedelta(minutes=window_minutes)
 
     upcoming = db.session.execute(
         select(Order.next_reminder_at)
@@ -61,20 +76,17 @@ def _wait_for_nearby_reminders() -> None:
     if upcoming is None:
         return
 
+    upcoming = _as_utc(upcoming)
     wait_seconds = (upcoming - datetime.now(timezone.utc)).total_seconds()
     if wait_seconds <= 0:
         return
 
-    # Never sleep beyond the worker's scheduling window. GitHub Actions may
-    # itself delay scheduled runs, so the final due query remains the source
-    # of truth and will catch anything that became due meanwhile.
-    time.sleep(min(wait_seconds, MAX_WAIT_SECONDS))
+    time.sleep(min(wait_seconds, window_minutes * 60))
 
 
 def process_due_reminders() -> int:
-    # If a run starts a few minutes before the target, wait until the target
-    # rather than firing the notification early. If GitHub starts late, the
-    # normal <= now query below catches the reminder immediately.
+    # If a run starts shortly before the target, wait until the target instead
+    # of firing early. If GitHub starts late, <= now catches the reminder.
     _wait_for_nearby_reminders()
 
     now = datetime.now(timezone.utc)
@@ -128,6 +140,35 @@ def process_due_reminders() -> int:
                 order.next_reminder_at = None
                 notification_type = "reminder_due"
 
+            escalation_after = int(escalation.get("after_occurrences", 0) or 0)
+            should_escalate = escalation_after and occurrences >= escalation_after and not rules.get("escalated")
+            if should_escalate:
+                managers = db.session.execute(
+                    select(User).where(User.tenant_id == order.tenant_id, User.active.is_(True), User.role == ROLE_MANAGER)
+                ).scalars().all()
+                rules["escalated"] = True
+                for manager in managers:
+                    manager_message = f"הזמנה {order.order_number} עדיין דורשת טיפול של {order.supplier_name}. {urgency_label}."
+                    manager_notification = Notification(
+                        tenant_id=order.tenant_id,
+                        user_id=manager.id,
+                        title="התראת הסלמה על תזכורת",
+                        message=manager_message,
+                        status=STATUS_UNREAD,
+                        action_url=action_url,
+                        notification_type="reminder_escalation",
+                    )
+                    db.session.add(manager_notification)
+                    db.session.flush()
+                    AuditService.log_event(
+                        order.tenant_id,
+                        manager.id,
+                        "reminder_escalation",
+                        title="התראת הסלמה על תזכורת",
+                        metadata={"order_id": order.id, "order_number": order.order_number},
+                    )
+                    push_events.append((manager.id, {"title": "התראת הסלמה על תזכורת", "body": manager_message, "url": action_url, "notification_id": manager_notification.id, "order_id": order.id, "type": "reminder_escalation"}))
+
             order.reminder_rules_snapshot = rules
 
             notification = Notification(
@@ -156,36 +197,6 @@ def process_due_reminders() -> int:
                 },
             )
             push_events.append((order.user_id, {"title": title, "body": message, "url": action_url, "notification_id": notification.id, "order_id": order.id, "type": notification_type}))
-
-            escalation_after = int(escalation.get("after_occurrences", 0) or 0)
-            if escalation_after and occurrences >= escalation_after and not rules.get("escalated"):
-                managers = db.session.execute(
-                    select(User).where(User.tenant_id == order.tenant_id, User.active.is_(True), User.role == ROLE_MANAGER)
-                ).scalars().all()
-                for manager in managers:
-                    manager_message = f"הזמנה {order.order_number} עדיין דורשת טיפול של {order.supplier_name}. {urgency_label}."
-                    manager_notification = Notification(
-                        tenant_id=order.tenant_id,
-                        user_id=manager.id,
-                        title="התראת הסלמה על תזכורת",
-                        message=manager_message,
-                        status=STATUS_UNREAD,
-                        action_url=action_url,
-                        notification_type="reminder_escalation",
-                    )
-                    db.session.add(manager_notification)
-                    db.session.flush()
-                    AuditService.log_event(
-                        order.tenant_id,
-                        manager.id,
-                        "reminder_escalation",
-                        title="התראת הסלמה על תזכורת",
-                        metadata={"order_id": order.id, "order_number": order.order_number},
-                    )
-                    push_events.append((manager.id, {"title": "התראת הסלמה על תזכורת", "body": manager_message, "url": action_url, "notification_id": manager_notification.id, "order_id": order.id, "type": "reminder_escalation"}))
-                rules["escalated"] = True
-                order.reminder_rules_snapshot = rules
-
             processed += 1
 
         if processed:
@@ -196,14 +207,12 @@ def process_due_reminders() -> int:
         db.session.rollback()
         raise
 
-    # Database state is now durable before push delivery. A push failure must
-    # never roll back the reminder or cause a duplicate notification on retry.
+    # Database state is durable before push delivery. Push is best-effort and
+    # can never roll back the reminder or cause a duplicate DB notification.
     for user_id, payload in push_events:
         try:
             send_to_user(user_id, payload)
         except Exception:
-            # Push is best-effort; the in-app Notification remains available.
-            from flask import current_app
             current_app.logger.exception("Reminder push delivery failed for user %s", user_id)
 
     return processed

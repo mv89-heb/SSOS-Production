@@ -29,6 +29,16 @@ def _required_env(name: str) -> str:
     return value
 
 
+def _env_int(name: str, default: int, minimum: int = 0) -> int:
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return default
+    parsed = int(value)
+    if parsed < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+    return parsed
+
+
 class BaseConfig:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key-change-me")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -69,6 +79,8 @@ class BaseConfig:
     WEB_PUSH_VAPID_PUBLIC_KEY = os.environ.get("WEB_PUSH_VAPID_PUBLIC_KEY", "").strip()
     WEB_PUSH_VAPID_PRIVATE_KEY = os.environ.get("WEB_PUSH_VAPID_PRIVATE_KEY", "").strip()
     WEB_PUSH_VAPID_CLAIMS_EMAIL = os.environ.get("WEB_PUSH_VAPID_CLAIMS_EMAIL", "mailto:admin@example.com").strip()
+
+    REMINDER_EXECUTION_WINDOW_MINUTES = _env_int("REMINDER_EXECUTION_WINDOW_MINUTES", 5, minimum=0)
 
     @staticmethod
     def init_app(app):
@@ -119,6 +131,7 @@ class ProductionConfig(BaseConfig):
         app.config["WEB_PUSH_VAPID_PUBLIC_KEY"] = os.environ.get("WEB_PUSH_VAPID_PUBLIC_KEY", "").strip()
         app.config["WEB_PUSH_VAPID_PRIVATE_KEY"] = os.environ.get("WEB_PUSH_VAPID_PRIVATE_KEY", "").strip()
         app.config["WEB_PUSH_VAPID_CLAIMS_EMAIL"] = os.environ.get("WEB_PUSH_VAPID_CLAIMS_EMAIL", "mailto:admin@example.com").strip()
+        app.config["REMINDER_EXECUTION_WINDOW_MINUTES"] = _env_int("REMINDER_EXECUTION_WINDOW_MINUTES", 5, minimum=0)
 
 
 class DevelopmentConfig(BaseConfig):
