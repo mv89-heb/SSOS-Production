@@ -22,7 +22,7 @@ services:
         sync: false
       - key: RATELIMIT_STORAGE_URI
         fromService:
-          name: ssos-ratelimit
+          name: ssos-ratelimit-redis
           type: keyvalue
           property: connectionString
       - key: SESSION_COOKIE_SECURE
@@ -69,13 +69,16 @@ services:
 
   # -------------------------------------------------------------------
   # Shared Key Value — distributed rate limiting / shared application state.
+  # Free tier is sufficient because rate-limit state is intentionally ephemeral.
   # -------------------------------------------------------------------
   - type: keyvalue
-    name: ssos-ratelimit
-    plan: 256mb
+    name: ssos-ratelimit-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+    persistenceMode: off
     ipAllowList:
-      - source: 0.0.0.0/0
-        description: Render services
+      - source: 0.0.0.0/32
+        description: External access disabled; use Render private networking
 
   # -------------------------------------------------------------------
   # Frontend — Next.js 15 App Router (frontend/)
