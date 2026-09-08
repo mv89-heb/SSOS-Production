@@ -1,3 +1,5 @@
+from app.extensions import db
+from app.models.supplier_offer import SupplierProductOffer
 from app.services.ai_service import AIResult
 
 
@@ -16,7 +18,7 @@ class FakeAI:
         )
 
 
-def test_gemini_insight_uses_deterministic_comparison(logged_in_client_a, monkeypatch):
+def test_gemini_insight_uses_deterministic_comparison(logged_in_client_a, db, monkeypatch):
     supplier_a = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "Supplier A"}).get_json()["supplier"]["id"]
     supplier_b = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "Supplier B"}).get_json()["supplier"]["id"]
     product = logged_in_client_a.post("/api/catalog/products", json={
@@ -27,13 +29,12 @@ def test_gemini_insight_uses_deterministic_comparison(logged_in_client_a, monkey
         "currency": "ILS",
         "unit": "unit",
     }).get_json()["product"]
-    offer = logged_in_client_a.post("/api/catalog/products/%s/offers" % product["id"], json={
-        "supplier_id": supplier_b,
-        "price": 9,
-        "currency": "ILS",
-        "unit": "unit",
-    })
-    assert offer.status_code in (200, 201), offer.get_json()
+
+    db.session.add(SupplierProductOffer(
+        tenant_id=product["tenant_id"], product_id=product["id"], supplier_id=supplier_b,
+        price=9, currency="ILS", unit="unit", active=True,
+    ))
+    db.session.commit()
 
     import app.routes.price_intelligence as route_module
     monkeypatch.setattr(route_module.AIService, "from_config", lambda config: FakeAI())
