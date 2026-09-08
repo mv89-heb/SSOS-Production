@@ -303,6 +303,92 @@ class PriceIntelligenceService:
                 "savings": round(float(savings), 2), "savings_percent": round(float(percent), 4),
                 "supplier_count": len(grouped), "suppliers": list(grouped.values())}
 
+    def get_portfolio_summary(self, product_limit: int = 2000, opportunity_limit: int = 10):
+        """Build a tenant-scoped executive snapshot from deterministic price facts."""
+        products = self.product_repo.get_all_for_matching()[:max(1, int(product_limit))]
+        total_current = Decimal("0")
+        total_best = Decimal("0")
+        opportunity_count = 0
+        comparable_products = 0
+        opportunities = []
+        analyzed = []
+        for product in products:
+            try:
+                comparison = self.compare_product(product.id)
+            except (ValueError, TypeError):
+                continue
+            current = comparison.get("current")
+            best = comparison.get("best_offer")
+            if not current:
+                continue
+            current_price = self._decimal(current["normalized_price"])
+            total_current += current_price
+            best_price = current_price
+            if best and comparison.get("offers"):
+                comparable_products += 1
+                best_price = min(current_price, self._decimal(best["normalized_price"]))
+            total_best += best_price
+            savings = max(Decimal("0"), current_price - best_price)
+            if savings > 0:
+                opportunity_count += 1
+                opportunities.append({
+                    "product_id": product.id,
+                    "product_name": product.name,
+                    "sku": product.sku,
+                    "current_supplier": current.get("supplier_name"),
+                    "best_supplier": best.get("supplier_name") if best else None,
+                    "current_price": float(current_price),
+                    "best_price": float(best_price),
+                    "savings_per_unit": round(float(savings), 6),
+                    "savings_percent": round(float(savings / current_price * Decimal("100")), 4) if current_price else 0.0,
+                    "currency": current.get("currency", "ILS"),
+                })
+            analyzed.append(product)
+        opportunities.sort(key=lambda row: row["savings_per_unit"], reverse=True)
+        potential_savings = max(Decimal("0"), total_current - total_best)
+        savings_percent = potential_savings / total_current * Decimal("100") if total_current > 0 else Decimal("0")
+        return {
+            "products_analyzed": len(analyzed),
+            "products_with_comparable_alternatives": comparable_products,
+            "opportunity_products": opportunity_count,
+            "current_unit_total": round(float(total_current), 2),
+            "best_unit_total": round(float(total_best), 2),
+            "potential_savings": round(float(potential_savings), 2),
+            "potential_savings_percent": round(float(savings_percent), 4),
+            "top_opportunities": opportunities[:max(1, int(opportunity_limit))],
+            "recent_changes": [row.to_dict() for row in self.history_repo.list_all(limit=10)],
+        }
+
+    def get_supplier_price_scores(self, product_limit: int = 2000, limit: int = 10):
+        """Score suppliers on price competitiveness and coverage only; no invented quality metrics."""
+        products = self.product_repo.get_all_for_matching()[:max(1, int(product_limit))]
+        stats = {}
+        analyzed = 0
+        for product in products:
+            comparison = self.compare_product(product.id)
+            current = comparison.get("current")
+            if not current:
+                continue
+            candidates = [current] + list(comparison.get("offers") or [])
+            if len(candidates) < 2:
+                continue
+            analyzed += 1
+            cheapest = min(candidates, key=lambda row: row["normalized_price"])
+            for row in candidates:
+                supplier_id = row["supplier_id"]
+                entry = stats.setdefault(supplier_id, {"supplier_id": supplier_id, "supplier_name": row.get("supplier_name"), "participation": 0, "wins": 0})
+                entry["participation"] += 1
+                if supplier_id == cheapest["supplier_id"]:
+                    entry["wins"] += 1
+        results = []
+        for entry in stats.values():
+            coverage = entry["participation"] / analyzed if analyzed else 0
+            win_rate = entry["wins"] / entry["participation"] if entry["participation"] else 0
+            score = round((coverage * 50) + (win_rate * 50), 1)
+            results.append({**entry, "coverage_percent": round(coverage * 100, 1), "win_rate_percent": round(win_rate * 100, 1), "score": score})
+        results.sort(key=lambda row: (-row["score"], -row["wins"], row["supplier_name"] or ""))
+        return {"products_analyzed": analyzed, "suppliers": results[:max(1, int(limit))]}
+
     def get_price_history(self, product_id: int, supplier_id: int | None = None, limit: int = 100):
         self.product_repo.get_by_id_or_404(product_id)
         return [row.to_dict() for row in self.history_repo.get_by_product(product_id, supplier_id, limit)]

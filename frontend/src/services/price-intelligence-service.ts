@@ -59,6 +59,53 @@ export interface GeminiInsight {
   actions: string[];
 }
 
+export interface PortfolioOpportunity {
+  product_id: number;
+  product_name: string;
+  sku?: string | null;
+  current_supplier: string | null;
+  best_supplier: string | null;
+  current_price: number;
+  best_price: number;
+  savings_per_unit: number;
+  savings_percent: number;
+  currency: string;
+}
+
+export interface PortfolioSummary {
+  products_analyzed: number;
+  products_with_comparable_alternatives: number;
+  opportunity_products: number;
+  current_unit_total: number;
+  best_unit_total: number;
+  potential_savings: number;
+  potential_savings_percent: number;
+  top_opportunities: PortfolioOpportunity[];
+  recent_changes: PriceHistoryRow[];
+}
+
+export interface SupplierPriceScore {
+  supplier_id: number;
+  supplier_name: string | null;
+  participation: number;
+  wins: number;
+  coverage_percent: number;
+  win_rate_percent: number;
+  score: number;
+}
+
+export interface SupplierScoreResult {
+  products_analyzed: number;
+  suppliers: SupplierPriceScore[];
+}
+
+export interface ProcurementBriefing {
+  headline: string;
+  highlights: string[];
+  risks: string[];
+  actions: string[];
+}
+
 export const priceIntelligenceService = {
   compareProduct: async (productId: number) => {
     const { data } = await apiClient.get<ProductComparison>(`/api/price-intelligence/products/${productId}/comparison`);
@@ -75,6 +122,18 @@ export const priceIntelligenceService = {
   getChanges: async (limit = 100) => {
     const { data } = await apiClient.get<{ success: boolean; changes: PriceHistoryRow[] }>("/api/price-intelligence/changes", { params: { limit } });
     return data.changes;
+  },
+  getPortfolioSummary: async (limit = 10) => {
+    const { data } = await apiClient.get<{ success: boolean } & PortfolioSummary>("/api/price-intelligence/summary", { params: { limit } });
+    return data;
+  },
+  getSupplierScores: async (limit = 10) => {
+    const { data } = await apiClient.get<{ success: boolean } & SupplierScoreResult>("/api/price-intelligence/supplier-scores", { params: { limit } });
+    return data;
+  },
+  getAiBriefing: async () => {
+    const { data } = await apiClient.post<{ success: boolean; provider: string; model: string; briefing: ProcurementBriefing }>("/api/price-intelligence/ai-briefing");
+    return data;
   },
   getGeminiInsight: async (productId: number, quantity: number) => {
     const { data } = await apiClient.post<{ success: boolean; provider: string; model: string; insight: GeminiInsight }>(

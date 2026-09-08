@@ -5,7 +5,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3, FileSearch, Bell, CalendarDays } from "lucide-react";
+import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3, FileSearch, Bell, CalendarDays, BrainCircuit } from "lucide-react";
 
 const ORGANIZATION_NAME = "ישיבת אוהבי ירושלים - ראשית";
 const navigation = [
@@ -16,6 +16,7 @@ const navigation = [
   // Reminders is intentionally kept near the primary workflow so it is visible without scrolling.
   { name: "תזכורות", href: "/dashboard/reminders", icon: Bell },
   { name: "השוואת ספקים", href: "/dashboard/price-intelligence", icon: BarChart3 },
+  { name: "מרכז מודיעין רכש", href: "/dashboard/procurement-intelligence", icon: BrainCircuit },
   { name: "ניתוח מסמכים עם Gemini", href: "/dashboard/gemini", icon: FileSearch },
   { name: "Google Calendar", href: "/dashboard/settings/google-calendar", icon: CalendarDays },
   { name: "לוג ביקורת", href: "/dashboard/audit", icon: History },
