@@ -68,15 +68,18 @@ def upload_document():
             raise BadRequest("Uploaded document exceeds the maximum allowed size")
 
         # Render instances have an ephemeral filesystem. Stage the document in
-        # the OS temp directory rather than inside the application tree. The
-        # file exists only long enough for the analysis flow and is deleted on
-        # every exit path.
+        # the OS temp directory so it survives the upload request and is
+        # available to the explicit /analyze request. The analysis service
+        # deletes it after processing succeeds or fails.
         fd, storage_path = tempfile.mkstemp(prefix="ssos-document-", suffix=ext)
         os.close(fd)
         upload.save(storage_path)
         row = DocumentIntelligenceService(current_user.tenant_id, current_user.id).create_analysis(
             upload.filename, storage_path, mime_type
         )
+        # Do not delete storage_path here: the client analyzes this staged row
+        # in a subsequent request. The service owns cleanup after analysis.
+        storage_path = None
         return jsonify({"success": True, "analysis": row.to_dict()}), 201
     except HTTPException as exc:
         _delete_file(storage_path)
@@ -95,8 +98,6 @@ def analyze_document(analysis_id):
     except HTTPException as exc:
         return _handle(exc)
     except Exception as exc:
-        # Never expose an unhandled Flask 500 for provider/filesystem/runtime
-        # failures. The detailed traceback remains in the backend logs.
         return _internal_error(exc, "analysis")
 
 
