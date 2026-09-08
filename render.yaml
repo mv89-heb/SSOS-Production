@@ -20,6 +20,11 @@ services:
         generateValue: true
       - key: DATABASE_URL
         sync: false
+      - key: RATELIMIT_STORAGE_URI
+        fromService:
+          name: ssos-ratelimit
+          type: keyvalue
+          property: connectionString
       - key: SESSION_COOKIE_SECURE
         value: "True"
       - key: MAX_UPLOAD_SIZE
@@ -63,6 +68,16 @@ services:
         value: Asia/Jerusalem
 
   # -------------------------------------------------------------------
+  # Shared Key Value — distributed rate limiting / shared application state.
+  # -------------------------------------------------------------------
+  - type: keyvalue
+    name: ssos-ratelimit
+    plan: 256mb
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: Render services
+
+  # -------------------------------------------------------------------
   # Reminder worker — runs independently of browser activity.
   # -------------------------------------------------------------------
   - type: cron
@@ -87,6 +102,11 @@ services:
           name: ssos-backend
           type: web
           envVarKey: DATABASE_URL
+      - key: RATELIMIT_STORAGE_URI
+        fromService:
+          name: ssos-ratelimit
+          type: keyvalue
+          property: connectionString
       - key: CORS_ORIGINS
         fromService:
           name: ssos-backend
