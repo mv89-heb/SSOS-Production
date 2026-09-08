@@ -66,11 +66,11 @@ class ImportService:
                 f"Failed to parse {filename}: {exc}",
                 {"import_session_id": session.id},
             )
-            try:
-                os.remove(storage_path)
-                session.storage_path = None
-            except OSError:
-                pass
+            # Keep the original upload available for the read-only Analysis
+            # phase. Failed/empty staging sessions are still valid analysis
+            # inputs (for example a workbook containing only headers), and
+            # deleting the source here made that workflow impossible. A
+            # later retention/cleanup job should remove abandoned files.
             return session
 
         row_entities = [
