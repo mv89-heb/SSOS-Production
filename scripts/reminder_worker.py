@@ -38,6 +38,13 @@ def _execution_window_minutes() -> int:
     return max(0, value)
 
 
+def _as_utc(value: datetime) -> datetime:
+    """Return an aware UTC datetime for both PostgreSQL and SQLite values."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _wait_for_nearby_reminders() -> None:
     """Wait for the earliest reminder inside the configured execution window.
 
@@ -69,6 +76,7 @@ def _wait_for_nearby_reminders() -> None:
     if upcoming is None:
         return
 
+    upcoming = _as_utc(upcoming)
     wait_seconds = (upcoming - datetime.now(timezone.utc)).total_seconds()
     if wait_seconds <= 0:
         return
@@ -132,6 +140,35 @@ def process_due_reminders() -> int:
                 order.next_reminder_at = None
                 notification_type = "reminder_due"
 
+            escalation_after = int(escalation.get("after_occurrences", 0) or 0)
+            should_escalate = escalation_after and occurrences >= escalation_after and not rules.get("escalated")
+            if should_escalate:
+                managers = db.session.execute(
+                    select(User).where(User.tenant_id == order.tenant_id, User.active.is_(True), User.role == ROLE_MANAGER)
+                ).scalars().all()
+                rules["escalated"] = True
+                for manager in managers:
+                    manager_message = f"הזמנה {order.order_number} עדיין דורשת טיפול של {order.supplier_name}. {urgency_label}."
+                    manager_notification = Notification(
+                        tenant_id=order.tenant_id,
+                        user_id=manager.id,
+                        title="התראת הסלמה על תזכורת",
+                        message=manager_message,
+                        status=STATUS_UNREAD,
+                        action_url=action_url,
+                        notification_type="reminder_escalation",
+                    )
+                    db.session.add(manager_notification)
+                    db.session.flush()
+                    AuditService.log_event(
+                        order.tenant_id,
+                        manager.id,
+                        "reminder_escalation",
+                        title="התראת הסלמה על תזכורת",
+                        metadata={"order_id": order.id, "order_number": order.order_number},
+                    )
+                    push_events.append((manager.id, {"title": "התראת הסלמה על תזכורת", "body": manager_message, "url": action_url, "notification_id": manager_notification.id, "order_id": order.id, "type": "reminder_escalation"}))
+
             order.reminder_rules_snapshot = rules
 
             notification = Notification(
@@ -160,36 +197,6 @@ def process_due_reminders() -> int:
                 },
             )
             push_events.append((order.user_id, {"title": title, "body": message, "url": action_url, "notification_id": notification.id, "order_id": order.id, "type": notification_type}))
-
-            escalation_after = int(escalation.get("after_occurrences", 0) or 0)
-            if escalation_after and occurrences >= escalation_after and not rules.get("escalated"):
-                managers = db.session.execute(
-                    select(User).where(User.tenant_id == order.tenant_id, User.active.is_(True), User.role == ROLE_MANAGER)
-                ).scalars().all()
-                for manager in managers:
-                    manager_message = f"הזמנה {order.order_number} עדיין דורשת טיפול של {order.supplier_name}. {urgency_label}."
-                    manager_notification = Notification(
-                        tenant_id=order.tenant_id,
-                        user_id=manager.id,
-                        title="התראת הסלמה על תזכורת",
-                        message=manager_message,
-                        status=STATUS_UNREAD,
-                        action_url=action_url,
-                        notification_type="reminder_escalation",
-                    )
-                    db.session.add(manager_notification)
-                    db.session.flush()
-                    AuditService.log_event(
-                        order.tenant_id,
-                        manager.id,
-                        "reminder_escalation",
-                        title="התראת הסלמה על תזכורת",
-                        metadata={"order_id": order.id, "order_number": order.order_number},
-                    )
-                    push_events.append((manager.id, {"title": "התראת הסלמה על תזכורת", "body": manager_message, "url": action_url, "notification_id": manager_notification.id, "order_id": order.id, "type": "reminder_escalation"}))
-                rules["escalated"] = True
-                order.reminder_rules_snapshot = rules
-
             processed += 1
 
         if processed:
