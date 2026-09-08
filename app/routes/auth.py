@@ -26,6 +26,7 @@ def csrf_token():
 
 
 @auth_bp.route("/register", methods=["POST"])
+@limiter.limit(lambda: current_app.config["RATELIMIT_REGISTER"])
 def register():
     data = request.get_json(silent=True) or {}
 
