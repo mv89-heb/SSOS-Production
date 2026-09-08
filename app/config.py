@@ -48,6 +48,7 @@ class BaseConfig:
     SESSION_COOKIE_SAMESITE = "Lax"
     WTF_CSRF_ENABLED = os.environ.get("WTF_CSRF_ENABLED", "True") == "True"
     RATELIMIT_LOGIN = os.environ.get("RATELIMIT_LOGIN", "10 per minute")
+    RATELIMIT_REGISTER = os.environ.get("RATELIMIT_REGISTER", "5 per hour")
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
     CORS_ORIGINS = _csv_env("CORS_ORIGINS", "http://localhost:3000,http://localhost:3100")
 
@@ -139,6 +140,7 @@ class TestingConfig(BaseConfig):
     WTF_CSRF_ENABLED = False
     SESSION_COOKIE_SECURE = False
     RATELIMIT_LOGIN = "10 per minute"
+    RATELIMIT_REGISTER = "5 per hour"
     RATELIMIT_STORAGE_URI = "memory://"
 
 
