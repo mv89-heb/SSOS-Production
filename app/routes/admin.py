@@ -182,13 +182,11 @@ def admin_audit():
     from app.repositories.audit_repository import AuditRepository
     limit = min(max(request.args.get("limit", 50, type=int) or 50, 1), 200)
     offset = max(request.args.get("offset", 0, type=int) or 0, 0)
-    logs = AuditRepository(tenant_id=current_user.tenant_id).list_all(limit=limit, offset=offset)
     action = (request.args.get("action") or "").strip().lower()
+    logs = AuditRepository(tenant_id=current_user.tenant_id).list_all(limit=limit, offset=offset, action=action or None)
     items = [log.to_dict() for log in logs]
-    if action:
-        items = [item for item in items if action in str(item.get("action", "")).lower()]
     valid, broken_id = AuditService.verify_chain(current_user.tenant_id)
-    return jsonify({"success": True, "logs": items, "audit_chain_valid": valid, "first_broken_log_id": broken_id, "limit": limit, "offset": offset})
+    return jsonify({"success": True, "logs": items, "audit_chain_valid": valid, "first_broken_log_id": broken_id, "limit": limit, "offset": offset, "action": action or None})
 
 
 @admin_bp.route("/imports/<int:session_id>", methods=["DELETE"])
