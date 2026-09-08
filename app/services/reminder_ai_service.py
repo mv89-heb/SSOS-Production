@@ -33,9 +33,9 @@ class ReminderAIService:
         text = cls._text_blob(order, user_text)
         score = 0
         if any(term in text for term in ("דחוף", "קריטי", "חייב", "בהקדם", "היום", "תקוע", "עוצר", "urgent", "critical", "asap")):
-            score += 30
+            score += 35
         if any(term in text for term in ("עוצר עבודה", "לא יכול לעבוד", "מעכב", "תקלה", "עצירה", "blocked", "blocking")):
-            score += 25
+            score += 30
         if deadline is not None:
             delta = (deadline if deadline.tzinfo else deadline.replace(tzinfo=timezone.utc)) - now
             if delta.total_seconds() <= 3600:
