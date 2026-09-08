@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from flask_wtf.csrf import generate_csrf
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db, limiter
 from app.models.tenant import Tenant
@@ -46,8 +47,8 @@ def register():
         return jsonify({"success": False, "error": "full_name_required"}), 400
 
     # Existing-tenant self-enrollment is part of the current product flow.
-    # The important security boundary is that the caller can never select a
-    # privileged role: every slug-based registration is forced to employee.
+    # The caller can never select a privileged role: every slug-based
+    # registration is forced to employee.
     if tenant_slug:
         tenant = db.session.execute(
             select(Tenant).where(Tenant.slug == tenant_slug)
@@ -68,7 +69,7 @@ def register():
         db.session.add(user)
         try:
             db.session.flush()
-        except Exception:
+        except IntegrityError:
             db.session.rollback()
             return jsonify({"success": False, "error": "email_already_registered"}), 409
 
