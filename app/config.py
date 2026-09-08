@@ -81,16 +81,20 @@ class ProductionConfig(BaseConfig):
         database_url = _normalize_db_url(_required_env("DATABASE_URL"))
         cors_origins = _csv_env("CORS_ORIGINS")
         gemini_api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+        ratelimit_storage = _required_env("RATELIMIT_STORAGE_URI")
 
         if not cors_origins:
             raise RuntimeError("CORS_ORIGINS must contain at least one allowed origin in production")
         if not database_url.startswith("postgresql"):
             raise RuntimeError("Production DATABASE_URL must use PostgreSQL/Neon")
+        if ratelimit_storage == "memory://":
+            raise RuntimeError("RATELIMIT_STORAGE_URI must use shared production storage (for example Redis)")
 
         app.config["SECRET_KEY"] = secret_key
         app.config["DATABASE_URL"] = database_url
         app.config["SQLALCHEMY_DATABASE_URI"] = database_url
         app.config["CORS_ORIGINS"] = cors_origins
+        app.config["RATELIMIT_STORAGE_URI"] = ratelimit_storage
         app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
             "connect_args": {"sslmode": "require"}, "pool_pre_ping": True, "pool_recycle": 300,
         }
@@ -133,6 +137,7 @@ class TestingConfig(BaseConfig):
     WTF_CSRF_ENABLED = False
     SESSION_COOKIE_SECURE = False
     RATELIMIT_LOGIN = "10 per minute"
+    RATELIMIT_STORAGE_URI = "memory://"
 
 
 CONFIG_MAP = {"production": ProductionConfig, "development": DevelopmentConfig, "testing": TestingConfig}
