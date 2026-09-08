@@ -33,24 +33,12 @@ def _json_error(exc: HTTPException):
 
 def _unexpected_error(message: str, exc: Exception, stage: str | None = None):
     request_id = request.headers.get("Rndr-Id")
-    current_app.logger.exception(
-        "%s stage=%s order_id=%s request_id=%s",
-        message,
-        stage or "unknown",
-        request.view_args.get("order_id") if request.view_args else None,
-        request_id or "unknown",
-        exc_info=exc,
-    )
+    current_app.logger.exception("%s stage=%s order_id=%s request_id=%s", message, stage or "unknown", request.view_args.get("order_id") if request.view_args else None, request_id or "unknown", exc_info=exc)
     try:
         db.session.rollback()
     except Exception:
         current_app.logger.exception("Reminder transaction rollback failed")
-    return jsonify({
-        "success": False,
-        "error": "internal_server_error",
-        "message": "אירעה שגיאה בהפעלת התזכורת. נסה שוב.",
-        "request_id": request_id,
-    }), 500
+    return jsonify({"success": False, "error": "internal_server_error", "message": "אירעה שגיאה בהפעלת התזכורת. נסה שוב.", "request_id": request_id}), 500
 
 
 def _get_owned_open_order(order_id: int):
@@ -94,7 +82,6 @@ def _refresh_order_after_calendar_failure(order: Order):
 
 
 def _sync_google_calendar(order: Order) -> str | None:
-    """Sync Calendar without ever rolling back the already-persisted reminder."""
     try:
         event_id = gcal.sync_order_event(order)
         if event_id:
@@ -108,7 +95,6 @@ def _sync_google_calendar(order: Order) -> str | None:
 
 
 def _delete_google_calendar_event(order: Order) -> bool:
-    """Delete a Calendar event best-effort; reminder completion must not depend on Google."""
     try:
         gcal.delete_order_event(order)
         db.session.commit()
@@ -175,6 +161,56 @@ def reminder_configuration(order_id: int):
         return _unexpected_error("Reminder configuration lookup failed", exc, "configuration")
 
 
+@order_reminders_bp.route("/orders/<int:order_id>/ai-analysis", methods=["POST"])
+@login_required
+def analyze_order_reminder_with_ai(order_id: int):
+    try:
+        order = _get_owned_open_order(order_id)
+        data = request.get_json(silent=True) or {}
+        user_text = str(data.get("text") or data.get("note") or "").strip()
+        raw_deadline = data.get("deadline")
+        deadline = None
+        if raw_deadline:
+            deadline = datetime.fromisoformat(str(raw_deadline).replace("Z", "+00:00"))
+            if deadline.tzinfo is None:
+                deadline = deadline.replace(tzinfo=timezone.utc)
+        analysis = ReminderAIService.analyze(order, user_text=user_text, deadline=deadline)
+        return jsonify({"success": True, "ai": analysis, "display": ReminderAIService.urgency_display(analysis["urgency"])})
+    except (TypeError, ValueError) as exc:
+        return _json_error(BadRequest(str(exc)))
+    except HTTPException as exc:
+        return _json_error(exc)
+    except Exception as exc:
+        return _unexpected_error("AI reminder analysis failed", exc, "ai_analysis")
+
+
+@order_reminders_bp.route("/orders/<int:order_id>/natural-language", methods=["POST"])
+@login_required
+def natural_language_order_reminder(order_id: int):
+    try:
+        order = _get_owned_open_order(order_id)
+        data = request.get_json(silent=True) or {}
+        text = str(data.get("text") or "").strip()
+        if not text:
+            raise BadRequest("text is required")
+        analysis = ReminderAIService.parse_natural_language(order, text)
+        apply = bool(data.get("apply", False))
+        calendar_event_id = None
+        if apply:
+            reminder_at = datetime.fromisoformat(analysis["first_reminder_at"])
+            ReminderAIService.apply_analysis(order, analysis, reminder_at=reminder_at, mode="natural_language_ai")
+            order.reminder_state = REMINDER_PENDING
+            db.session.commit()
+            calendar_event_id = _sync_google_calendar(order)
+        return jsonify({"success": True, "applied": apply, "ai": analysis, "display": ReminderAIService.urgency_display(analysis["urgency"]), "order": order.to_dict() if apply else None, "calendar_event_id": calendar_event_id})
+    except (TypeError, ValueError) as exc:
+        return _json_error(BadRequest(str(exc)))
+    except HTTPException as exc:
+        return _json_error(exc)
+    except Exception as exc:
+        return _unexpected_error("Natural language reminder failed", exc, "natural_language")
+
+
 @order_reminders_bp.route("/orders/<int:order_id>/activate", methods=["POST"])
 @login_required
 def activate_order_reminder(order_id: int):
@@ -214,27 +250,25 @@ def activate_order_reminder(order_id: int):
         chosen_at = chosen.get("at") if chosen else candidates[0]["at"]
         ai_reason = chosen.get("reason") if chosen else fallback_note or "נבחר מועד המעקב הראשון לפי כללי הספק."
 
+        stage = "ai_urgency"
+        analysis = ReminderAIService.analyze(order, now=now, user_text=order.notes or "")
+
         stage = "persist_reminder"
         next_at = datetime.fromisoformat(chosen_at)
         if next_at.tzinfo is None:
             next_at = next_at.replace(tzinfo=timezone.utc)
-        order.reminder_rules_snapshot = {
-            "mode": mode,
-            **({"rules": rules} if rules else {}),
-            **({"note": fallback_note} if fallback_note else {}),
-            "ai_reason": ai_reason,
-            "created_at": now.isoformat(),
-        }
-        order.next_reminder_at = next_at.astimezone(timezone.utc)
+        ReminderAIService.apply_analysis(order, analysis, reminder_at=next_at.astimezone(timezone.utc), mode=mode)
+        snapshot = dict(order.reminder_rules_snapshot or {})
+        snapshot["supplier_rules"] = rules if rules else None
+        snapshot["candidate_reason"] = ai_reason
+        snapshot["fallback_note"] = fallback_note
+        order.reminder_rules_snapshot = snapshot
         order.reminder_state = REMINDER_PENDING
         db.session.commit()
 
         stage = "google_calendar"
         calendar_event_id = _sync_google_calendar(order)
-
-        stage = "serialize_response"
-        response_order = order.to_dict()
-        return jsonify({"success": True, "order": response_order, "calendar_event_id": calendar_event_id, "ai_reason": ai_reason})
+        return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id, "ai": analysis, "ai_reason": ai_reason})
     except HTTPException as exc:
         return _json_error(exc)
     except Exception as exc:
@@ -264,12 +298,15 @@ def create_manual_order_reminder(order_id: int):
     except HTTPException as exc:
         return _json_error(exc)
     try:
-        order.reminder_rules_snapshot = {"mode": "manual", "note": note, "created_at": datetime.now(timezone.utc).isoformat()}
-        order.next_reminder_at = reminder_at
+        analysis = ReminderAIService.analyze(order, user_text=note) if note else ReminderAIService.analyze(order)
+        ReminderAIService.apply_analysis(order, analysis, reminder_at=reminder_at, mode="manual_ai")
+        snapshot = dict(order.reminder_rules_snapshot or {})
+        snapshot["note"] = note
+        order.reminder_rules_snapshot = snapshot
         order.reminder_state = REMINDER_PENDING
         db.session.commit()
         calendar_event_id = _sync_google_calendar(order)
-        return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id})
+        return jsonify({"success": True, "order": order.to_dict(), "calendar_event_id": calendar_event_id, "ai": analysis})
     except Exception as exc:
         return _unexpected_error("Manual reminder creation failed", exc, "manual")
 
