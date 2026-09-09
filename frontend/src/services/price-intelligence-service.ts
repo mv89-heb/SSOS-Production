@@ -106,6 +106,32 @@ export interface ProcurementBriefing {
   actions: string[];
 }
 
+export interface ProcurementDataReadiness {
+  products: {
+    active: number;
+    priced: number;
+    categorized: number;
+    missing_units: number;
+    with_stock_rules: number;
+  };
+  supplier_offers: {
+    active: number;
+    products_covered: number;
+    suppliers_covered: number;
+  };
+  suppliers: { active: number };
+  price_intelligence: { history_rows: number; observation_rows: number };
+  documents: { analyses: number };
+  orders: { total: number; with_realized_value: number };
+  readiness: {
+    catalog: boolean;
+    supplier_comparison: boolean;
+    historical_prices: boolean;
+    realized_spend: boolean;
+    stock_risk: boolean;
+  };
+}
+
 export const priceIntelligenceService = {
   compareProduct: async (productId: number) => {
     const { data } = await apiClient.get<ProductComparison>(`/api/price-intelligence/products/${productId}/comparison`);
@@ -129,6 +155,10 @@ export const priceIntelligenceService = {
   },
   getSupplierScores: async (limit = 10) => {
     const { data } = await apiClient.get<{ success: boolean } & SupplierScoreResult>("/api/price-intelligence/supplier-scores", { params: { limit } });
+    return data;
+  },
+  getDataReadiness: async () => {
+    const { data } = await apiClient.get<{ success: boolean } & ProcurementDataReadiness>("/api/price-intelligence/data-readiness");
     return data;
   },
   getAiBriefing: async () => {
