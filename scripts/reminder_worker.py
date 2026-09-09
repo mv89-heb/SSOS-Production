@@ -45,6 +45,11 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
+def _reminder_dedupe_key(order_id: int, scheduled_for: datetime) -> str:
+    """Build a stable identifier for one logical reminder occurrence."""
+    return f"order-reminder:{order_id}:{_as_utc(scheduled_for).isoformat()}"
+
+
 def _wait_for_nearby_reminders() -> None:
     """Wait for the earliest reminder inside the configured execution window.
 
@@ -108,6 +113,32 @@ def process_due_reminders() -> int:
 
     try:
         for order in due_orders:
+            # Capture the scheduled timestamp before mutating the order. It is
+            # the identity of this occurrence and the anchor for recurrence.
+            scheduled_for = _as_utc(order.next_reminder_at)
+            dedupe_key = _reminder_dedupe_key(order.id, scheduled_for)
+
+            # The order row is locked, so this check is deterministic for the
+            # current worker. The unique DB index is the final safety net.
+            existing = db.session.execute(
+                select(Notification.id).where(Notification.dedupe_key == dedupe_key).limit(1)
+            ).scalar_one_or_none()
+            if existing is not None:
+                # A previous attempt already persisted this occurrence. Repair
+                # the order schedule from the occurrence anchor and continue.
+                rules = deepcopy(order.reminder_rules_snapshot or {})
+                recurrence = rules.get("recurrence") or {}
+                repeat_minutes = int(recurrence.get("every_minutes", 0) or 0)
+                max_occurrences = int(recurrence.get("max_occurrences", 0) or 0)
+                occurrences = int(rules.get("occurrences", 1) or 1)
+                if repeat_minutes >= 5 and (max_occurrences <= 0 or occurrences < max_occurrences):
+                    order.next_reminder_at = scheduled_for + timedelta(minutes=repeat_minutes)
+                    order.reminder_state = REMINDER_PENDING
+                else:
+                    order.next_reminder_at = None
+                    order.reminder_state = REMINDER_DUE
+                continue
+
             rules = deepcopy(order.reminder_rules_snapshot or {})
             recurrence = rules.get("recurrence")
             escalation = rules.get("escalation") or {}
@@ -132,7 +163,9 @@ def process_due_reminders() -> int:
             should_repeat = repeat_minutes >= 5 and (max_occurrences <= 0 or occurrences < max_occurrences)
 
             if should_repeat:
-                order.next_reminder_at = now + timedelta(minutes=repeat_minutes)
+                # Anchor recurrence to the scheduled occurrence, not execution
+                # time. This prevents cumulative drift when the worker starts late.
+                order.next_reminder_at = scheduled_for + timedelta(minutes=repeat_minutes)
                 order.reminder_state = REMINDER_PENDING
                 notification_type = "reminder_recurrence"
             else:
@@ -179,6 +212,7 @@ def process_due_reminders() -> int:
                 status=STATUS_UNREAD,
                 action_url=action_url,
                 notification_type=notification_type,
+                dedupe_key=dedupe_key,
             )
             db.session.add(notification)
             db.session.flush()
@@ -191,6 +225,8 @@ def process_due_reminders() -> int:
                     "order_id": order.id,
                     "order_number": order.order_number,
                     "occurrence": occurrences,
+                    "scheduled_for": scheduled_for.isoformat(),
+                    "dedupe_key": dedupe_key,
                     "recurring": should_repeat,
                     "urgency": (rules.get("ai") or {}).get("urgency"),
                     "urgency_score": (rules.get("ai") or {}).get("score"),
@@ -199,7 +235,7 @@ def process_due_reminders() -> int:
             push_events.append((order.user_id, {"title": title, "body": message, "url": action_url, "notification_id": notification.id, "order_id": order.id, "type": notification_type}))
             processed += 1
 
-        if processed:
+        if processed or any(order in due_orders and order in db.session.dirty for order in due_orders):
             db.session.commit()
         else:
             db.session.rollback()
