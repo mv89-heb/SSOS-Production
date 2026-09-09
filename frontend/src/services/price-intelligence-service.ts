@@ -152,6 +152,51 @@ export interface ProcurementDataReadiness {
   };
 }
 
+export interface InventoryMovement {
+  id: number;
+  product_id: number;
+  movement_type: "receipt" | "issue" | "adjustment" | "count";
+  quantity: number;
+  balance_after: number | null;
+  reference_type: string | null;
+  reference_id: string | null;
+  note: string | null;
+  occurred_at: string;
+  created_at: string;
+}
+
+export interface InventoryRecommendation {
+  product_id: number;
+  product_name: string;
+  current_stock: number;
+  lookback_days: number;
+  stock_checks_in_period: number;
+  observed_days: number;
+  estimated_depletion: number;
+  average_daily_usage: number;
+  lead_time_days: number;
+  days_until_next_order: number | null;
+  planning_horizon_days: number;
+  lead_time_demand: number;
+  safety_stock: number;
+  reorder_point: number;
+  recommended_order: number;
+  coverage_days: number | null;
+  status: "urgent" | "reorder" | "healthy" | "insufficient_data";
+  data_ready: boolean;
+  supplier_schedule: {
+    supplier_id: number;
+    supplier_name: string | null;
+    order_days: number[];
+    delivery_days: number[];
+    next_order_date: string | null;
+    next_delivery_date: string | null;
+    recommended_check_date: string | null;
+    order_cutoff_time: string | null;
+    schedule_ready: boolean;
+  };
+}
+
 export const priceIntelligenceService = {
   compareProduct: async (productId: number) => {
     const { data } = await apiClient.get<ProductComparison>(`/api/price-intelligence/products/${productId}/comparison`);
@@ -163,6 +208,29 @@ export const priceIntelligenceService = {
   },
   optimizeBasket: async (items: Array<{ product_id: number; quantity: number }>, max_suppliers?: number) => {
     const { data } = await apiClient.post<{ success: boolean } & BasketAnalysis>("/api/price-intelligence/basket/analyze", { items, max_suppliers });
+    return data;
+  },
+  recordStockCheck: async (productId: number, quantity: number, note?: string) => {
+    const { data } = await apiClient.post<{ success: boolean; movement: InventoryMovement }>("/api/price-intelligence/inventory/movements", {
+      product_id: productId,
+      movement_type: "count",
+      quantity,
+      note,
+    });
+    return data;
+  },
+  getInventoryRecommendation: async (productId: number, options?: { lookback_days?: number; safety_days?: number }) => {
+    const { data } = await apiClient.get<{ success: boolean } & InventoryRecommendation>(
+      `/api/price-intelligence/inventory/products/${productId}/recommendation`,
+      { params: options },
+    );
+    return data;
+  },
+  getInventoryRecommendations: async (options?: { lookback_days?: number; safety_days?: number; limit?: number }) => {
+    const { data } = await apiClient.get<{ success: boolean; recommendations: InventoryRecommendation[] }>(
+      "/api/price-intelligence/inventory/recommendations",
+      { params: options },
+    );
     return data;
   },
   getHistory: async (productId: number, supplierId?: number) => {
