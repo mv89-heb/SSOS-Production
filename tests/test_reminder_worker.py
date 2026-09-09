@@ -68,7 +68,7 @@ def test_dedupe_key_is_stable_and_timezone_normalized():
     first = reminder_worker._reminder_dedupe_key(42, utc_value)
     second = reminder_worker._reminder_dedupe_key(42, local_value)
 
-    assert first == second == "order:42:2026-09-09T10:05:00+00:00"
+    assert first == second == "order-reminder:42:2026-09-09T10:05:00+00:00"
 
 
 def test_as_utc_handles_naive_datetime():
@@ -96,7 +96,7 @@ def test_same_dedupe_key_is_database_unique(app, db):
         db.session.add(user)
         db.session.flush()
 
-        key = "order:42:2026-09-09T10:05:00+00:00"
+        key = "order-reminder:42:2026-09-09T10:05:00+00:00"
         db.session.add(Notification(
             tenant_id=tenant.id,
             user_id=user.id,
