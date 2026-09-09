@@ -7,7 +7,7 @@ import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { useUnreadNotifications } from "@/hooks/use-notifications";
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, LogOut, Menu, X, HelpCircle, Bell, CalendarDays, BarChart3, FileSearch } from "lucide-react";
+import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, LogOut, Menu, X, HelpCircle, Bell, CalendarDays, BarChart3, FileSearch, Warehouse } from "lucide-react";
 
 const ORGANIZATION_NAME = "ישיבת אוהבי ירושלים - ראשית";
 const ROLE_LABELS: Record<string, string> = { admin: "מנהל מערכת", manager: "מנהל", employee: "עובד" };
@@ -15,6 +15,7 @@ const NAVIGATION = [
   { name: "לוח בקרה", href: "/dashboard", icon: LayoutDashboard },
   { name: "ניהול ספקים", href: "/dashboard/suppliers", icon: Users },
   { name: "קטלוג מוצרים", href: "/dashboard/catalog", icon: Package },
+  { name: "מחסן ומלאי", href: "/dashboard/inventory", icon: Warehouse },
   { name: "השוואת ספקים", href: "/dashboard/price-intelligence", icon: BarChart3 },
   { name: "ניתוח מסמכים עם Gemini", href: "/dashboard/gemini", icon: FileSearch },
   { name: "הזמנות רכש", href: "/dashboard/orders", icon: ShoppingCart },
