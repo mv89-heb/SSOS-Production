@@ -22,23 +22,19 @@ class ProcurementDataReadinessService:
         active_offer_filter = (SupplierProductOffer.tenant_id == tenant_id, SupplierProductOffer.active.is_(True))
         active_supplier_filter = (Supplier.tenant_id == tenant_id, Supplier.active.is_(True))
 
-        active_products = db.session.scalar(
-            select(func.count()).select_from(Product).where(*active_product_filter)
-        ) or 0
+        active_products = db.session.scalar(select(func.count()).select_from(Product).where(*active_product_filter)) or 0
         priced_products = db.session.scalar(
-            select(func.count()).select_from(Product).where(
-                *active_product_filter, Product.current_price > 0
-            )
+            select(func.count()).select_from(Product).where(*active_product_filter, Product.current_price > 0)
         ) or 0
         categorized_products = db.session.scalar(
             select(func.count()).select_from(Product).where(
-                *active_product_filter, Product.category.is_not(None), func.btrim(Product.category) != ""
+                *active_product_filter, Product.category.is_not(None), func.trim(Product.category) != ""
             )
         ) or 0
         missing_units = db.session.scalar(
             select(func.count()).select_from(Product).where(
                 *active_product_filter,
-                (Product.unit.is_(None) | (func.btrim(Product.unit) == "")),
+                (Product.unit.is_(None) | (func.trim(Product.unit) == "")),
             )
         ) or 0
         products_with_stock_rules = db.session.scalar(
@@ -62,10 +58,7 @@ class ProcurementDataReadinessService:
             )
         ) or 0
 
-        suppliers = db.session.scalar(
-            select(func.count()).select_from(Supplier).where(*active_supplier_filter)
-        ) or 0
-
+        suppliers = db.session.scalar(select(func.count()).select_from(Supplier).where(*active_supplier_filter)) or 0
         price_history = db.session.scalar(
             select(func.count()).select_from(PriceHistory).where(PriceHistory.tenant_id == tenant_id)
         ) or 0
@@ -75,14 +68,9 @@ class ProcurementDataReadinessService:
         document_analyses = db.session.scalar(
             select(func.count()).select_from(DocumentAnalysis).where(DocumentAnalysis.tenant_id == tenant_id)
         ) or 0
-
-        orders = db.session.scalar(
-            select(func.count()).select_from(Order).where(Order.tenant_id == tenant_id)
-        ) or 0
+        orders = db.session.scalar(select(func.count()).select_from(Order).where(Order.tenant_id == tenant_id)) or 0
         priced_orders = db.session.scalar(
-            select(func.count()).select_from(Order).where(
-                Order.tenant_id == tenant_id, Order.final_total > 0
-            )
+            select(func.count()).select_from(Order).where(Order.tenant_id == tenant_id, Order.final_total > 0)
         ) or 0
 
         readiness = {
@@ -107,10 +95,7 @@ class ProcurementDataReadinessService:
                 "suppliers_covered": int(covered_suppliers),
             },
             "suppliers": {"active": int(suppliers)},
-            "price_intelligence": {
-                "history_rows": int(price_history),
-                "observation_rows": int(price_observations),
-            },
+            "price_intelligence": {"history_rows": int(price_history), "observation_rows": int(price_observations)},
             "documents": {"analyses": int(document_analyses)},
             "orders": {"total": int(orders), "with_realized_value": int(priced_orders)},
             "readiness": readiness,
