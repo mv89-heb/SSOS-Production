@@ -16,7 +16,6 @@ def _make_product(db, tenant_id, supplier_id, name="Test Product"):
         current_price=10,
         currency="ILS",
         active=True,
-        version_id=1,
     )
     db.session.add(product)
     db.session.flush()
