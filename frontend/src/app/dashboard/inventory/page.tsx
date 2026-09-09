@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ClipboardCheck, Package, RefreshCw, Search, Smartphone, Warehouse } from "lucide-react";
+import { AlertTriangle, ClipboardCheck, Package, RefreshCw, Search, Smartphone, Warehouse } from "lucide-react";
 import { catalogService } from "@/services/catalog-service";
 import { priceIntelligenceService, type InventoryRecommendation } from "@/services/price-intelligence-service";
 
