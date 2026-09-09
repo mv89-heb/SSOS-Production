@@ -11,6 +11,7 @@ from app.models.order import Order
 from app.models.audit import AuditLog
 from app.models.notification import Notification
 from app.models.google_calendar import GoogleCalendarConnection
+from app.models.inventory_movement import InventoryMovement
 
 __all__ = [
     "Tenant",
@@ -26,4 +27,5 @@ __all__ = [
     "AuditLog",
     "Notification",
     "GoogleCalendarConnection",
+    "InventoryMovement",
 ]

@@ -2,8 +2,10 @@ from flask import Blueprint, jsonify, request, current_app
 from flask_login import current_user, login_required
 from werkzeug.exceptions import BadRequest, HTTPException, ServiceUnavailable
 
+from app.extensions import db
 from app.services.ai_service import AIService
 from app.services.data_readiness_service import ProcurementDataReadinessService
+from app.services.inventory_planning_service import InventoryPlanningService
 from app.services.price_intelligence_service import PriceIntelligenceService
 
 price_intelligence_bp = Blueprint("price_intelligence", __name__, url_prefix="/api/price-intelligence")
@@ -77,7 +79,6 @@ def price_changes():
 @price_intelligence_bp.route("/summary", methods=["GET"])
 @login_required
 def portfolio_summary():
-    """Return a deterministic tenant-scoped procurement snapshot for the dashboard."""
     try:
         limit = max(1, min(request.args.get("limit", default=10, type=int), 50))
         result = PriceIntelligenceService(current_user.tenant_id).get_portfolio_summary(opportunity_limit=limit)
@@ -91,7 +92,6 @@ def portfolio_summary():
 @price_intelligence_bp.route("/supplier-scores", methods=["GET"])
 @login_required
 def supplier_price_scores():
-    """Rank suppliers by price competitiveness and catalog coverage only."""
     try:
         limit = max(1, min(request.args.get("limit", default=10, type=int), 50))
         result = PriceIntelligenceService(current_user.tenant_id).get_supplier_price_scores(limit=limit)
@@ -105,9 +105,101 @@ def supplier_price_scores():
 @price_intelligence_bp.route("/data-readiness", methods=["GET"])
 @login_required
 def procurement_data_readiness():
-    """Return factual data coverage so the UI can distinguish empty intelligence from missing source data."""
     result = ProcurementDataReadinessService(current_user.tenant_id).snapshot()
     return jsonify({"success": True, **result})
+
+
+@price_intelligence_bp.route("/basket/analyze", methods=["POST"])
+@login_required
+def analyze_basket():
+    try:
+        payload = request.get_json(silent=True) or {}
+        items = payload.get("items")
+        if not isinstance(items, list) or not items:
+            raise BadRequest("items must be a non-empty array")
+        max_suppliers = payload.get("max_suppliers")
+        if max_suppliers is not None:
+            try:
+                max_suppliers = int(max_suppliers)
+            except (TypeError, ValueError):
+                raise BadRequest("max_suppliers must be an integer")
+            if max_suppliers <= 0:
+                raise BadRequest("max_suppliers must be greater than zero")
+        result = PriceIntelligenceService(current_user.tenant_id).optimize_basket(items, max_suppliers)
+        return jsonify({"success": True, **result})
+    except ValueError as exc:
+        return _handle(BadRequest(str(exc)))
+    except HTTPException as exc:
+        return _handle(exc)
+
+
+@price_intelligence_bp.route("/inventory/movements", methods=["POST"])
+@login_required
+def record_inventory_movement():
+    try:
+        payload = request.get_json(silent=True) or {}
+        product_id = payload.get("product_id")
+        movement_type = payload.get("movement_type")
+        quantity = payload.get("quantity")
+        if not product_id or not movement_type or quantity is None:
+            raise BadRequest("product_id, movement_type and quantity are required")
+        service = InventoryPlanningService(current_user.tenant_id)
+        movement = service.record_movement(
+            product_id=product_id,
+            movement_type=str(movement_type).strip().lower(),
+            quantity=quantity,
+            user_id=current_user.id,
+            reference_type=payload.get("reference_type"),
+            reference_id=payload.get("reference_id"),
+            note=payload.get("note"),
+        )
+        db.session.commit()
+        return jsonify({"success": True, "movement": movement.to_dict()})
+    except (ValueError, TypeError) as exc:
+        db.session.rollback()
+        return _handle(BadRequest(str(exc)))
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+@price_intelligence_bp.route("/inventory/products/<int:product_id>/recommendation", methods=["GET"])
+@login_required
+def inventory_recommendation(product_id):
+    try:
+        service = InventoryPlanningService(current_user.tenant_id)
+        result = service.recommendation(
+            product_id,
+            lookback_days=request.args.get("lookback_days", default=60, type=int),
+            lead_time_days=request.args.get("lead_time_days", default=None, type=int),
+            safety_days=request.args.get("safety_days", default=2, type=int),
+        )
+        return jsonify({"success": True, **result})
+    except (ValueError, TypeError) as exc:
+        return _handle(BadRequest(str(exc)))
+    except HTTPException as exc:
+        return _handle(exc)
+
+
+@price_intelligence_bp.route("/inventory/recommendations", methods=["GET"])
+@login_required
+def inventory_recommendations():
+    try:
+        service = InventoryPlanningService(current_user.tenant_id)
+        rows = service.recommendations(
+            lookback_days=request.args.get("lookback_days", default=60, type=int),
+            lead_time_days=request.args.get("lead_time_days", default=None, type=int),
+            safety_days=request.args.get("safety_days", default=2, type=int),
+            limit=request.args.get("limit", default=100, type=int),
+        )
+        return jsonify({"success": True, "recommendations": rows})
+    except (ValueError, TypeError) as exc:
+        return _handle(BadRequest(str(exc)))
+    except HTTPException as exc:
+        return _handle(exc)
 
 
 def _build_briefing_prompt(summary: dict, supplier_scores: dict) -> str:
@@ -124,7 +216,6 @@ def _build_briefing_prompt(summary: dict, supplier_scores: dict) -> str:
 @price_intelligence_bp.route("/ai-briefing", methods=["POST"])
 @login_required
 def portfolio_ai_briefing():
-    """Generate a read-only Gemini executive briefing from deterministic portfolio facts."""
     try:
         intelligence = PriceIntelligenceService(current_user.tenant_id)
         summary = intelligence.get_portfolio_summary(opportunity_limit=10)
@@ -184,7 +275,6 @@ def _build_gemini_prompt(comparison: dict, history: list[dict], quantity: float)
 @price_intelligence_bp.route("/products/<int:product_id>/ai-insight", methods=["POST"])
 @login_required
 def product_ai_insight(product_id):
-    """Ask Gemini to explain the deterministic supplier comparison without changing data."""
     try:
         payload = request.get_json(silent=True) or {}
         raw_quantity = payload.get("quantity", 100)
@@ -229,29 +319,5 @@ def product_ai_insight(product_id):
         })
     except (BadRequest, ServiceUnavailable) as exc:
         return _handle(exc)
-    except HTTPException as exc:
-        return _handle(exc)
-
-
-@price_intelligence_bp.route("/basket/analyze", methods=["POST"])
-@login_required
-def analyze_basket():
-    try:
-        payload = request.get_json(silent=True) or {}
-        items = payload.get("items")
-        if not isinstance(items, list) or not items:
-            raise BadRequest("items must be a non-empty array")
-        max_suppliers = payload.get("max_suppliers")
-        if max_suppliers is not None:
-            try:
-                max_suppliers = int(max_suppliers)
-            except (TypeError, ValueError):
-                raise BadRequest("max_suppliers must be an integer")
-            if max_suppliers <= 0:
-                raise BadRequest("max_suppliers must be greater than zero")
-        result = PriceIntelligenceService(current_user.tenant_id).optimize_basket(items, max_suppliers)
-        return jsonify({"success": True, **result})
-    except ValueError as exc:
-        return _handle(BadRequest(str(exc)))
     except HTTPException as exc:
         return _handle(exc)
