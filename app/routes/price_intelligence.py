@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request, current_app
 from flask_login import current_user, login_required
 from werkzeug.exceptions import BadRequest, HTTPException, ServiceUnavailable
 
+from app.extensions import db
 from app.services.ai_service import AIService
 from app.services.data_readiness_service import ProcurementDataReadinessService
 from app.services.inventory_planning_service import InventoryPlanningService
@@ -151,12 +152,19 @@ def record_inventory_movement():
             reference_type=payload.get("reference_type"),
             reference_id=payload.get("reference_id"),
             note=payload.get("note"),
+            occurred_at=payload.get("occurred_at"),
         )
+        db.session.commit()
         return jsonify({"success": True, "movement": movement.to_dict()})
     except (ValueError, TypeError) as exc:
+        db.session.rollback()
         return _handle(BadRequest(str(exc)))
     except HTTPException as exc:
+        db.session.rollback()
         return _handle(exc)
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 @price_intelligence_bp.route("/inventory/products/<int:product_id>/recommendation", methods=["GET"])
@@ -167,7 +175,7 @@ def inventory_recommendation(product_id):
         result = service.recommendation(
             product_id,
             lookback_days=request.args.get("lookback_days", default=60, type=int),
-            lead_time_days=request.args.get("lead_time_days", default=7, type=int),
+            lead_time_days=request.args.get("lead_time_days", default=None, type=int),
             safety_days=request.args.get("safety_days", default=2, type=int),
         )
         return jsonify({"success": True, **result})
@@ -184,7 +192,7 @@ def inventory_recommendations():
         service = InventoryPlanningService(current_user.tenant_id)
         rows = service.recommendations(
             lookback_days=request.args.get("lookback_days", default=60, type=int),
-            lead_time_days=request.args.get("lead_time_days", default=7, type=int),
+            lead_time_days=request.args.get("lead_time_days", default=None, type=int),
             safety_days=request.args.get("safety_days", default=2, type=int),
             limit=request.args.get("limit", default=100, type=int),
         )
