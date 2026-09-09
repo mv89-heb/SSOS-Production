@@ -137,6 +137,7 @@ def process_due_reminders() -> int:
                 else:
                     order.next_reminder_at = None
                     order.reminder_state = REMINDER_DUE
+                processed += 1
                 continue
 
             rules = deepcopy(order.reminder_rules_snapshot or {})
