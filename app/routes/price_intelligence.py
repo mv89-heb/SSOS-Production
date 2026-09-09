@@ -3,6 +3,7 @@ from flask_login import current_user, login_required
 from werkzeug.exceptions import BadRequest, HTTPException, ServiceUnavailable
 
 from app.services.ai_service import AIService
+from app.services.data_readiness_service import ProcurementDataReadinessService
 from app.services.price_intelligence_service import PriceIntelligenceService
 
 price_intelligence_bp = Blueprint("price_intelligence", __name__, url_prefix="/api/price-intelligence")
@@ -99,6 +100,14 @@ def supplier_price_scores():
         return _handle(BadRequest(str(exc)))
     except HTTPException as exc:
         return _handle(exc)
+
+
+@price_intelligence_bp.route("/data-readiness", methods=["GET"])
+@login_required
+def procurement_data_readiness():
+    """Return factual data coverage so the UI can distinguish empty intelligence from missing source data."""
+    result = ProcurementDataReadinessService(current_user.tenant_id).snapshot()
+    return jsonify({"success": True, **result})
 
 
 def _build_briefing_prompt(summary: dict, supplier_scores: dict) -> str:

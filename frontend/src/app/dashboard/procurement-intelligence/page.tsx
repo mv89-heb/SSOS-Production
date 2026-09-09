@@ -75,6 +75,11 @@ export default function ProcurementIntelligencePage() {
     queryFn: () => catalogService.listProducts(undefined, true),
     retry: 1,
   });
+  const readiness = useQuery({
+    queryKey: ["procurement-intelligence", "data-readiness"],
+    queryFn: () => priceIntelligenceService.getDataReadiness(),
+    retry: 1,
+  });
 
   const [briefing, setBriefing] = useState<Awaited<ReturnType<typeof priceIntelligenceService.getAiBriefing>> | null>(null);
   const [aiError, setAiError] = useState<string>();
@@ -84,6 +89,7 @@ export default function ProcurementIntelligencePage() {
     void summary.refetch();
     void suppliers.refetch();
     void products.refetch();
+    void readiness.refetch();
   };
 
   const runBriefing = async () => {
@@ -101,7 +107,8 @@ export default function ProcurementIntelligencePage() {
   const data = summary.data;
   const supplierData = suppliers.data;
   const productRows = products.data ?? [];
-  const loading = summary.isLoading || suppliers.isLoading || products.isLoading;
+  const readinessData = readiness.data;
+  const loading = summary.isLoading || suppliers.isLoading || products.isLoading || readiness.isLoading;
 
   return (
     <div dir="rtl" className="space-y-6 pb-10">
@@ -130,7 +137,7 @@ export default function ProcurementIntelligencePage() {
         </div>
       </header>
 
-      {(summary.isError || suppliers.isError || products.isError) && (
+      {(summary.isError || suppliers.isError || products.isError || readiness.isError) && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
           <div className="font-bold">חלק מנתוני המודיעין לא נטענו</div>
           <div className="mt-1">הקטלוג והנתונים הזמינים עדיין מוצגים. לחץ על רענן נתונים לאחר שהשרת זמין.</div>
@@ -139,30 +146,10 @@ export default function ProcurementIntelligencePage() {
 
       {data ? (
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            label="חיסכון פוטנציאלי"
-            value={money(data.potential_savings)}
-            hint={`${number(data.potential_savings_percent)}% מהמחיר הנוכחי ליחידה`}
-            icon={<ArrowDown className="text-emerald-500" size={18} />}
-          />
-          <StatCard
-            label="מוצרים עם הזדמנות"
-            value={number(data.opportunity_products)}
-            hint={`מתוך ${number(data.products_analyzed)} מוצרים שנותחו`}
-            icon={<Sparkles className="text-violet-500" size={18} />}
-          />
-          <StatCard
-            label="חלופות ברות-השוואה"
-            value={number(data.products_with_comparable_alternatives)}
-            hint="לפחות ספק חלופי אחד באותה יחידת השוואה ומטבע"
-            icon={<CheckCircle2 className="text-blue-500" size={18} />}
-          />
-          <StatCard
-            label="עלות נוכחית → מיטבית"
-            value={`${money(data.current_unit_total)} → ${money(data.best_unit_total)}`}
-            hint="סכום מחירי יחידה להשוואה"
-            icon={<TrendingUp className="text-indigo-500" size={18} />}
-          />
+          <StatCard label="חיסכון פוטנציאלי" value={money(data.potential_savings)} hint={`${number(data.potential_savings_percent)}% מהמחיר הנוכחי ליחידה`} icon={<ArrowDown className="text-emerald-500" size={18} />} />
+          <StatCard label="מוצרים עם הזדמנות" value={number(data.opportunity_products)} hint={`מתוך ${number(data.products_analyzed)} מוצרים שנותחו`} icon={<Sparkles className="text-violet-500" size={18} />} />
+          <StatCard label="חלופות ברות-השוואה" value={number(data.products_with_comparable_alternatives)} hint="לפחות ספק חלופי אחד באותה יחידת השוואה ומטבע" icon={<CheckCircle2 className="text-blue-500" size={18} />} />
+          <StatCard label="עלות נוכחית → מיטבית" value={`${money(data.current_unit_total)} → ${money(data.best_unit_total)}`} hint="סכום מחירי יחידה להשוואה" icon={<TrendingUp className="text-indigo-500" size={18} />} />
         </section>
       ) : (
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -173,26 +160,41 @@ export default function ProcurementIntelligencePage() {
         </section>
       )}
 
+      {readinessData && (
+        <Section title="מוכנות נתוני הרכש" hint="זהו מדד איכות/כיסוי של הנתונים הקיימים — לא ציון עסקי ולא נתון מומצא.">
+          <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-5">
+            {[
+              ["קטלוג", readinessData.readiness.catalog, `${number(readinessData.products.active)} מוצרים פעילים`],
+              ["השוואת ספקים", readinessData.readiness.supplier_comparison, `${number(readinessData.supplier_offers.active)} הצעות פעילות`],
+              ["היסטוריית מחירים", readinessData.readiness.historical_prices, `${number(readinessData.price_intelligence.history_rows + readinessData.price_intelligence.observation_rows)} רשומות`],
+              ["הוצאה ממומשת", readinessData.readiness.realized_spend, `${number(readinessData.orders.with_realized_value)} הזמנות עם ערך`],
+              ["סיכון מלאי", readinessData.readiness.stock_risk, `${number(readinessData.products.with_stock_rules)} מוצרים עם כללי מלאי`],
+            ].map(([label, ready, hint]) => (
+              <div key={String(label)} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+                <div className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
+                  {ready ? <CheckCircle2 className="text-emerald-500" size={17} /> : <AlertTriangle className="text-amber-500" size={17} />}
+                  {String(label)}
+                </div>
+                <div className={`mt-2 text-lg font-black ${ready ? "text-emerald-600" : "text-amber-600"}`}>{ready ? "מוכן" : "חסר מקור נתונים"}</div>
+                <div className="mt-1 text-xs text-slate-400">{String(hint)}</div>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-slate-100 px-5 py-4 text-xs leading-5 text-slate-500 dark:border-slate-800">
+            חסר נתון היסטורי? המערכת לא ממלאת אותו בהערכה. במקום זאת היא מציגה את מקור החוסר כדי שניתן יהיה להשלים את תהליך הרכש/הייבוא.
+          </div>
+        </Section>
+      )}
+
       <Section title="קטלוג רכש חי" hint={`${number(productRows.length)} מוצרים פעילים — כדי שהמסך לא יהיה ריק גם כשאין עדיין השוואות מחיר.`}>
         {productRows.length ? (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">
-              <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900">
-                <tr>
-                  <th className="px-5 py-3">מוצר</th>
-                  <th className="px-5 py-3">קטגוריה</th>
-                  <th className="px-5 py-3">מחיר נוכחי</th>
-                  <th className="px-5 py-3">יחידה</th>
-                  <th className="px-5 py-3">מלאי</th>
-                </tr>
-              </thead>
+              <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-5 py-3">מוצר</th><th className="px-5 py-3">קטגוריה</th><th className="px-5 py-3">מחיר נוכחי</th><th className="px-5 py-3">יחידה</th><th className="px-5 py-3">מלאי</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {productRows.slice(0, 25).map((product) => (
                   <tr key={product.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
-                    <td className="px-5 py-4 font-semibold text-slate-900 dark:text-white">
-                      {product.name}
-                      <div className="text-xs font-normal text-slate-400">{product.sku || "ללא מק״ט"}</div>
-                    </td>
+                    <td className="px-5 py-4 font-semibold text-slate-900 dark:text-white">{product.name}<div className="text-xs font-normal text-slate-400">{product.sku || "ללא מק״ט"}</div></td>
                     <td className="px-5 py-4 text-slate-600 dark:text-slate-300">{product.category || "ללא קטגוריה"}</td>
                     <td className="px-5 py-4 font-black text-indigo-700 dark:text-indigo-300">{money(product.current_price, product.currency || "ILS")}</td>
                     <td className="px-5 py-4">{product.unit || "יחידה"}</td>
@@ -203,94 +205,31 @@ export default function ProcurementIntelligencePage() {
             </table>
           </div>
         ) : (
-          <div className="p-8 text-center">
-            <PackageSearch className="mx-auto text-slate-300" size={38} />
-            <div className="mt-3 font-bold text-slate-700 dark:text-slate-200">אין מוצרים פעילים בקטלוג</div>
-            <div className="mt-1 text-sm text-slate-500">ייבא מחירון או הוסף מוצרים במסך הקטלוג כדי להזין את מרכז המודיעין.</div>
-          </div>
+          <div className="p-8 text-center"><PackageSearch className="mx-auto text-slate-300" size={38} /><div className="mt-3 font-bold text-slate-700 dark:text-slate-200">אין מוצרים פעילים בקטלוג</div><div className="mt-1 text-sm text-slate-500">ייבא מחירון או הוסף מוצרים במסך הקטלוג כדי להזין את מרכז המודיעין.</div></div>
         )}
       </Section>
 
       <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
         <Section title="הזדמנויות חיסכון מובילות" hint="השוואה דטרמיניסטית לפי יחידת בסיס ומטבע; ללא המצאת נתונים.">
           {data?.top_opportunities?.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-sm">
-                <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900">
-                  <tr><th className="px-5 py-3">מוצר</th><th className="px-5 py-3">ספק נוכחי</th><th className="px-5 py-3">ספק זול יותר</th><th className="px-5 py-3">חיסכון</th></tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {data.top_opportunities.map((row) => (
-                    <tr key={row.product_id}>
-                      <td className="px-5 py-4 font-semibold">{row.product_name}<div className="text-xs text-slate-400">{row.sku || "ללא מק״ט"}</div></td>
-                      <td className="px-5 py-4">{row.current_supplier || "—"}</td>
-                      <td className="px-5 py-4 font-semibold text-emerald-700 dark:text-emerald-300">{row.best_supplier || "—"}</td>
-                      <td className="px-5 py-4 font-black text-emerald-700 dark:text-emerald-300">{money(row.savings_per_unit, row.currency)}<div className="text-xs font-normal">{number(row.savings_percent)}%</div></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="p-8 text-center text-sm text-slate-500">אין כרגע הזדמנויות חיסכון שניתנות להשוואה. זה לא אומר שהקטלוג ריק.</div>
-          )}
+            <div className="overflow-x-auto"><table className="w-full text-right text-sm"><thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-5 py-3">מוצר</th><th className="px-5 py-3">ספק נוכחי</th><th className="px-5 py-3">ספק זול יותר</th><th className="px-5 py-3">חיסכון</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {data.top_opportunities.map((row) => <tr key={row.product_id}><td className="px-5 py-4 font-semibold">{row.product_name}<div className="text-xs text-slate-400">{row.sku || "ללא מק״ט"}</div></td><td className="px-5 py-4">{row.current_supplier || "—"}</td><td className="px-5 py-4 font-semibold text-emerald-700 dark:text-emerald-300">{row.best_supplier || "—"}</td><td className="px-5 py-4 font-black text-emerald-700 dark:text-emerald-300">{money(row.savings_per_unit, row.currency)}<div className="text-xs font-normal">{number(row.savings_percent)}%</div></td></tr>)}
+            </tbody></table></div>
+          ) : <div className="p-8 text-center text-sm text-slate-500">אין כרגע הזדמנויות חיסכון שניתנות להשוואה. זה לא אומר שהקטלוג ריק.</div>}
         </Section>
 
         <Section title="דירוג ספקים לפי מחיר" hint="הציון משקף כיסוי בקטלוג וניצחונות במחיר בלבד — לא איכות או שירות.">
-          {supplierData?.suppliers?.length ? (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {supplierData.suppliers.map((supplier, index) => (
-                <div key={supplier.supplier_id} className="flex items-center gap-3 p-4">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-sm font-black dark:bg-slate-900">{index + 1}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-semibold">{supplier.supplier_name || `ספק #${supplier.supplier_id}`}</div>
-                    <div className="mt-1 text-xs text-slate-400">כיסוי {number(supplier.coverage_percent)}% · ניצחונות {supplier.wins}/{supplier.participation}</div>
-                  </div>
-                  <div className="text-left"><div className="font-black text-indigo-600">{number(supplier.score)}</div><div className="text-[10px] text-slate-400">ציון</div></div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-8 text-center text-sm text-slate-500">אין עדיין מספיק הצעות ספקים להשוואה.</div>
-          )}
+          {supplierData?.suppliers?.length ? <div className="divide-y divide-slate-100 dark:divide-slate-800">{supplierData.suppliers.map((supplier, index) => <div key={supplier.supplier_id} className="flex items-center gap-3 p-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-sm font-black dark:bg-slate-900">{index + 1}</div><div className="min-w-0 flex-1"><div className="truncate font-semibold">{supplier.supplier_name || `ספק #${supplier.supplier_id}`}</div><div className="mt-1 text-xs text-slate-400">כיסוי {number(supplier.coverage_percent)}% · ניצחונות {supplier.wins}/{supplier.participation}</div></div><div className="text-left"><div className="font-black text-indigo-600">{number(supplier.score)}</div><div className="text-[10px] text-slate-400">ציון</div></div></div>)}</div> : <div className="p-8 text-center text-sm text-slate-500">אין עדיין מספיק הצעות ספקים להשוואה.</div>}
         </Section>
       </div>
 
       <Section title="שינויי מחיר אחרונים" hint="היסטוריית מחירים שנרשמה במערכת.">
-        {data?.recent_changes?.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-sm">
-              <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900">
-                <tr><th className="px-5 py-3">מוצר</th><th className="px-5 py-3">ספק</th><th className="px-5 py-3">מחיר קודם</th><th className="px-5 py-3">מחיר חדש</th><th className="px-5 py-3">שינוי</th></tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {data.recent_changes.map((row) => (
-                  <tr key={row.id}>
-                    <td className="px-5 py-4 font-semibold">#{row.product_id}</td>
-                    <td className="px-5 py-4">{row.supplier_name || `ספק #${row.supplier_id}`}</td>
-                    <td className="px-5 py-4">{row.old_price == null ? "—" : money(row.old_price, row.currency)}</td>
-                    <td className="px-5 py-4 font-bold">{money(row.new_price, row.currency)}</td>
-                    <td className={`px-5 py-4 font-black ${(row.change_percent ?? 0) > 0 ? "text-red-600" : "text-emerald-600"}`}>{row.change_percent == null ? "—" : `${number(row.change_percent)}%`}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="p-8 text-center text-sm text-slate-500">אין עדיין היסטוריית שינויי מחיר.</div>
-        )}
+        {data?.recent_changes?.length ? <div className="overflow-x-auto"><table className="w-full text-right text-sm"><thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-5 py-3">מוצר</th><th className="px-5 py-3">ספק</th><th className="px-5 py-3">מחיר קודם</th><th className="px-5 py-3">מחיר חדש</th><th className="px-5 py-3">שינוי</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{data.recent_changes.map((row) => <tr key={row.id}><td className="px-5 py-4 font-semibold">#{row.product_id}</td><td className="px-5 py-4">{row.supplier_name || `ספק #${row.supplier_id}`}</td><td className="px-5 py-4">{row.old_price == null ? "—" : money(row.old_price, row.currency)}</td><td className="px-5 py-4 font-bold">{money(row.new_price, row.currency)}</td><td className={`px-5 py-4 font-black ${(row.change_percent ?? 0) > 0 ? "text-red-600" : "text-emerald-600"}`}>{row.change_percent == null ? "—" : `${number(row.change_percent)}%`}</td></tr>)}</tbody></table></div> : <div className="p-8 text-center text-sm text-slate-500">אין עדיין היסטוריית שינויי מחיר.</div>}
       </Section>
 
       <section className="overflow-hidden rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-indigo-50 shadow-sm dark:border-violet-900 dark:from-violet-950/30 dark:via-slate-950 dark:to-indigo-950/20">
-        <div className="flex flex-col gap-4 border-b border-violet-100 p-5 dark:border-violet-900/60 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3"><div className="rounded-xl bg-violet-600 p-2 text-white"><BrainCircuit size={20} /></div><div><h2 className="font-black text-violet-950 dark:text-violet-100">Gemini Executive Briefing</h2><p className="mt-1 text-sm text-violet-900/70 dark:text-violet-200/70">Gemini מפרש את הנתונים הקיימים בלבד ואינו משנה אותם.</p></div></div>
-          <button type="button" onClick={runBriefing} disabled={aiLoading || !data} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"><Sparkles size={16} />{aiLoading ? "Gemini מנתח..." : "הפק סיכום מנהלים"}</button>
-        </div>
-        <div className="p-5">
-          {aiError && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">{aiError}</div>}
-          {!briefing && !aiError && <div className="text-sm text-slate-500">הפקת הסיכום תנתח את ההזדמנויות, הסיכונים והפעולות על בסיס נתוני המסך.</div>}
-          {briefing && <div className="grid gap-5 md:grid-cols-3"><div><div className="mb-2 font-bold text-emerald-700">הזדמנויות</div><ul className="space-y-2 text-sm">{briefing.briefing.highlights.map((x, i) => <li key={`h-${i}`}>• {x}</li>)}</ul></div><div><div className="mb-2 font-bold text-amber-700">סיכונים</div><ul className="space-y-2 text-sm">{briefing.briefing.risks.map((x, i) => <li key={`r-${i}`}>• {x}</li>)}</ul></div><div><div className="mb-2 font-bold text-indigo-700">פעולות</div><ul className="space-y-2 text-sm">{briefing.briefing.actions.map((x, i) => <li key={`a-${i}`}>→ {x}</li>)}</ul></div></div>}
-        </div>
+        <div className="flex flex-col gap-4 border-b border-violet-100 p-5 dark:border-violet-900/60 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><div className="rounded-xl bg-violet-600 p-2 text-white"><BrainCircuit size={20} /></div><div><h2 className="font-black text-violet-950 dark:text-violet-100">Gemini Executive Briefing</h2><p className="mt-1 text-sm text-violet-900/70 dark:text-violet-200/70">Gemini מפרש את הנתונים הקיימים בלבד ואינו משנה אותם.</p></div></div><button type="button" onClick={runBriefing} disabled={aiLoading || !data} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"><Sparkles size={16} />{aiLoading ? "Gemini מנתח..." : "הפק סיכום מנהלים"}</button></div>
+        <div className="p-5">{aiError && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">{aiError}</div>}{!briefing && !aiError && <div className="text-sm text-slate-500">הפקת הסיכום תנתח את ההזדמנויות, הסיכונים והפעולות על בסיס נתוני המסך.</div>}{briefing && <div className="grid gap-5 md:grid-cols-3"><div><div className="mb-2 font-bold text-emerald-700">הזדמנויות</div><ul className="space-y-2 text-sm">{briefing.briefing.highlights.map((x, i) => <li key={`h-${i}`}>• {x}</li>)}</ul></div><div><div className="mb-2 font-bold text-amber-700">סיכונים</div><ul className="space-y-2 text-sm">{briefing.briefing.risks.map((x, i) => <li key={`r-${i}`}>• {x}</li>)}</ul></div><div><div className="mb-2 font-bold text-indigo-700">פעולות</div><ul className="space-y-2 text-sm">{briefing.briefing.actions.map((x, i) => <li key={`a-${i}`}>→ {x}</li>)}</ul></div></div>}</div>
       </section>
 
       <div className="flex items-center gap-2 text-xs text-slate-400"><AlertTriangle size={14} /> הנתונים מוצגים לפי הרשאות הארגון וה־tenant המחובר.</div>
