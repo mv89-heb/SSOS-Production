@@ -34,6 +34,26 @@ export interface SavingsResult {
   best_supplier_name?: string | null;
 }
 
+export interface BasketAnalysis {
+  current_cost: number;
+  optimized_cost: number;
+  savings: number;
+  savings_percent: number;
+  supplier_count: number;
+  suppliers: Array<{
+    supplier_id: number;
+    supplier_name: string | null;
+    items: Array<{
+      product_id: number;
+      quantity: number;
+      supplier_id: number;
+      supplier_name: string | null;
+      unit_price: number;
+      line_total: number;
+    }>;
+  }>;
+}
+
 export interface PriceHistoryRow {
   id: number;
   product_id: number;
@@ -139,6 +159,10 @@ export const priceIntelligenceService = {
   },
   calculateSavings: async (productId: number, quantity: number) => {
     const { data } = await apiClient.get<SavingsResult>(`/api/price-intelligence/products/${productId}/savings`, { params: { quantity } });
+    return data;
+  },
+  optimizeBasket: async (items: Array<{ product_id: number; quantity: number }>, max_suppliers?: number) => {
+    const { data } = await apiClient.post<{ success: boolean } & BasketAnalysis>("/api/price-intelligence/basket/analyze", { items, max_suppliers });
     return data;
   },
   getHistory: async (productId: number, supplierId?: number) => {
