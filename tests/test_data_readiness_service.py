@@ -1,14 +1,18 @@
-from app.models.document_analysis import DocumentAnalysis
-from app.models.order import Order
-from app.models.price_history import PriceHistory
-from app.models.price_observation import PriceObservation
-from app.models.product import Product
-from app.models.supplier import Supplier
-from app.models.supplier_offer import SupplierProductOffer
-from app.services.data_readiness_service import ProcurementDataReadinessService
+def test_data_readiness_endpoint_reports_empty_tenant_without_fabrication(logged_in_client_a):
+    response = logged_in_client_a.get("/api/price-intelligence/data-readiness")
 
-
-def test_snapshot_reports_factual_data_coverage(app, tenant):
-    with app.app_context():
-        supplier = Supplier(tenant_id=tenant.id, name="Supplier A", active=True)
-        db = app.extensions["sqlalchemy"].db if False else None
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["products"]["active"] == 0
+    assert payload["supplier_offers"]["active"] == 0
+    assert payload["price_intelligence"]["history_rows"] == 0
+    assert payload["price_intelligence"]["observation_rows"] == 0
+    assert payload["orders"]["with_realized_value"] == 0
+    assert payload["readiness"] == {
+        "catalog": False,
+        "supplier_comparison": False,
+        "historical_prices": False,
+        "realized_spend": False,
+        "stock_risk": False,
+    }
