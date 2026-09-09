@@ -152,7 +152,6 @@ def record_inventory_movement():
             reference_type=payload.get("reference_type"),
             reference_id=payload.get("reference_id"),
             note=payload.get("note"),
-            occurred_at=payload.get("occurred_at"),
         )
         db.session.commit()
         return jsonify({"success": True, "movement": movement.to_dict()})
