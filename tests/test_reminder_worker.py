@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
 from app.models.notification import Notification
@@ -56,6 +57,67 @@ def _seed_order(db_session, *, next_reminder_at, rules=None, status=STATUS_DRAFT
     db_session.add(order)
     db_session.commit()
     return order, user, manager
+
+
+def test_dedupe_key_is_stable_and_timezone_normalized():
+    from scripts import reminder_worker
+
+    utc_value = datetime(2026, 9, 9, 10, 5, tzinfo=timezone.utc)
+    local_value = datetime(2026, 9, 9, 13, 5, tzinfo=timezone(timedelta(hours=3)))
+
+    first = reminder_worker._reminder_dedupe_key(42, utc_value)
+    second = reminder_worker._reminder_dedupe_key(42, local_value)
+
+    assert first == second == "order-reminder:42:2026-09-09T10:05:00+00:00"
+
+
+def test_as_utc_handles_naive_datetime():
+    from scripts import reminder_worker
+
+    value = reminder_worker._as_utc(datetime(2026, 9, 9, 10, 5))
+
+    assert value.tzinfo == timezone.utc
+    assert value == datetime(2026, 9, 9, 10, 5, tzinfo=timezone.utc)
+
+
+def test_same_dedupe_key_is_database_unique(app, db):
+    with app.app_context():
+        tenant = Tenant(name="Dedupe Tenant", slug="dedupe-tenant")
+        db.session.add(tenant)
+        db.session.flush()
+        user = User(
+            tenant_id=tenant.id,
+            email="dedupe-user@test.local",
+            full_name="Dedupe User",
+            password_hash="test-hash",
+            role=ROLE_ADMIN,
+            active=True,
+        )
+        db.session.add(user)
+        db.session.flush()
+
+        key = "order-reminder:42:2026-09-09T10:05:00+00:00"
+        db.session.add(Notification(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            title="Reminder",
+            message="First delivery",
+            dedupe_key=key,
+        ))
+        db.session.commit()
+
+        db.session.add(Notification(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            title="Reminder",
+            message="Duplicate delivery",
+            dedupe_key=key,
+        ))
+        with pytest.raises(IntegrityError):
+            db.session.commit()
+        db.session.rollback()
+
+        assert Notification.query.filter_by(dedupe_key=key).count() == 1
 
 
 def test_wait_skips_when_no_reminder_in_window(app, db, monkeypatch):
@@ -144,13 +206,13 @@ def test_cancelled_reminder_is_not_processed(app, db, monkeypatch):
     assert db.session.query(Notification).count() == 0
 
 
-def test_recurring_reminder_schedules_next_occurrence(app, db, monkeypatch):
+def test_recurring_reminder_anchors_next_occurrence_to_scheduled_time(app, db, monkeypatch):
     from scripts import reminder_worker
 
-    now = datetime.now(timezone.utc)
+    scheduled_for = datetime.now(timezone.utc) - timedelta(seconds=1)
     order, _, _ = _seed_order(
         db.session,
-        next_reminder_at=now - timedelta(seconds=1),
+        next_reminder_at=scheduled_for,
         rules={"recurrence": {"every_minutes": 15, "max_occurrences": 2}},
     )
     monkeypatch.setattr(reminder_worker, "_wait_for_nearby_reminders", lambda: None)
@@ -163,8 +225,45 @@ def test_recurring_reminder_schedules_next_occurrence(app, db, monkeypatch):
     assert processed == 1
     assert refreshed.reminder_state == REMINDER_PENDING
     assert refreshed.next_reminder_at is not None
-    assert _aware(refreshed.next_reminder_at) > datetime.now(timezone.utc) + timedelta(minutes=14)
+    expected = scheduled_for + timedelta(minutes=15)
+    actual = _aware(refreshed.next_reminder_at)
+    assert abs((actual - expected).total_seconds()) < 2
     assert refreshed.reminder_rules_snapshot["occurrences"] == 1
+
+
+def test_existing_dedupe_notification_does_not_create_duplicate(app, db, monkeypatch):
+    from scripts import reminder_worker
+
+    scheduled_for = datetime.now(timezone.utc) - timedelta(seconds=1)
+    order, user, _ = _seed_order(
+        db.session,
+        next_reminder_at=scheduled_for,
+        rules={"recurrence": {"every_minutes": 15, "max_occurrences": 1}},
+    )
+    dedupe_key = reminder_worker._reminder_dedupe_key(order.id, scheduled_for)
+    db.session.add(Notification(
+        tenant_id=order.tenant_id,
+        user_id=user.id,
+        title="Reminder",
+        message="Already delivered",
+        dedupe_key=dedupe_key,
+    ))
+    db.session.commit()
+
+    monkeypatch.setattr(reminder_worker, "_wait_for_nearby_reminders", lambda: None)
+    pushed = []
+    monkeypatch.setattr(reminder_worker, "send_to_user", lambda *args: pushed.append(args))
+
+    with app.app_context():
+        processed = reminder_worker.process_due_reminders()
+        refreshed = db.session.get(Order, order.id)
+        notification_count = Notification.query.filter_by(dedupe_key=dedupe_key).count()
+
+    assert processed == 1
+    assert notification_count == 1
+    assert pushed == []
+    assert refreshed.next_reminder_at is None
+    assert refreshed.reminder_state == REMINDER_DUE
 
 
 def test_escalation_notifies_active_managers(app, db, monkeypatch):

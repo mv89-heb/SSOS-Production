@@ -19,6 +19,9 @@ class Notification(db.Model):
     status = db.Column(db.String(20), default=STATUS_UNREAD, nullable=False)
     action_url = db.Column(db.Text, nullable=True)
     notification_type = db.Column(db.String(50), nullable=True)
+    # Stable key for one logical reminder occurrence. Nullable for legacy/manual
+    # notifications that predate reminder idempotency.
+    dedupe_key = db.Column(db.String(255), nullable=True, unique=True, index=True)
 
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     read_at = db.Column(db.DateTime, nullable=True)
