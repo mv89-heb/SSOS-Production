@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
 
-from app.models.inventory_movement import InventoryMovement, MOVEMENT_COUNT
+from app.models.inventory_movement import InventoryMovement, MOVEMENT_COUNT, MOVEMENT_RECEIPT
 from app.models.inventory_planning_period import InventoryPlanningPeriod
 from app.models.product import Product
 from app.models.supplier import Supplier
@@ -12,6 +12,30 @@ def _product(db, tenant_id, supplier_id, name="Holiday Product"):
     db.session.add(product)
     db.session.flush()
     return product
+
+
+def test_receipts_are_added_back_when_inferring_consumption(db, tenant_a_admin):
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="Supplier")
+    db.session.add(supplier)
+    db.session.flush()
+    product = _product(db, tenant_id, supplier.id)
+    now = datetime.now(timezone.utc)
+    db.session.add_all([
+        InventoryMovement(tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_COUNT, quantity=100, balance_after=100, occurred_at=now - timedelta(days=7)),
+        InventoryMovement(tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_RECEIPT, quantity=20, balance_after=120, occurred_at=now - timedelta(days=4)),
+        InventoryMovement(tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_COUNT, quantity=80, balance_after=80, occurred_at=now),
+    ])
+    product.current_stock = 80
+    db.session.commit()
+
+    service = InventoryCalendarService(tenant_id)
+    estimated, observed_days, receipts, checks = service._consumption_metrics(product.id, 60)
+
+    assert checks == 2
+    assert observed_days == 7
+    assert estimated == 40
+    assert receipts == 20
 
 
 def test_holiday_multiplier_changes_forecast(db, tenant_a_admin):
@@ -50,8 +74,7 @@ def test_count_status_tracks_distinct_products(db, tenant_a_admin):
     db.session.add(supplier)
     db.session.flush()
     first = _product(db, tenant_id, supplier.id)
-    _product(db, tenant_id, supplier.id, "Second Product")
-    second = db.session.query(Product).filter_by(tenant_id=tenant_id, name="Second Product").one()
+    second = _product(db, tenant_id, supplier.id, "Second Product")
     now = datetime.now(timezone.utc)
     db.session.add_all([
         InventoryMovement(tenant_id=tenant_id, product_id=first.id, movement_type=MOVEMENT_COUNT, quantity=10, balance_after=10, occurred_at=now),
