@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.extensions import db
@@ -57,6 +57,31 @@ def summary():
         "products": [p.to_dict() for p in products],
         "recent_movements": [m.to_dict() for m in movements[:50]],
     })
+
+
+@inventory_bp.route("/products/lookup", methods=["GET"])
+@login_required
+def lookup_product():
+    """Find one active tenant product by exact barcode or SKU."""
+    value = str(request.args.get("value") or "").strip()
+    if not value:
+        return _handle(BadRequest("value is required"))
+    if len(value) > 100:
+        return _handle(BadRequest("value is too long"))
+
+    product = db.session.scalar(
+        select(Product)
+        .where(
+            Product.tenant_id == current_user.tenant_id,
+            Product.active.is_(True),
+            or_(Product.barcode == value, Product.sku == value),
+        )
+        .limit(1)
+    )
+    if product is None:
+        from werkzeug.exceptions import NotFound
+        return _handle(NotFound("Product not found"))
+    return jsonify({"success": True, "product": product.to_dict()})
 
 
 @inventory_bp.route("/movements", methods=["GET"])
