@@ -1,9 +1,11 @@
 name: SSOS Reminder Worker
 
-# The production reminder scheduler runs on Render Cron. Keep this workflow
-# as a manual emergency runner only; scheduled execution here would duplicate
-# reminders when both schedulers are active.
+# GitHub Actions is the production scheduler for reminders.
+# It runs every 5 minutes; the worker can wait inside a 5-minute execution
+# window so reminders are delivered at their configured time instead of early.
 on:
+  schedule:
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -11,7 +13,7 @@ permissions:
 
 jobs:
   reminder-worker:
-    name: Manual reminder worker
+    name: Process scheduled reminders
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     env:
@@ -26,7 +28,7 @@ jobs:
       WEB_PUSH_VAPID_PUBLIC_KEY: ${{ secrets.SSOS_WEB_PUSH_VAPID_PUBLIC_KEY }}
       WEB_PUSH_VAPID_PRIVATE_KEY: ${{ secrets.SSOS_WEB_PUSH_VAPID_PRIVATE_KEY }}
       WEB_PUSH_VAPID_CLAIMS_EMAIL: ${{ secrets.SSOS_WEB_PUSH_VAPID_CLAIMS_EMAIL }}
-      REMINDER_EXECUTION_WINDOW_MINUTES: "0"
+      REMINDER_EXECUTION_WINDOW_MINUTES: "5"
       SESSION_COOKIE_SECURE: "True"
       MAX_UPLOAD_SIZE: "5242880"
       WTF_CSRF_ENABLED: "True"
