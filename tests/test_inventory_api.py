@@ -113,3 +113,40 @@ def test_inventory_lookup_is_tenant_scoped(logged_in_client_a, logged_in_client_
 def test_inventory_lookup_requires_value(logged_in_client_a):
     response = logged_in_client_a.get("/api/inventory/products/lookup")
     assert response.status_code == 400
+
+
+def test_generate_internal_barcodes_for_missing_products(logged_in_client_a):
+    product_id = _create_product(logged_in_client_a, sku="NO-BARCODE")
+
+    response = logged_in_client_a.post("/api/inventory/barcodes/generate", json={})
+    assert response.status_code == 200, response.get_json()
+    body = response.get_json()
+    assert body["generated_count"] == 1
+    generated = next(product for product in body["products"] if product["id"] == product_id)
+    assert generated["barcode"] == f"SSOS-{logged_in_client_a.get('/api/inventory/summary').get_json()['products'][0]['supplier_id']:04d}-{product_id:08d}" or generated["barcode"].endswith(f"-{product_id:08d}")
+
+    repeat = logged_in_client_a.post("/api/inventory/barcodes/generate", json={})
+    assert repeat.status_code == 200, repeat.get_json()
+    assert repeat.get_json()["generated_count"] == 0
+    assert repeat.get_json()["skipped_count"] >= 1
+
+    lookup = logged_in_client_a.get(f"/api/inventory/products/lookup?value={generated['barcode']}")
+    assert lookup.status_code == 200, lookup.get_json()
+    assert lookup.get_json()["product"]["id"] == product_id
+
+
+def test_generate_barcodes_preserves_existing_barcode(logged_in_client_a):
+    product_id = _create_product(logged_in_client_a, sku="HAS-BARCODE", barcode="ORG-EXISTING-001")
+    response = logged_in_client_a.post("/api/inventory/barcodes/generate", json={"product_ids": [product_id]})
+    assert response.status_code == 200, response.get_json()
+    body = response.get_json()
+    assert body["generated_count"] == 0
+    assert body["skipped_count"] == 1
+
+
+def test_generate_barcodes_is_tenant_scoped(logged_in_client_a, logged_in_client_b):
+    product_id = _create_product(logged_in_client_a, sku="TENANT-A-BARCODE")
+    response = logged_in_client_b.post("/api/inventory/barcodes/generate", json={"product_ids": [product_id]})
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["generated_count"] == 0
+    assert response.get_json()["products"] == []
