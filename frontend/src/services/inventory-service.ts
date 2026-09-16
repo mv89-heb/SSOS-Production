@@ -58,6 +58,11 @@ export interface InventoryRecommendation {
   };
 }
 
+export interface BarcodeLabelItem {
+  product_id: number;
+  quantity: number;
+}
+
 // Inventory uses cartons by default. Only an explicit "יחידה" product is
 // counted as individual pieces. The catalog's original unit value remains
 // available elsewhere and is not rewritten by this normalization.
@@ -77,8 +82,8 @@ export const inventoryService = {
   },
   generateBarcodes: async (productIds?: number[]) =>
     (await apiClient.post<{ success: boolean; generated_count: number; skipped_count: number; products: Product[]; skipped_product_ids: number[]; format: string }>("/api/inventory/barcodes/generate", productIds ? { product_ids: productIds } : {})).data,
-  printBarcodeLabels: async (productIds: number[]) => {
-    const response = await apiClient.post<Blob>("/api/inventory/barcodes/labels", { product_ids: productIds }, { responseType: "blob" });
+  printBarcodeLabels: async (items: BarcodeLabelItem[]) => {
+    const response = await apiClient.post<Blob>("/api/inventory/barcodes/labels", { items }, { responseType: "blob" });
     return response.data;
   },
   getMovements: async (params?: { product_id?: number; movement_type?: InventoryMovementType; limit?: number }) =>
