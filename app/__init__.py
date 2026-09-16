@@ -125,6 +125,7 @@ def _register_blueprints(app):
     from app.routes.web_push import web_push_bp
     from app.routes.reminder_advanced import reminder_advanced_bp
     from app.routes.inventory import inventory_bp
+    from app.routes.inventory_planning import inventory_planning_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
@@ -144,6 +145,7 @@ def _register_blueprints(app):
     app.register_blueprint(web_push_bp)
     app.register_blueprint(reminder_advanced_bp)
     app.register_blueprint(inventory_bp)
+    app.register_blueprint(inventory_planning_bp)
     csrf.exempt(health_bp)
     csrf.exempt(web_push_bp)
 

@@ -11,6 +11,7 @@ import {
 import { inventoryService, type InventoryMovement, type InventoryMovementType } from "@/services/inventory-service";
 import InventoryBarcodeManager from "@/components/inventory/inventory-barcode-manager";
 import InventoryScannerModal from "@/components/inventory/inventory-scanner-modal";
+import InventoryPlanningPanel from "@/components/inventory/inventory-planning-panel";
 import type { Product } from "@/types";
 
 const number = (value: number | null | undefined) => new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 }).format(Number(value ?? 0));
@@ -92,35 +93,24 @@ export default function InventoryPage() {
     try {
       const result = await inventoryService.createMovement({ product_id: selected.id, movement_type: movementType, quantity: qty, note: note.trim() || undefined });
       const balanceAfter = Number(result.movement.balance_after ?? 0);
-
-      // The POST/commit is the critical path. Update the visible product immediately
-      // from the authoritative server response instead of blocking the user on
-      // unrelated background refetches.
       qc.setQueryData(["inventory", "summary"], (current: any) => {
         if (!current?.products) return current;
         return {
           ...current,
-          products: current.products.map((product: Product) => product.id === selected.id
-            ? { ...product, current_stock: balanceAfter }
-            : product),
+          products: current.products.map((product: Product) => product.id === selected.id ? { ...product, current_stock: balanceAfter } : product),
           recent_movements: [result.movement, ...(current.recent_movements ?? []).filter((movement: InventoryMovement) => movement.id !== result.movement.id)].slice(0, 50),
           stats: current.stats ? { ...current.stats } : current.stats,
         };
       });
       qc.setQueryData(["inventory", "history", selected.id], (current: any) => {
         if (!current?.movements) return current;
-        return {
-          ...current,
-          movements: [result.movement, ...(current.movements ?? []).filter((movement: InventoryMovement) => movement.id !== result.movement.id)].slice(0, 100),
-        };
+        return { ...current, movements: [result.movement, ...(current.movements ?? []).filter((movement: InventoryMovement) => movement.id !== result.movement.id)].slice(0, 100) };
       });
-
-      // Refresh secondary views in the background; they must not delay the save UX.
       void qc.invalidateQueries({ queryKey: ["inventory", "summary"], refetchType: "inactive" });
       void qc.invalidateQueries({ queryKey: ["inventory", "recommendations"], refetchType: "inactive" });
+      void qc.invalidateQueries({ queryKey: ["inventory", "count-status"] });
       if (showHistory) void qc.invalidateQueries({ queryKey: ["inventory", "history", selected.id] });
       void qc.invalidateQueries({ queryKey: ["procurement-intelligence"], refetchType: "inactive" });
-
       setShowMovement(false);
       setQuantity("");
       setNote("");
@@ -137,7 +127,7 @@ export default function InventoryPage() {
       <header className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="bg-gradient-to-l from-indigo-700 via-indigo-600 to-blue-600 px-5 py-6 text-white sm:px-7 sm:py-8">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div><div className="mb-2 flex items-center gap-2 text-sm font-bold text-indigo-100"><Warehouse size={18}/> מחסן ומלאי</div><h1 className="text-3xl font-black tracking-tight sm:text-4xl">ניהול מלאי</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-indigo-100">ספירה, קבלה וניפוק לפי מוצר. ברירת המחדל היא ארגזים; מוצרים מיוחדים יכולים להיספר ביחידות.</p></div>
+            <div><div className="mb-2 flex items-center gap-2 text-sm font-bold text-indigo-100"><Warehouse size={18}/> מחסן ומלאי</div><h1 className="text-3xl font-black tracking-tight sm:text-4xl">ניהול מלאי</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-indigo-100">ספירה פיזית היא נקודת האמת. אין צורך לדווח על כל לקיחה מהמחסן; הרכישות והספירות משמשות לחישוב קצב הצריכה.</p></div>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
               <button onClick={() => setShowScanner(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-black text-indigo-700 shadow-lg hover:bg-indigo-50"><ScanLine size={19}/> סרוק ברקוד</button>
               <button onClick={() => setShowBarcodeManager(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white/10 px-5 text-sm font-black text-white ring-1 ring-white/25 hover:bg-white/20"><Barcode size={18}/> ברקודים ומדבקות</button>
@@ -148,6 +138,8 @@ export default function InventoryPage() {
       </header>
 
       {message && !showMovement && <div className={`flex items-center gap-2 rounded-2xl p-4 text-sm font-black ${message.error ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"}`}>{message.error ? <AlertTriangle size={18}/> : <CheckCircle2 size={18}/>} {message.text}</div>}
+
+      <InventoryPlanningPanel />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {[["מוצרים פעילים", summary.data?.stats.active_products ?? 0, Package], ["מלאי חסר", summary.data?.stats.out_of_stock ?? 0, AlertTriangle], ["מתחת למינימום", summary.data?.stats.low_stock ?? 0, SlidersHorizontal], ["ללא כללי מלאי", summary.data?.stats.without_stock_rule ?? 0, ClipboardCheck], ["תנועות אחרונות", summary.data?.stats.movement_count ?? 0, History]].map(([label, value, Icon]) => { const C = Icon as typeof Package; return <button key={String(label)} onClick={() => label === "מלאי חסר" ? setStatusFilter("urgent") : label === "מתחת למינימום" ? setStatusFilter("reorder") : undefined} className="rounded-2xl border border-slate-200 bg-white p-5 text-right shadow-sm dark:border-slate-800 dark:bg-slate-950"><C className="text-indigo-500" size={21}/><div className="mt-3 text-xs font-bold text-slate-500">{label}</div><div className="mt-1 text-2xl font-black">{number(Number(value))}</div></button>; })}
@@ -162,7 +154,7 @@ export default function InventoryPage() {
         {!rows.length && <div className="p-12 text-center"><Package className="mx-auto text-slate-300" size={40}/><h3 className="mt-3 font-black">לא נמצאו מוצרים</h3></div>}
       </section>
 
-      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="border-b border-slate-200 p-5 dark:border-slate-800"><div className="flex items-center gap-2"><Truck className="text-indigo-600" size={20}/><div><h2 className="font-black">המלצות רכש</h2><p className="mt-1 text-xs text-slate-500">מבוססות על ספירות פיזיות וקצב צריכה.</p></div></div></div><div className="grid gap-3 p-4 lg:grid-cols-2">{(recommendations.data ?? []).filter((row) => row.status === "urgent" || row.status === "reorder").slice(0,20).map((row) => <button key={row.product_id} onClick={() => {const product=products.find((p)=>p.id===row.product_id);if(product)openMovement(product,"count");}} className="rounded-2xl border border-slate-200 p-4 text-right dark:border-slate-800"><div className="flex items-center justify-between gap-3"><span className="font-black">{row.product_name}</span><span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${statusMeta[row.status].className}`}>{statusMeta[row.status].label}</span></div><div className="mt-3 grid grid-cols-3 gap-2 text-xs"><div><span className="text-slate-400">מלאי</span><strong className="mt-1 block text-base">{number(row.current_stock)}</strong></div><div><span className="text-slate-400">נקודת הזמנה</span><strong className="mt-1 block text-base">{number(row.reorder_point)}</strong></div><div><span className="text-slate-400">מומלץ להזמין</span><strong className="mt-1 block text-base">{number(row.recommended_order)}</strong></div></div></button>)}{!(recommendations.data ?? []).some((row) => row.status === "urgent" || row.status === "reorder") && <div className="p-8 text-center text-sm text-slate-500 lg:col-span-2">אין כרגע המלצות דחופות או להזמנה.</div>}</div></section>
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="border-b border-slate-200 p-5 dark:border-slate-800"><div className="flex items-center gap-2"><Truck className="text-indigo-600" size={20}/><div><h2 className="font-black">המלצות רכש</h2><p className="mt-1 text-xs text-slate-500">מבוססות על ספירות פיזיות, רכישות, קצב צריכה ותקופות מיוחדות.</p></div></div></div><div className="grid gap-3 p-4 lg:grid-cols-2">{(recommendations.data ?? []).filter((row) => row.status === "urgent" || row.status === "reorder").slice(0,20).map((row) => <button key={row.product_id} onClick={() => {const product=products.find((p)=>p.id===row.product_id);if(product)openMovement(product,"count");}} className="rounded-2xl border border-slate-200 p-4 text-right dark:border-slate-800"><div className="flex items-center justify-between gap-3"><span className="font-black">{row.product_name}</span><span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${statusMeta[row.status].className}`}>{statusMeta[row.status].label}</span></div><div className="mt-3 grid grid-cols-4 gap-2 text-xs"><div><span className="text-slate-400">מלאי</span><strong className="mt-1 block text-base">{number(row.current_stock)}</strong></div><div><span className="text-slate-400">קצב רגיל</span><strong className="mt-1 block text-base">{number(row.base_average_daily_usage ?? row.average_daily_usage)}</strong></div><div><span className="text-slate-400">ביקוש מתוקנן</span><strong className="mt-1 block text-base">{number(row.holiday_adjusted_demand)}</strong></div><div><span className="text-slate-400">מומלץ להזמין</span><strong className="mt-1 block text-base">{number(row.recommended_order)}</strong></div></div>{row.active_planning_periods?.length ? <div className="mt-3 rounded-xl bg-amber-50 p-2 text-xs font-bold text-amber-800">מושפע מתקופה מיוחדת: {row.active_planning_periods.map((p)=>p.name).join(", ")}</div> : null}</button>)}{!(recommendations.data ?? []).some((row) => row.status === "urgent" || row.status === "reorder") && <div className="p-8 text-center text-sm text-slate-500 lg:col-span-2">אין כרגע המלצות דחופות או להזמנה.</div>}</div></section>
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="border-b border-slate-200 p-5 dark:border-slate-800"><h2 className="font-black">תנועות אחרונות</h2></div><div className="divide-y divide-slate-100 dark:divide-slate-800">{(summary.data?.recent_movements ?? []).slice(0,12).map((movement) => <MovementRow key={movement.id} movement={movement} products={products}/>)}{!summary.data?.recent_movements?.length && <div className="p-8 text-center text-sm text-slate-500">עדיין לא נרשמו תנועות מלאי.</div>}</div></section>
 

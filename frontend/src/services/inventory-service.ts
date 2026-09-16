@@ -28,14 +28,43 @@ export interface InventorySummary {
   recent_movements: InventoryMovement[];
 }
 
+export interface InventoryPlanningPeriod {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+  consumption_multiplier: number;
+  order_days: string;
+  delivery_days: string;
+  order_cutoff_time: string | null;
+  active: boolean;
+  notes: string | null;
+}
+
+export interface InventoryCountStatus {
+  count_weekday: number;
+  count_time: string;
+  active_products: number;
+  counted_products_last_7_days: number;
+  completion_percent: number;
+  completed: boolean;
+  due: boolean;
+  next_due_date: string;
+  window_start: string;
+}
+
 export interface InventoryRecommendation {
   product_id: number;
   product_name: string;
   current_stock: number;
+  confirmed_inbound?: number;
   stock_checks_in_period: number;
   observed_days: number;
   estimated_depletion: number;
   average_daily_usage: number;
+  base_average_daily_usage?: number;
+  holiday_adjusted_demand?: number;
+  holiday_adjusted_target_stock?: number;
   lead_time_days: number;
   days_until_next_order: number | null;
   planning_horizon_days: number;
@@ -45,6 +74,7 @@ export interface InventoryRecommendation {
   safety_stock: number;
   status: "urgent" | "reorder" | "healthy" | "insufficient_data";
   data_ready: boolean;
+  active_planning_periods?: InventoryPlanningPeriod[];
   supplier_schedule: {
     supplier_id: number;
     supplier_name: string | null;
@@ -55,6 +85,7 @@ export interface InventoryRecommendation {
     recommended_check_date: string | null;
     order_cutoff_time: string | null;
     schedule_ready: boolean;
+    schedule_adjusted_for_period?: boolean;
   };
 }
 
@@ -63,9 +94,6 @@ export interface BarcodeLabelItem {
   quantity: number;
 }
 
-// Inventory uses cartons by default. Only an explicit "יחידה" product is
-// counted as individual pieces. The catalog's original unit value remains
-// available elsewhere and is not rewritten by this normalization.
 const normalizeInventoryProduct = (product: Product): Product => ({
   ...product,
   unit: product.stock_unit === "יחידה" || product.unit === "יחידה" ? "יחידה" : "ארגז",
@@ -95,5 +123,11 @@ export const inventoryService = {
   createMovement: async (input: { product_id: number; movement_type: InventoryMovementType; quantity: number; note?: string; occurred_at?: string }) =>
     (await apiClient.post<{ success: boolean; movement: InventoryMovement }>("/api/inventory/movements", input)).data,
   getRecommendations: async (options?: { lookback_days?: number; safety_days?: number; limit?: number }) =>
-    (await apiClient.get<{ success: boolean; recommendations: InventoryRecommendation[] }>("/api/price-intelligence/inventory/recommendations", { params: options })).data.recommendations,
+    (await apiClient.get<{ success: boolean; recommendations: InventoryRecommendation[] }>("/api/inventory/planning/recommendations", { params: options })).data.recommendations,
+  getPlanningPeriods: async () =>
+    (await apiClient.get<{ success: boolean; periods: InventoryPlanningPeriod[] }>("/api/inventory/planning/periods")).data.periods,
+  seedHolidayPeriods: async () =>
+    (await apiClient.post<{ success: boolean; created_count: number; periods: InventoryPlanningPeriod[] }>("/api/inventory/planning/seed-holidays")).data,
+  getCountStatus: async () =>
+    (await apiClient.get<{ success: boolean } & InventoryCountStatus>("/api/inventory/planning/count-status")).data,
 };

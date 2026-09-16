@@ -12,6 +12,7 @@ from app.models.audit import AuditLog
 from app.models.notification import Notification
 from app.models.google_calendar import GoogleCalendarConnection
 from app.models.inventory_movement import InventoryMovement
+from app.models.inventory_planning_period import InventoryPlanningPeriod
 
 __all__ = [
     "Tenant",
@@ -28,4 +29,5 @@ __all__ = [
     "Notification",
     "GoogleCalendarConnection",
     "InventoryMovement",
+    "InventoryPlanningPeriod",
 ]
