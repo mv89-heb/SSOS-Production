@@ -2,6 +2,7 @@ import math
 
 from werkzeug.exceptions import Conflict, BadRequest, NotFound
 
+from app.extensions import db
 from app.repositories.supplier_repository import SupplierRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.supplier_offer_repository import SupplierOfferRepository
@@ -137,7 +138,10 @@ class CatalogService:
         product = self.product_repo.model(tenant_id=self.tenant_id, supplier_id=supplier_id, **fields)
         self._apply_category(product, data.get("category") if "category" in data else None)
         self.product_repo.add(product)
-        AuditService.log_event(self.tenant_id, self.user_id, "catalog.product_created", f"Created product {product.name}", {"product_id": product.id, "category": product.category, "category_source": product.category_source})
+        db.session.flush()
+        if not product.barcode:
+            product.barcode = f"SSOS-{self.tenant_id:04d}-{product.id:08d}"
+        AuditService.log_event(self.tenant_id, self.user_id, "catalog.product_created", f"Created product {product.name}", {"product_id": product.id, "category": product.category, "category_source": product.category_source, "barcode": product.barcode})
         return product
 
     def update_product(self, product_id: int, data: dict):
@@ -208,4 +212,4 @@ class CatalogService:
     def delete_offer(self, product_id: int, offer_id: int):
         self.product_repo.get_by_id_or_404(product_id); offer = self.offer_repo.get_by_id_or_404(offer_id)
         if offer.product_id != product_id: raise NotFound("SupplierProductOffer not found")
-        AuditService.log_event(self.tenant_id, self.user_id, "catalog.offer_deleted", f"Removed {offer.supplier.name} as a price source for {offer.product.name}", {"product_id": product_id, "offer_id": offer.id}); self.offer_repo.delete(offer)
+        AuditService.log_event(self.tenant_id, self.user_id, "catalog.offer_deleted", f"Removed {offer.supplier.name} as a price source for {product_id}", {"product_id": product_id, "offer_id": offer.id}); self.offer_repo.delete(offer)
