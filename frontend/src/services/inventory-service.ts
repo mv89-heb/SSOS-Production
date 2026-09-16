@@ -60,6 +60,8 @@ export interface InventoryRecommendation {
 
 export const inventoryService = {
   getSummary: async () => (await apiClient.get<InventorySummary>("/api/inventory/summary")).data,
+  lookupProduct: async (value: string) =>
+    (await apiClient.get<{ success: boolean; product: Product }>("/api/inventory/products/lookup", { params: { value } })).data.product,
   getMovements: async (params?: { product_id?: number; movement_type?: InventoryMovementType; limit?: number }) =>
     (await apiClient.get<{ success: boolean; movements: InventoryMovement[] }>("/api/inventory/movements", { params })).data.movements,
   getProductMovements: async (productId: number, limit = 100) =>
