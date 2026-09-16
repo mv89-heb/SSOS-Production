@@ -66,6 +66,84 @@ services:
         sync: false
       - key: GOOGLE_CALENDAR_TIMEZONE
         value: Asia/Jerusalem
+      - key: WEB_PUSH_VAPID_PUBLIC_KEY
+        sync: false
+      - key: WEB_PUSH_VAPID_PRIVATE_KEY
+        sync: false
+      - key: WEB_PUSH_VAPID_CLAIMS_EMAIL
+        value: mailto:admin@example.com
+
+  # -------------------------------------------------------------------
+  # Production reminder scheduler.
+  # Render evaluates cron schedules in UTC. The worker itself waits for a
+  # reminder that falls inside the execution window, so a five-minute tick
+  # can deliver at the exact database-scheduled time without early firing.
+  # -------------------------------------------------------------------
+  - type: cron
+    name: ssos-reminder-worker
+    env: python
+    plan: starter
+    region: oregon
+    schedule: "2-57/5 * * * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python scripts/reminder_worker.py"
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: FLASK_APP
+        value: wsgi.py
+      - key: PYTHONPATH
+        value: .
+      - key: SECRET_KEY
+        fromService:
+          name: ssos-backend
+          type: web
+          envVarKey: SECRET_KEY
+      - key: DATABASE_URL
+        fromService:
+          name: ssos-backend
+          type: web
+          envVarKey: DATABASE_URL
+      - key: RATELIMIT_STORAGE_URI
+        fromService:
+          name: ssos-ratelimit-redis
+          type: keyvalue
+          property: connectionString
+      - key: CORS_ORIGINS
+        fromService:
+          name: ssos-frontend
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: FRONTEND_PUBLIC_URL
+        fromService:
+          name: ssos-frontend
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: WEB_PUSH_VAPID_PUBLIC_KEY
+        fromService:
+          name: ssos-backend
+          type: web
+          envVarKey: WEB_PUSH_VAPID_PUBLIC_KEY
+      - key: WEB_PUSH_VAPID_PRIVATE_KEY
+        fromService:
+          name: ssos-backend
+          type: web
+          envVarKey: WEB_PUSH_VAPID_PRIVATE_KEY
+      - key: WEB_PUSH_VAPID_CLAIMS_EMAIL
+        fromService:
+          name: ssos-backend
+          type: web
+          envVarKey: WEB_PUSH_VAPID_CLAIMS_EMAIL
+      - key: REMINDER_EXECUTION_WINDOW_MINUTES
+        value: "5"
+      - key: SESSION_COOKIE_SECURE
+        value: "True"
+      - key: MAX_UPLOAD_SIZE
+        value: "5242880"
+      - key: WTF_CSRF_ENABLED
+        value: "True"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
 
   # -------------------------------------------------------------------
   # Shared Key Value — distributed rate limiting / shared application state.
