@@ -24,7 +24,8 @@ def _handle(exc: HTTPException):
 
 
 def _internal_barcode(product: Product) -> str:
-    return f"SSOS-{product.tenant_id:04d}-{product.id:08d}"
+    """Stable numeric Code 128 value, unique within the tenant."""
+    return f"990{product.tenant_id:05d}{product.id:08d}"
 
 
 def _generate_missing_barcodes(products):
@@ -154,8 +155,7 @@ def barcode_labels():
         from reportlab.pdfgen import canvas
         from reportlab.graphics.barcode import code128
     except ImportError:
-        db.session.rollback()
-        return _handle(HTTPException(description="PDF label support is not installed"))
+        return _handle(BadRequest("PDF label support is not installed"))
 
     font_name = "Helvetica"
     for font_path in ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf"):
@@ -192,13 +192,11 @@ def barcode_labels():
             product_name = product_name[:39] + "..."
         pdf.drawRightString(x + label_width - 5 * mm, y + label_height - 8 * mm, product_name)
 
-        barcode_value = product.barcode
-        barcode = code128.Code128(barcode_value, barHeight=18 * mm, humanReadable=True)
-        scale = min((label_width - 10 * mm) / barcode.width, 1.0)
-        barcode.drawOn(pdf, x + (label_width - barcode.width * scale) / 2, y + 12 * mm)
+        barcode = code128.Code128(product.barcode, barHeight=18 * mm, humanReadable=True)
+        barcode.drawOn(pdf, x + (label_width - barcode.width) / 2, y + 12 * mm)
 
         pdf.setFont(font_name, 7)
-        pdf.drawCentredString(x + label_width / 2, y + 5 * mm, barcode_value)
+        pdf.drawCentredString(x + label_width / 2, y + 5 * mm, product.barcode)
 
     pdf.save()
     buffer.seek(0)
