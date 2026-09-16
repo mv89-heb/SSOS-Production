@@ -11,6 +11,7 @@ import {
   History,
   Package,
   RefreshCw,
+  ScanLine,
   Search,
   SlidersHorizontal,
   Truck,
@@ -18,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { inventoryService, type InventoryMovement, type InventoryMovementType } from "@/services/inventory-service";
+import InventoryScannerModal from "@/components/inventory/inventory-scanner-modal";
 import type { Product } from "@/types";
 
 const number = (value: number | null | undefined) => new Intl.NumberFormat("he-IL", { maximumFractionDigits: 1 }).format(Number(value ?? 0));
@@ -48,6 +50,7 @@ export default function InventoryPage() {
   const [note, setNote] = useState("");
   const [showMovement, setShowMovement] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
 
@@ -74,6 +77,11 @@ export default function InventoryPage() {
     setMessage(null);
     setShowHistory(false);
     setShowMovement(true);
+  };
+
+  const handleScannedProduct = (product: Product) => {
+    setShowScanner(false);
+    openMovement(product, "count");
   };
 
   const submitMovement = async () => {
@@ -110,7 +118,10 @@ export default function InventoryPage() {
         <div className="bg-gradient-to-l from-indigo-700 via-indigo-600 to-blue-600 px-5 py-6 text-white sm:px-7 sm:py-8">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div><div className="mb-2 flex items-center gap-2 text-sm font-bold text-indigo-100"><Warehouse size={18} /> מחסן ומלאי</div><h1 className="text-3xl font-black tracking-tight sm:text-4xl">ניהול מלאי</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-indigo-100">תמונה אחת של המלאי, ספירה מהירה מהטלפון, תנועות מחסן והמלצות רכש המבוססות על ההיסטוריה בפועל.</p></div>
-            <button onClick={() => qc.invalidateQueries({ queryKey: ["inventory"] })} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 text-sm font-black backdrop-blur hover:bg-white/20"><RefreshCw size={18} /> רענן נתונים</button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button onClick={() => setShowScanner(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-black text-indigo-700 shadow-lg hover:bg-indigo-50"><ScanLine size={19} /> סרוק ברקוד</button>
+              <button onClick={() => qc.invalidateQueries({ queryKey: ["inventory"] })} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 text-sm font-black backdrop-blur hover:bg-white/20"><RefreshCw size={18} /> רענן נתונים</button>
+            </div>
           </div>
         </div>
       </header>
@@ -135,6 +146,8 @@ export default function InventoryPage() {
       {showMovement && selected && <div className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"><div className="w-full max-w-lg rounded-t-3xl bg-white p-5 shadow-2xl dark:bg-slate-950 sm:rounded-3xl"><div className="flex items-start justify-between gap-4"><div><div className="text-xs font-bold text-indigo-600">פעולת מחסן</div><h2 className="mt-1 text-2xl font-black">{selected.name}</h2><p className="mt-1 text-xs text-slate-500">מלאי נוכחי: {number(selected.current_stock)} {selected.unit || "יח׳"}</p></div><button onClick={() => setShowMovement(false)} className="rounded-xl bg-slate-100 p-2 dark:bg-slate-900"><X size={19}/></button></div><div className="mt-5 grid grid-cols-4 gap-2">{(Object.keys(movementLabels) as InventoryMovementType[]).map((type) => <button key={type} onClick={() => { setMovementType(type); setQuantity(type === "count" || type === "adjustment" ? String(selected.current_stock ?? 0) : ""); }} className={`rounded-xl py-3 text-xs font-black ${movementType === type ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-300"}`}>{movementLabels[type]}</button>)}</div><div className="mt-5"><label className="text-sm font-bold">{movementType === "count" ? "כמות בפועל" : movementType === "receipt" ? "כמות שהתקבלה" : movementType === "issue" ? "כמות שנופקה" : "כמות לאחר ההתאמה"}</label><input autoFocus inputMode="numeric" type="number" min="0" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-3xl font-black outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900" /><input value={note} onChange={(event) => setNote(event.target.value)} placeholder="הערה (אופציונלי)" className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900" /></div>{message && <div className={`mt-3 rounded-xl p-3 text-sm font-bold ${message.error ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"}`}>{message.text}</div>}<button onClick={submitMovement} disabled={busy || quantity === ""} className="mt-5 min-h-14 w-full rounded-2xl bg-indigo-600 text-base font-black text-white shadow-lg shadow-indigo-200 disabled:opacity-50 dark:shadow-none">{busy ? "שומר…" : `שמור ${movementLabels[movementType]}`}</button></div></div>}
 
       {showHistory && selected && <div className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"><div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-slate-950 sm:rounded-3xl"><div className="flex items-start justify-between border-b border-slate-200 p-5 dark:border-slate-800"><div><div className="text-xs font-bold text-indigo-600">היסטוריית מחסן</div><h2 className="mt-1 text-2xl font-black">{selected.name}</h2></div><button onClick={() => setShowHistory(false)} className="rounded-xl bg-slate-100 p-2 dark:bg-slate-900"><X size={19}/></button></div><div className="max-h-[65vh] overflow-y-auto p-4">{history.isLoading && <div className="p-8 text-center text-sm text-slate-500">טוען היסטוריה…</div>}{!history.isLoading && !(history.data?.movements ?? []).length && <div className="p-8 text-center text-sm text-slate-500">אין היסטוריה למוצר הזה.</div>}{(history.data?.movements ?? []).map((movement) => <MovementRow key={movement.id} movement={movement} products={products} detailed />)}</div><div className="border-t border-slate-200 p-4 dark:border-slate-800"><button onClick={() => { setShowHistory(false); openMovement(selected, "count"); }} className="min-h-12 w-full rounded-xl bg-indigo-600 font-black text-white">בצע ספירה חדשה</button></div></div></div>}
+
+      <InventoryScannerModal open={showScanner} onClose={() => setShowScanner(false)} onProductFound={handleScannedProduct} />
     </div>
   );
 }
