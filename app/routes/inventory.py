@@ -30,12 +30,33 @@ def _internal_barcode(product: Product) -> str:
 
 def _generate_missing_barcodes(products):
     generated = []
+    candidates = []
     for product in products:
         if product.barcode and product.barcode.strip():
             continue
-        product.barcode = _internal_barcode(product)
-        generated.append(product)
-    if generated:
+        barcode = _internal_barcode(product)
+        candidates.append((product, barcode))
+
+    if candidates:
+        candidate_values = [barcode for _, barcode in candidates]
+        existing = set(
+            db.session.scalars(
+                select(Product.barcode).where(
+                    Product.tenant_id == current_user.tenant_id,
+                    Product.barcode.in_(candidate_values),
+                )
+            ).all()
+        )
+        conflicts = [product.id for product, barcode in candidates if barcode in existing]
+        if conflicts:
+            raise BadRequest(
+                "לא ניתן ליצור ברקודים פנימיים עבור המוצרים הבאים בגלל התנגשות עם ברקוד קיים: "
+                + ", ".join(str(product_id) for product_id in conflicts)
+            )
+
+        for product, barcode in candidates:
+            product.barcode = barcode
+            generated.append(product)
         db.session.flush()
     return generated
 
@@ -45,6 +66,40 @@ def _pdf_display_text(value: str) -> str:
     from bidi.algorithm import get_display
 
     return get_display(str(value or ""), base_dir="R")
+
+
+def _parse_label_items(payload):
+    """Parse product_ids (legacy) or items [{product_id, quantity}] into unique label items."""
+    raw_items = payload.get("items")
+    if raw_items is None:
+        raw_ids = payload.get("product_ids")
+        if not isinstance(raw_ids, list) or not raw_ids:
+            raise BadRequest("product_ids must be a non-empty list")
+        if any(not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in raw_ids):
+            raise BadRequest("product_ids must contain positive integers")
+        raw_items = [{"product_id": product_id, "quantity": 1} for product_id in raw_ids]
+
+    if not isinstance(raw_items, list) or not raw_items:
+        raise BadRequest("items must be a non-empty list")
+    if len(raw_items) > 5000:
+        raise BadRequest("Too many products requested")
+
+    quantities = {}
+    for item in raw_items:
+        if not isinstance(item, dict):
+            raise BadRequest("Each label item must be an object")
+        product_id = item.get("product_id")
+        quantity = item.get("quantity", 1)
+        if not isinstance(product_id, int) or isinstance(product_id, bool) or product_id <= 0:
+            raise BadRequest("product_id must be a positive integer")
+        if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity < 1 or quantity > 5000:
+            raise BadRequest("quantity must be an integer between 1 and 5000")
+        quantities[product_id] = quantities.get(product_id, 0) + quantity
+
+    total_labels = sum(quantities.values())
+    if total_labels > 5000:
+        raise BadRequest("לא ניתן להפיק יותר מ-5000 מדבקות בפעולת הדפסה אחת")
+    return [{"product_id": product_id, "quantity": quantity} for product_id, quantity in quantities.items()]
 
 
 @inventory_bp.route("/summary", methods=["GET"])
@@ -112,9 +167,13 @@ def generate_barcodes():
         statement = statement.where(Product.id.in_(raw_ids))
 
     products = db.session.scalars(statement.order_by(Product.id.asc())).all()
-    generated = _generate_missing_barcodes(products)
+    try:
+        generated = _generate_missing_barcodes(products)
+        db.session.commit()
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
     skipped_count = len(products) - len(generated)
-    db.session.commit()
     return jsonify({
         "success": True,
         "generated_count": len(generated),
@@ -135,24 +194,24 @@ def barcode_labels():
         return _handle(exc)
 
     payload = request.get_json(silent=True) or {}
-    raw_ids = payload.get("product_ids")
-    if not isinstance(raw_ids, list) or not raw_ids:
-        return _handle(BadRequest("product_ids must be a non-empty list"))
-    if len(raw_ids) > 5000 or any(
-        not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in raw_ids
-    ):
-        return _handle(BadRequest("product_ids must contain up to 5000 positive integers"))
+    try:
+        items = _parse_label_items(payload)
+    except HTTPException as exc:
+        return _handle(exc)
 
+    product_ids = [item["product_id"] for item in items]
     products = db.session.scalars(
         select(Product)
-        .where(Product.tenant_id == current_user.tenant_id, Product.id.in_(raw_ids), Product.active.is_(True))
+        .where(Product.tenant_id == current_user.tenant_id, Product.id.in_(product_ids), Product.active.is_(True))
         .order_by(Product.name.asc(), Product.id.asc())
     ).all()
     if not products:
         return _handle(BadRequest("No active products found"))
 
-    _generate_missing_barcodes(products)
-    db.session.commit()
+    product_by_id = {product.id: product for product in products}
+    missing_ids = [product_id for product_id in product_ids if product_id not in product_by_id]
+    if missing_ids:
+        return _handle(BadRequest("Some requested products are unavailable or inactive"))
 
     try:
         from reportlab.lib.pagesizes import A4
@@ -163,6 +222,16 @@ def barcode_labels():
         from reportlab.graphics.barcode import code128
     except ImportError:
         return _handle(BadRequest("PDF label support is not installed"))
+
+    try:
+        _generate_missing_barcodes(products)
+        db.session.commit()
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+
+    quantity_by_id = {item["product_id"]: item["quantity"] for item in items}
+    labels = [product for product in products for _ in range(quantity_by_id[product.id])]
 
     font_name = "Helvetica"
     for font_path in ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf"):
@@ -182,7 +251,7 @@ def barcode_labels():
     label_width = (page_width - 2 * margin_x - gap_x) / columns
     label_height = (page_height - 2 * margin_y - gap_y * (rows - 1)) / rows
 
-    for index, product in enumerate(products):
+    for index, product in enumerate(labels):
         position = index % (columns * rows)
         if position == 0 and index:
             pdf.showPage()
@@ -197,11 +266,7 @@ def barcode_labels():
         product_name = product.name or "מוצר"
         if len(product_name) > 42:
             product_name = product_name[:39] + "..."
-        pdf.drawRightString(
-            x + label_width - 5 * mm,
-            y + label_height - 8 * mm,
-            _pdf_display_text(product_name),
-        )
+        pdf.drawRightString(x + label_width - 5 * mm, y + label_height - 8 * mm, _pdf_display_text(product_name))
 
         barcode = code128.Code128(product.barcode, barHeight=18 * mm, humanReadable=True)
         barcode.drawOn(pdf, x + (label_width - barcode.width) / 2, y + 12 * mm)
