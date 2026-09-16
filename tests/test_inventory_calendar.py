@@ -1,14 +1,14 @@
 from datetime import date, datetime, timedelta, timezone
 
-from app.models.inventory_movement import InventoryMovement, MOVEMENT_COUNT, MOVEMENT_RECEIPT
+from app.models.inventory_movement import InventoryMovement, MOVEMENT_COUNT
 from app.models.inventory_planning_period import InventoryPlanningPeriod
 from app.models.product import Product
 from app.models.supplier import Supplier
 from app.services.inventory_calendar_service import InventoryCalendarService
 
 
-def _product(db, tenant_id, supplier_id):
-    product = Product(tenant_id=tenant_id, supplier_id=supplier_id, name="Holiday Product", current_price=10, currency="ILS", active=True)
+def _product(db, tenant_id, supplier_id, name="Holiday Product"):
+    product = Product(tenant_id=tenant_id, supplier_id=supplier_id, name=name, current_price=10, currency="ILS", active=True)
     db.session.add(product)
     db.session.flush()
     return product
@@ -27,16 +27,14 @@ def test_holiday_multiplier_changes_forecast(db, tenant_a_admin):
     ])
     product.current_stock = 36
     start = date.today() + timedelta(days=1)
-    period = InventoryPlanningPeriod(
+    db.session.add(InventoryPlanningPeriod(
         tenant_id=tenant_id,
         name="Test Holiday",
         start_date=start,
         end_date=start + timedelta(days=3),
         consumption_multiplier=2,
         active=True,
-        created_by=tenant_a_admin[1].id,
-    )
-    db.session.add(period)
+    ))
     db.session.commit()
 
     result = InventoryCalendarService(tenant_id).recommendation(product.id, lookback_days=60, safety_days=2)
@@ -52,12 +50,13 @@ def test_count_status_tracks_distinct_products(db, tenant_a_admin):
     db.session.add(supplier)
     db.session.flush()
     first = _product(db, tenant_id, supplier.id)
-    second = Product(tenant_id=tenant_id, supplier_id=supplier.id, name="Second Product", current_price=10, currency="ILS", active=True)
-    db.session.add(second)
-    db.session.flush()
+    _product(db, tenant_id, supplier.id, "Second Product")
+    second = db.session.query(Product).filter_by(tenant_id=tenant_id, name="Second Product").one()
     now = datetime.now(timezone.utc)
-    db.session.add(InventoryMovement(tenant_id=tenant_id, product_id=first.id, movement_type=MOVEMENT_COUNT, quantity=10, balance_after=10, occurred_at=now))
-    db.session.add(InventoryMovement(tenant_id=tenant_id, product_id=second.id, movement_type=MOVEMENT_COUNT, quantity=8, balance_after=8, occurred_at=now))
+    db.session.add_all([
+        InventoryMovement(tenant_id=tenant_id, product_id=first.id, movement_type=MOVEMENT_COUNT, quantity=10, balance_after=10, occurred_at=now),
+        InventoryMovement(tenant_id=tenant_id, product_id=second.id, movement_type=MOVEMENT_COUNT, quantity=8, balance_after=8, occurred_at=now),
+    ])
     db.session.commit()
 
     status = InventoryCalendarService(tenant_id).count_status()
