@@ -56,6 +56,11 @@ class Product(db.Model):
     )
 
     def to_dict(self):
+        # Inventory is counted in stock units. By default the organization's
+        # stock unit is a carton; products that explicitly use "יחידה" remain
+        # unit-based. This prevents legacy NULL units from being shown as kg,
+        # liters, or generic units and keeps all stock actions consistent.
+        stock_unit = "יחידה" if str(self.unit or "").strip() == "יחידה" else "ארגז"
         return {
             "id": self.id,
             "supplier_id": self.supplier_id,
@@ -72,7 +77,7 @@ class Product(db.Model):
             "category_source": self.category_source,
             "category_confidence": float(self.category_confidence) if self.category_confidence is not None else None,
             "category_reviewed": self.category_reviewed,
-            "unit": self.unit,
+            "unit": stock_unit,
             "units_per_carton": self.units_per_carton,
             "supplier_sku": self.supplier_sku,
             "current_stock": self.current_stock,
