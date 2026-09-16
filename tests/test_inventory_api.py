@@ -115,15 +115,26 @@ def test_inventory_lookup_requires_value(logged_in_client_a):
     assert response.status_code == 400
 
 
-def test_generate_internal_barcodes_for_missing_products(logged_in_client_a):
-    product_id = _create_product(logged_in_client_a, sku="NO-BARCODE")
+def test_new_products_receive_internal_barcode_automatically(logged_in_client_a):
+    product_id = _create_product(logged_in_client_a, sku="AUTO-BARCODE")
+    product = logged_in_client_a.get(f"/api/catalog/products/{product_id}")
+    assert product.status_code == 200, product.get_json()
+    barcode = product.get_json()["product"]["barcode"]
+    assert barcode.startswith("SSOS-")
+    assert barcode.endswith(f"-{product_id:08d}")
+
+
+def test_generate_internal_barcodes_for_existing_missing_product(logged_in_client_a):
+    product_id = _create_product(logged_in_client_a, sku="MISSING-BARCODE")
+    clear = logged_in_client_a.put(f"/api/catalog/products/{product_id}", json={"barcode": ""})
+    assert clear.status_code == 200, clear.get_json()
 
     response = logged_in_client_a.post("/api/inventory/barcodes/generate", json={})
     assert response.status_code == 200, response.get_json()
     body = response.get_json()
     assert body["generated_count"] == 1
     generated = next(product for product in body["products"] if product["id"] == product_id)
-    assert generated["barcode"] == f"SSOS-{logged_in_client_a.get('/api/inventory/summary').get_json()['products'][0]['supplier_id']:04d}-{product_id:08d}" or generated["barcode"].endswith(f"-{product_id:08d}")
+    assert generated["barcode"].endswith(f"-{product_id:08d}")
 
     repeat = logged_in_client_a.post("/api/inventory/barcodes/generate", json={})
     assert repeat.status_code == 200, repeat.get_json()
