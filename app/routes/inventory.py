@@ -40,6 +40,13 @@ def _generate_missing_barcodes(products):
     return generated
 
 
+def _pdf_display_text(value: str) -> str:
+    """Convert logical Hebrew/RTL text into the visual order expected by ReportLab."""
+    from bidi.algorithm import get_display
+
+    return get_display(str(value or ""), base_dir="R")
+
+
 @inventory_bp.route("/summary", methods=["GET"])
 @login_required
 def summary():
@@ -190,7 +197,11 @@ def barcode_labels():
         product_name = product.name or "מוצר"
         if len(product_name) > 42:
             product_name = product_name[:39] + "..."
-        pdf.drawRightString(x + label_width - 5 * mm, y + label_height - 8 * mm, product_name)
+        pdf.drawRightString(
+            x + label_width - 5 * mm,
+            y + label_height - 8 * mm,
+            _pdf_display_text(product_name),
+        )
 
         barcode = code128.Code128(product.barcode, barHeight=18 * mm, humanReadable=True)
         barcode.drawOn(pdf, x + (label_width - barcode.width) / 2, y + 12 * mm)
