@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
+from io import BytesIO
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 from flask_login import current_user, login_required
 from sqlalchemy import or_, select
 from werkzeug.exceptions import BadRequest, HTTPException
@@ -24,6 +25,18 @@ def _handle(exc: HTTPException):
 
 def _internal_barcode(product: Product) -> str:
     return f"SSOS-{product.tenant_id:04d}-{product.id:08d}"
+
+
+def _generate_missing_barcodes(products):
+    generated = []
+    for product in products:
+        if product.barcode and product.barcode.strip():
+            continue
+        product.barcode = _internal_barcode(product)
+        generated.append(product)
+    if generated:
+        db.session.flush()
+    return generated
 
 
 @inventory_bp.route("/summary", methods=["GET"])
@@ -91,26 +104,105 @@ def generate_barcodes():
         statement = statement.where(Product.id.in_(raw_ids))
 
     products = db.session.scalars(statement.order_by(Product.id.asc())).all()
-    generated = []
-    skipped = []
-    for product in products:
-        if product.barcode and product.barcode.strip():
-            skipped.append(product.id)
-            continue
-        product.barcode = _internal_barcode(product)
-        generated.append(product)
-
-    if generated:
-        db.session.flush()
-
+    generated = _generate_missing_barcodes(products)
+    skipped_count = len(products) - len(generated)
+    db.session.commit()
     return jsonify({
         "success": True,
         "generated_count": len(generated),
-        "skipped_count": len(skipped),
+        "skipped_count": skipped_count,
         "products": [product.to_dict() for product in generated],
-        "skipped_product_ids": skipped,
+        "skipped_product_ids": [product.id for product in products if product not in generated],
         "format": "Code 128",
     })
+
+
+@inventory_bp.route("/barcodes/labels", methods=["POST"])
+@login_required
+def barcode_labels():
+    """Generate an A4 PDF containing printable Code 128 labels."""
+    try:
+        PermissionService.require_role_at_least("manager")
+    except HTTPException as exc:
+        return _handle(exc)
+
+    payload = request.get_json(silent=True) or {}
+    raw_ids = payload.get("product_ids")
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return _handle(BadRequest("product_ids must be a non-empty list"))
+    if len(raw_ids) > 5000 or any(
+        not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in raw_ids
+    ):
+        return _handle(BadRequest("product_ids must contain up to 5000 positive integers"))
+
+    products = db.session.scalars(
+        select(Product)
+        .where(Product.tenant_id == current_user.tenant_id, Product.id.in_(raw_ids), Product.active.is_(True))
+        .order_by(Product.name.asc(), Product.id.asc())
+    ).all()
+    if not products:
+        return _handle(BadRequest("No active products found"))
+
+    _generate_missing_barcodes(products)
+    db.session.commit()
+
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.pdfgen import canvas
+        from reportlab.graphics.barcode import code128
+    except ImportError:
+        db.session.rollback()
+        return _handle(HTTPException(description="PDF label support is not installed"))
+
+    font_name = "Helvetica"
+    for font_path in ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf"):
+        try:
+            pdfmetrics.registerFont(TTFont("InventoryLabelFont", font_path))
+            font_name = "InventoryLabelFont"
+            break
+        except Exception:
+            continue
+
+    buffer = BytesIO()
+    page_width, page_height = A4
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    columns, rows = 2, 5
+    margin_x, margin_y = 8 * mm, 8 * mm
+    gap_x, gap_y = 4 * mm, 4 * mm
+    label_width = (page_width - 2 * margin_x - gap_x) / columns
+    label_height = (page_height - 2 * margin_y - gap_y * (rows - 1)) / rows
+
+    for index, product in enumerate(products):
+        position = index % (columns * rows)
+        if position == 0 and index:
+            pdf.showPage()
+        col = position % columns
+        row = position // columns
+        x = margin_x + col * (label_width + gap_x)
+        y = page_height - margin_y - (row + 1) * label_height - row * gap_y
+
+        pdf.setLineWidth(0.5)
+        pdf.roundRect(x, y, label_width, label_height, 3 * mm, stroke=1, fill=0)
+        pdf.setFont(font_name, 9)
+        product_name = product.name or "מוצר"
+        if len(product_name) > 42:
+            product_name = product_name[:39] + "..."
+        pdf.drawRightString(x + label_width - 5 * mm, y + label_height - 8 * mm, product_name)
+
+        barcode_value = product.barcode
+        barcode = code128.Code128(barcode_value, barHeight=18 * mm, humanReadable=True)
+        scale = min((label_width - 10 * mm) / barcode.width, 1.0)
+        barcode.drawOn(pdf, x + (label_width - barcode.width * scale) / 2, y + 12 * mm)
+
+        pdf.setFont(font_name, 7)
+        pdf.drawCentredString(x + label_width / 2, y + 5 * mm, barcode_value)
+
+    pdf.save()
+    buffer.seek(0)
+    return send_file(buffer, mimetype="application/pdf", as_attachment=False, download_name="inventory-barcode-labels.pdf")
 
 
 @inventory_bp.route("/products/lookup", methods=["GET"])
