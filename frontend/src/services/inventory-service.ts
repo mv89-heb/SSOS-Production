@@ -58,10 +58,23 @@ export interface InventoryRecommendation {
   };
 }
 
+// Inventory uses cartons by default. Only an explicit "יחידה" product is
+// counted as individual pieces. The catalog's original unit value remains
+// available elsewhere and is not rewritten by this normalization.
+const normalizeInventoryProduct = (product: Product): Product => ({
+  ...product,
+  unit: product.stock_unit === "יחידה" || product.unit === "יחידה" ? "יחידה" : "ארגז",
+});
+
 export const inventoryService = {
-  getSummary: async () => (await apiClient.get<InventorySummary>("/api/inventory/summary")).data,
-  lookupProduct: async (value: string) =>
-    (await apiClient.get<{ success: boolean; product: Product }>("/api/inventory/products/lookup", { params: { value } })).data.product,
+  getSummary: async () => {
+    const data = (await apiClient.get<InventorySummary>("/api/inventory/summary")).data;
+    return { ...data, products: data.products.map(normalizeInventoryProduct) };
+  },
+  lookupProduct: async (value: string) => {
+    const product = (await apiClient.get<{ success: boolean; product: Product }>("/api/inventory/products/lookup", { params: { value } })).data.product;
+    return normalizeInventoryProduct(product);
+  },
   generateBarcodes: async (productIds?: number[]) =>
     (await apiClient.post<{ success: boolean; generated_count: number; skipped_count: number; products: Product[]; skipped_product_ids: number[]; format: string }>("/api/inventory/barcodes/generate", productIds ? { product_ids: productIds } : {})).data,
   printBarcodeLabels: async (productIds: number[]) => {
@@ -70,8 +83,10 @@ export const inventoryService = {
   },
   getMovements: async (params?: { product_id?: number; movement_type?: InventoryMovementType; limit?: number }) =>
     (await apiClient.get<{ success: boolean; movements: InventoryMovement[] }>("/api/inventory/movements", { params })).data.movements,
-  getProductMovements: async (productId: number, limit = 100) =>
-    (await apiClient.get<{ success: boolean; product: Product; movements: InventoryMovement[] }>(`/api/inventory/products/${productId}/movements`, { params: { limit } })).data,
+  getProductMovements: async (productId: number, limit = 100) => {
+    const data = (await apiClient.get<{ success: boolean; product: Product; movements: InventoryMovement[] }>(`/api/inventory/products/${productId}/movements`, { params: { limit } })).data;
+    return { ...data, product: normalizeInventoryProduct(data.product) };
+  },
   createMovement: async (input: { product_id: number; movement_type: InventoryMovementType; quantity: number; note?: string; occurred_at?: string }) =>
     (await apiClient.post<{ success: boolean; movement: InventoryMovement }>("/api/inventory/movements", input)).data,
   getRecommendations: async (options?: { lookback_days?: number; safety_days?: number; limit?: number }) =>
