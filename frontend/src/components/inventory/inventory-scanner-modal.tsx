@@ -9,7 +9,6 @@ import type { Product } from "@/types";
 interface InventoryScannerModalProps {
   open: boolean;
   onClose: () => void;
-  onProductFound?: (product: Product) => void;
 }
 
 const movementMeta: Record<"count" | "receipt" | "issue", { label: string; description: string }> = {
@@ -54,7 +53,9 @@ export default function InventoryScannerModal({ open, onClose }: InventoryScanne
     if (!open) return;
     const available = typeof window !== "undefined" && "BarcodeDetector" in window;
     setSupported(available);
-    if (available) detectorRef.current = new BarcodeDetector({ formats: ["ean_13", "ean_8", "code_128", "code_39", "itf", "upc_a", "upc_e"] });
+    if (available) {
+      detectorRef.current = new BarcodeDetector({ formats: ["ean_13", "ean_8", "code_128", "code_39", "itf", "upc_a", "upc_e"] });
+    }
     return () => stopCamera();
   }, [open]);
 
@@ -135,7 +136,9 @@ export default function InventoryScannerModal({ open, onClose }: InventoryScanne
     setError("");
     setSuccess("");
     try {
-      await inventoryService.createMovement({ product_id: product.id, movement_type: movementType as InventoryMovementType, quantity: qty, note: note.trim() || undefined });
+      const result = await inventoryService.createMovement({ product_id: product.id, movement_type: movementType as InventoryMovementType, quantity: qty, note: note.trim() || undefined });
+      const balanceAfter = Number(result.movement.balance_after ?? 0);
+      setProduct((current) => current ? { ...current, current_stock: balanceAfter } : current);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["inventory", "summary"] }),
         queryClient.invalidateQueries({ queryKey: ["inventory", "recommendations"] }),
@@ -143,7 +146,7 @@ export default function InventoryScannerModal({ open, onClose }: InventoryScanne
         queryClient.invalidateQueries({ queryKey: ["procurement-intelligence"] }),
       ]);
       const label = movementMeta[movementType].label;
-      setSuccess(`${label} של ${product.name} נקלטה בהצלחה.`);
+      setSuccess(`${label} של ${product.name} נקלטה בהצלחה. מלאי נוכחי: ${balanceAfter}.`);
       setMovementType(null);
       setQuantity("");
       setNote("");
@@ -170,7 +173,6 @@ export default function InventoryScannerModal({ open, onClose }: InventoryScanne
             {!running && <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-white"><Camera size={42} className="text-slate-400" /><p className="font-bold">המצלמה כבויה</p><button onClick={startCamera} className="rounded-xl bg-indigo-600 px-5 py-3 font-black hover:bg-indigo-500">פתח מצלמה</button></div>}
             {running && <div className="pointer-events-none absolute inset-0 flex items-center justify-center"><div className="h-40 w-64 rounded-2xl border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,.25)]" /></div>}
           </div>
-
           {running && <div className="flex justify-center p-3"><button onClick={stopCamera} className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2 text-sm font-black dark:bg-slate-900"><X size={17} /> סגור מצלמה</button></div>}
 
           <div className="mt-4 flex gap-2">
@@ -189,8 +191,6 @@ export default function InventoryScannerModal({ open, onClose }: InventoryScanne
 
             {movementType && <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950"><div className="flex items-center justify-between gap-3"><div><h4 className="font-black">{movementMeta[movementType].label}</h4><p className="mt-1 text-xs text-slate-500">{movementMeta[movementType].description}</p></div><button onClick={() => setMovementType(null)} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-black dark:bg-slate-900">החלף פעולה</button></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="block"><span className="mb-1 block text-xs font-bold text-slate-500">כמות</span><input autoFocus type="number" min="0" step="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-lg font-black outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900" /></label><label className="block"><span className="mb-1 block text-xs font-bold text-slate-500">הערה (אופציונלי)</span><input value={note} onChange={(e) => setNote(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900" /></label></div><button disabled={saving} onClick={saveMovement} className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 font-black text-white disabled:opacity-50">{saving ? <RefreshCw className="animate-spin" size={18} /> : <CheckCircle2 size={18} />} שמור {movementMeta[movementType].label}</button></div>}
           </div>}
-
-          {product && <div className="mt-3 flex flex-wrap gap-2"><button onClick={() => { resetProduct(); setValue(""); }} className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-black dark:bg-slate-900">סרוק מוצר אחר</button><button onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black dark:border-slate-800">סיום</button></div>}
         </div>
       </div>
     </div>
