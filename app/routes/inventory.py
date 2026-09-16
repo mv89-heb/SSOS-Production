@@ -9,6 +9,7 @@ from app.extensions import db
 from app.models.inventory_movement import InventoryMovement, VALID_MOVEMENT_TYPES
 from app.models.product import Product
 from app.services.inventory_planning_service import InventoryPlanningService
+from app.services.permission_service import PermissionService
 
 inventory_bp = Blueprint("inventory", __name__, url_prefix="/api/inventory")
 
@@ -19,6 +20,10 @@ def _handle(exc: HTTPException):
         "error": exc.name.lower().replace(" ", "_"),
         "message": exc.description,
     }), exc.code
+
+
+def _internal_barcode(product: Product) -> str:
+    return f"SSOS-{product.tenant_id:04d}-{product.id:08d}"
 
 
 @inventory_bp.route("/summary", methods=["GET"])
@@ -56,6 +61,55 @@ def summary():
         },
         "products": [p.to_dict() for p in products],
         "recent_movements": [m.to_dict() for m in movements[:50]],
+    })
+
+
+@inventory_bp.route("/barcodes/generate", methods=["POST"])
+@login_required
+def generate_barcodes():
+    """Generate stable internal barcodes for products that do not have one."""
+    try:
+        PermissionService.require_role_at_least("manager")
+    except HTTPException as exc:
+        return _handle(exc)
+
+    payload = request.get_json(silent=True) or {}
+    raw_ids = payload.get("product_ids")
+    include_inactive = bool(payload.get("include_inactive", False))
+
+    statement = select(Product).where(Product.tenant_id == current_user.tenant_id)
+    if not include_inactive:
+        statement = statement.where(Product.active.is_(True))
+
+    if raw_ids is not None:
+        if not isinstance(raw_ids, list) or any(
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in raw_ids
+        ):
+            return _handle(BadRequest("product_ids must be a list of positive integers"))
+        if len(raw_ids) > 5000:
+            return _handle(BadRequest("Too many products requested"))
+        statement = statement.where(Product.id.in_(raw_ids))
+
+    products = db.session.scalars(statement.order_by(Product.id.asc())).all()
+    generated = []
+    skipped = []
+    for product in products:
+        if product.barcode and product.barcode.strip():
+            skipped.append(product.id)
+            continue
+        product.barcode = _internal_barcode(product)
+        generated.append(product)
+
+    if generated:
+        db.session.flush()
+
+    return jsonify({
+        "success": True,
+        "generated_count": len(generated),
+        "skipped_count": len(skipped),
+        "products": [product.to_dict() for product in generated],
+        "skipped_product_ids": skipped,
+        "format": "Code 128",
     })
 
 
