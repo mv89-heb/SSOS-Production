@@ -1,0 +1,74 @@
+def _create_product(client, name="Milk", sku="MILK-1", stock=10, minimum=3, target=12):
+    supplier = client.post("/api/catalog/suppliers", json={"name": "Warehouse Supplier"})
+    assert supplier.status_code == 201, supplier.get_json()
+    supplier_id = supplier.get_json()["supplier"]["id"]
+    response = client.post("/api/catalog/products", json={
+        "supplier_id": supplier_id,
+        "name": name,
+        "sku": sku,
+        "current_price": 10,
+        "current_stock": stock,
+        "min_stock": minimum,
+        "recommended_stock": target,
+        "unit": "UNIT",
+    })
+    assert response.status_code == 201, response.get_json()
+    return response.get_json()["product"]["id"]
+
+
+def test_inventory_summary_and_movements(logged_in_client_a):
+    product_id = _create_product(logged_in_client_a)
+
+    summary = logged_in_client_a.get("/api/inventory/summary")
+    assert summary.status_code == 200
+    body = summary.get_json()
+    assert body["success"] is True
+    assert any(product["id"] == product_id for product in body["products"])
+
+    receipt = logged_in_client_a.post("/api/inventory/movements", json={
+        "product_id": product_id,
+        "movement_type": "receipt",
+        "quantity": 5,
+        "note": "קליטה למחסן",
+    })
+    assert receipt.status_code == 201, receipt.get_json()
+    assert receipt.get_json()["movement"]["balance_after"] == 15
+
+    count = logged_in_client_a.post("/api/inventory/movements", json={
+        "product_id": product_id,
+        "movement_type": "count",
+        "quantity": 14,
+    })
+    assert count.status_code == 201, count.get_json()
+    assert count.get_json()["movement"]["balance_after"] == 14
+
+    history = logged_in_client_a.get(f"/api/inventory/products/{product_id}/movements")
+    assert history.status_code == 200
+    movements = history.get_json()["movements"]
+    assert len(movements) >= 2
+    assert movements[0]["product_id"] == product_id
+
+
+def test_inventory_issue_cannot_make_stock_negative(logged_in_client_a):
+    product_id = _create_product(logged_in_client_a, stock=2)
+    response = logged_in_client_a.post("/api/inventory/movements", json={
+        "product_id": product_id,
+        "movement_type": "issue",
+        "quantity": 3,
+    })
+    assert response.status_code == 400
+    assert "negative" in response.get_json()["message"]
+
+
+def test_inventory_is_tenant_scoped(logged_in_client_a, logged_in_client_b):
+    product_id = _create_product(logged_in_client_a, sku="TENANT-A-1")
+
+    response = logged_in_client_b.get(f"/api/inventory/products/{product_id}/movements")
+    assert response.status_code == 404
+
+    movement = logged_in_client_b.post("/api/inventory/movements", json={
+        "product_id": product_id,
+        "movement_type": "count",
+        "quantity": 99,
+    })
+    assert movement.status_code == 404
