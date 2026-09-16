@@ -62,6 +62,12 @@ export const inventoryService = {
   getSummary: async () => (await apiClient.get<InventorySummary>("/api/inventory/summary")).data,
   lookupProduct: async (value: string) =>
     (await apiClient.get<{ success: boolean; product: Product }>("/api/inventory/products/lookup", { params: { value } })).data.product,
+  generateBarcodes: async (productIds?: number[]) =>
+    (await apiClient.post<{ success: boolean; generated_count: number; skipped_count: number; products: Product[]; skipped_product_ids: number[]; format: string }>("/api/inventory/barcodes/generate", productIds ? { product_ids: productIds } : {})).data,
+  printBarcodeLabels: async (productIds: number[]) => {
+    const response = await apiClient.post<Blob>("/api/inventory/barcodes/labels", { product_ids: productIds }, { responseType: "blob" });
+    return response.data;
+  },
   getMovements: async (params?: { product_id?: number; movement_type?: InventoryMovementType; limit?: number }) =>
     (await apiClient.get<{ success: boolean; movements: InventoryMovement[] }>("/api/inventory/movements", { params })).data.movements,
   getProductMovements: async (productId: number, limit = 100) =>
