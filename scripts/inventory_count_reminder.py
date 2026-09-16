@@ -1,6 +1,5 @@
 """Create one durable reminder when a weekly physical inventory count is due."""
-from datetime import datetime, timezone
-
+from flask import current_app
 from sqlalchemy import select
 
 from app import create_app
@@ -21,10 +20,6 @@ def process_inventory_count_reminders() -> int:
         if not status["due"]:
             continue
         due_date = status["next_due_date"]
-        dedupe_key = f"inventory-count:{tenant.id}:{due_date}"
-        exists = db.session.execute(select(Notification.id).where(Notification.dedupe_key == dedupe_key).limit(1)).scalar_one_or_none()
-        if exists is not None:
-            continue
         users = db.session.scalars(
             select(User).where(
                 User.tenant_id == tenant.id,
@@ -32,12 +27,14 @@ def process_inventory_count_reminders() -> int:
                 User.role.in_((ROLE_ADMIN, ROLE_MANAGER)),
             )
         ).all()
-        if not users:
-            continue
-        title = "🔔 הגיע הזמן לספירת מלאי"
-        message = f"הגיע מועד הספירה השבועית. הושלמו {status['completion_percent']}% מהמוצרים ב-7 הימים האחרונים."
-        action_url = f"{__import__('flask').current_app.config.get('FRONTEND_PUBLIC_URL', '').rstrip('/')}/dashboard/inventory"
         for user in users:
+            dedupe_key = f"inventory-count:{tenant.id}:{user.id}:{due_date}"
+            exists = db.session.execute(select(Notification.id).where(Notification.dedupe_key == dedupe_key).limit(1)).scalar_one_or_none()
+            if exists is not None:
+                continue
+            title = "🔔 הגיע הזמן לספירת מלאי"
+            message = f"הגיע מועד הספירה השבועית. הושלמו {status['completion_percent']}% מהמוצרים ב-7 הימים האחרונים."
+            action_url = current_app.config.get("FRONTEND_PUBLIC_URL", "").rstrip("/") + "/dashboard/inventory"
             notification = Notification(
                 tenant_id=tenant.id,
                 user_id=user.id,
@@ -57,8 +54,7 @@ def process_inventory_count_reminders() -> int:
         try:
             send_to_user(user_id, payload)
         except Exception:
-            db.session.rollback()
-            continue
+            current_app.logger.exception("Inventory count push delivery failed for user %s", user_id)
     return processed
 
 
