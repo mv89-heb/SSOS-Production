@@ -27,9 +27,6 @@ def create_app(config_name=None):
         if not app.config["CORS_ORIGINS"]:
             raise RuntimeError("CORS_ORIGINS must contain at least one allowed origin in production")
 
-    # Render terminates TLS at its edge proxy. Trust exactly one proxy hop so
-    # request.is_secure and client IP based controls reflect the original
-    # request without blindly trusting arbitrary forwarded headers.
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     _ensure_directories(app)
@@ -127,6 +124,7 @@ def _register_blueprints(app):
     from app.routes.google_calendar import google_calendar_bp
     from app.routes.web_push import web_push_bp
     from app.routes.reminder_advanced import reminder_advanced_bp
+    from app.routes.inventory import inventory_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
@@ -145,6 +143,7 @@ def _register_blueprints(app):
     app.register_blueprint(google_calendar_bp)
     app.register_blueprint(web_push_bp)
     app.register_blueprint(reminder_advanced_bp)
+    app.register_blueprint(inventory_bp)
     csrf.exempt(health_bp)
     csrf.exempt(web_push_bp)
 
