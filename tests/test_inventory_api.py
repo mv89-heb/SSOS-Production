@@ -1,8 +1,8 @@
-def _create_product(client, name="Milk", sku="MILK-1", stock=10, minimum=3, target=12):
+def _create_product(client, name="Milk", sku="MILK-1", stock=10, minimum=3, target=12, barcode=None):
     supplier = client.post("/api/catalog/suppliers", json={"name": "Warehouse Supplier"})
     assert supplier.status_code == 201, supplier.get_json()
     supplier_id = supplier.get_json()["supplier"]["id"]
-    response = client.post("/api/catalog/products", json={
+    payload = {
         "supplier_id": supplier_id,
         "name": name,
         "sku": sku,
@@ -11,7 +11,10 @@ def _create_product(client, name="Milk", sku="MILK-1", stock=10, minimum=3, targ
         "min_stock": minimum,
         "recommended_stock": target,
         "unit": "UNIT",
-    })
+    }
+    if barcode is not None:
+        payload["barcode"] = barcode
+    response = client.post("/api/catalog/products", json=payload)
     assert response.status_code == 201, response.get_json()
     return response.get_json()["product"]["id"]
 
@@ -83,3 +86,30 @@ def test_inventory_is_tenant_scoped(logged_in_client_a, logged_in_client_b):
         "quantity": 99,
     })
     assert movement.status_code == 404
+
+
+def test_inventory_lookup_by_barcode_and_sku(logged_in_client_a):
+    product_id = _create_product(logged_in_client_a, sku="MILK-SKU-42", barcode="7290001234567")
+
+    barcode = logged_in_client_a.get("/api/inventory/products/lookup?value=7290001234567")
+    assert barcode.status_code == 200, barcode.get_json()
+    assert barcode.get_json()["product"]["id"] == product_id
+
+    sku = logged_in_client_a.get("/api/inventory/products/lookup?value=MILK-SKU-42")
+    assert sku.status_code == 200, sku.get_json()
+    assert sku.get_json()["product"]["id"] == product_id
+
+
+def test_inventory_lookup_is_tenant_scoped(logged_in_client_a, logged_in_client_b):
+    _create_product(logged_in_client_a, sku="TENANT-A-LOOKUP", barcode="7290099999999")
+
+    barcode = logged_in_client_b.get("/api/inventory/products/lookup?value=7290099999999")
+    assert barcode.status_code == 404
+
+    sku = logged_in_client_b.get("/api/inventory/products/lookup?value=TENANT-A-LOOKUP")
+    assert sku.status_code == 404
+
+
+def test_inventory_lookup_requires_value(logged_in_client_a):
+    response = logged_in_client_a.get("/api/inventory/products/lookup")
+    assert response.status_code == 400
