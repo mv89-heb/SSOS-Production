@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from app.models.inventory_movement import InventoryMovement, MOVEMENT_RECEIPT
 from app.models.order import Order, STATUS_SENT
+from app.models.product import Product
 from app.models.receipt import Receipt, RECEIPT_POSTED
 from app.models.receipt_item import ReceiptItem
 
@@ -29,7 +30,7 @@ def test_full_receipt_updates_stock_and_movement(logged_in_client_a, make_order,
     assert receipt["status"] == RECEIPT_POSTED
     assert receipt["items"][0]["quantity"] == 5.0
 
-    product = db.session.get(__import__("app.models.product", fromlist=["Product"]).Product, product_id)
+    product = db.session.get(Product, product_id)
     assert product.current_stock == 5
 
     movement = db.session.query(InventoryMovement).filter_by(receipt_id=receipt["id"]).one()
@@ -66,7 +67,7 @@ def test_partial_receipts_track_remaining_quantity(logged_in_client_a, make_orde
     )
     assert received_total == Decimal("10")
 
-    product = db.session.get(__import__("app.models.product", fromlist=["Product"]).Product, product_id)
+    product = db.session.get(Product, product_id)
     assert product.current_stock == 10
 
 
