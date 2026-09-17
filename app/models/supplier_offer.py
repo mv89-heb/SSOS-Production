@@ -3,17 +3,7 @@ from app.extensions import db
 
 
 class SupplierProductOffer(db.Model):
-    """
-    An alternate supplier's price for a product that already exists in the
-    catalog under its own (primary) supplier. This is purely comparison
-    data — it does NOT change how orders are created. Order creation still
-    snapshots Product.current_price/supplier_id exactly as before; nothing
-    here is read by OrderService. That keeps Snapshot Architecture and the
-    existing order-creation contract completely untouched.
-
-    One row per (product, supplier) pair — a supplier can only have one
-    active price on file for a given product at a time.
-    """
+    """A tenant-scoped supplier price that can be selected for a purchase order."""
     __tablename__ = "supplier_product_offers"
     __table_args__ = (
         db.UniqueConstraint("product_id", "supplier_id", name="uq_offer_product_supplier"),
@@ -32,12 +22,7 @@ class SupplierProductOffer(db.Model):
     active = db.Column(db.Boolean, default=True, nullable=False)
 
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = db.Column(
-        db.DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     product = db.relationship("Product", back_populates="supplier_offers")
     supplier = db.relationship("Supplier", back_populates="offered_products")
