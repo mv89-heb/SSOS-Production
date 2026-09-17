@@ -159,6 +159,9 @@ class ReceiptService:
                 )
             )
 
+        if idempotency_key:
+            self._finalize_idempotency_key(idempotency_key, receipt.id)
+
         AuditService.log_event(
             self.tenant_id,
             user.id,
@@ -194,6 +197,11 @@ class ReceiptService:
         except IntegrityError:
             return self._get_idempotency_key(key)
         return None
+
+    def _finalize_idempotency_key(self, key: str, receipt_id: int) -> None:
+        record = self._get_idempotency_key(key)
+        if record is not None:
+            record.resource_id = receipt_id
 
     def _get_idempotency_key(self, key: str) -> IdempotencyKey | None:
         return db.session.scalar(
