@@ -2,14 +2,6 @@
 
 Revision ID: 20260917_db_integrity
 Revises: 20260917_procurement_foundation
-
-The application already enforces tenant ownership in its repositories and
-services. This migration adds the database-level backstop so a malformed or
-future code path cannot create cross-tenant procurement relationships.
-
-Production is PostgreSQL. SQLite is intentionally not used to apply this
-migration because PostgreSQL composite foreign-key validation is part of the
-production integrity contract.
 """
 from alembic import op
 import sqlalchemy as sa
@@ -227,11 +219,9 @@ def upgrade():
 
     _assert_clean_data(bind)
 
-    # A composite FK needs a unique target key. These keys are redundant from
-    # an application perspective (id is already globally unique), but they are
-    # required by PostgreSQL to express tenant + id as one referential unit.
+    # A composite FK needs a unique target key. The id column is already
+    # globally unique, but PostgreSQL requires the exact composite target.
     for table, name in (
-        ("tenants", "uq_tenants_id_tenant_integrity"),
         ("users", "uq_users_tenant_id_integrity"),
         ("suppliers", "uq_suppliers_tenant_id_integrity"),
         ("products", "uq_products_tenant_id_integrity"),
@@ -242,8 +232,6 @@ def upgrade():
     ):
         _add_unique(bind, table, name, ["tenant_id", "id"])
 
-    # SupplierProductOffer was historically unique by product + supplier only.
-    # The tenant is part of the business key and is now enforced explicitly.
     if _unique_exists(bind, "supplier_product_offers", "uq_offer_product_supplier"):
         op.drop_constraint("uq_offer_product_supplier", "supplier_product_offers", type_="unique")
     _add_unique(
@@ -253,118 +241,39 @@ def upgrade():
         ["tenant_id", "product_id", "supplier_id"],
     )
 
-    # Same-tenant relational integrity for procurement and inventory.
-    _add_fk(
-        bind, "fk_products_tenant_supplier", "products",
-        ["tenant_id", "supplier_id"], "suppliers", ["tenant_id", "id"],
-    )
-    _add_fk(
-        bind, "fk_offers_tenant_product", "supplier_product_offers",
-        ["tenant_id", "product_id"], "products", ["tenant_id", "id"],
-    )
-    _add_fk(
-        bind, "fk_offers_tenant_supplier", "supplier_product_offers",
-        ["tenant_id", "supplier_id"], "suppliers", ["tenant_id", "id"],
-    )
-    _add_fk(
-        bind, "fk_orders_tenant_supplier", "orders",
-        ["tenant_id", "supplier_id"], "suppliers", ["tenant_id", "id"],
-    )
-    _add_fk(
-        bind, "fk_order_items_tenant_order", "order_items",
-        ["tenant_id", "order_id"], "orders", ["tenant_id", "id"],
-    )
-    _add_fk(
-        bind, "fk_order_items_tenant_product", "order_items",
-        ["tenant_id", "product_id"], "products", ["tenant_id", "id"],
-    )
-    _add_fk(
-        bind, "fk_order_items_tenant_offer", "order_items",
-        ["tenant_id", "supplier_offer_id"], "supplier_product_offers", ["tenant_id", "id"],
-    )
-    _add_fk(
-        bind, "fk_receipts_tenant_order", "receipts",
-        ["tenant_id", "order_id"], "orders", ["tenant_id", "id"],
-    )
-    _add_fk(
-        bind, "fk_receipt_items_tenant_receipt", "receipt_items",
-        ["tenant_id", "receipt_id"], "receipts", ["tenant_id", "id"],
-    )
-    _add_fk(
-        bind, "fk_receipt_items_tenant_order_item", "receipt_items",
-        ["tenant_id", "order_item_id"], "order_items", ["tenant_id", "id"],
-    )
-    _add_fk(
-        bind, "fk_inventory_movements_tenant_product", "inventory_movements",
-        ["tenant_id", "product_id"], "products", ["tenant_id", "id"],
-    )
-    _add_fk(
-        bind, "fk_inventory_movements_tenant_receipt", "inventory_movements",
-        ["tenant_id", "receipt_id"], "receipts", ["tenant_id", "id"],
-    )
+    _add_fk(bind, "fk_products_tenant_supplier", "products", ["tenant_id", "supplier_id"], "suppliers", ["tenant_id", "id"])
+    _add_fk(bind, "fk_offers_tenant_product", "supplier_product_offers", ["tenant_id", "product_id"], "products", ["tenant_id", "id"])
+    _add_fk(bind, "fk_offers_tenant_supplier", "supplier_product_offers", ["tenant_id", "supplier_id"], "suppliers", ["tenant_id", "id"])
+    _add_fk(bind, "fk_orders_tenant_supplier", "orders", ["tenant_id", "supplier_id"], "suppliers", ["tenant_id", "id"])
+    _add_fk(bind, "fk_order_items_tenant_order", "order_items", ["tenant_id", "order_id"], "orders", ["tenant_id", "id"])
+    _add_fk(bind, "fk_order_items_tenant_product", "order_items", ["tenant_id", "product_id"], "products", ["tenant_id", "id"])
+    _add_fk(bind, "fk_order_items_tenant_offer", "order_items", ["tenant_id", "supplier_offer_id"], "supplier_product_offers", ["tenant_id", "id"])
+    _add_fk(bind, "fk_receipts_tenant_order", "receipts", ["tenant_id", "order_id"], "orders", ["tenant_id", "id"])
+    _add_fk(bind, "fk_receipt_items_tenant_receipt", "receipt_items", ["tenant_id", "receipt_id"], "receipts", ["tenant_id", "id"])
+    _add_fk(bind, "fk_receipt_items_tenant_order_item", "receipt_items", ["tenant_id", "order_item_id"], "order_items", ["tenant_id", "id"])
+    _add_fk(bind, "fk_inventory_movements_tenant_product", "inventory_movements", ["tenant_id", "product_id"], "products", ["tenant_id", "id"])
+    _add_fk(bind, "fk_inventory_movements_tenant_receipt", "inventory_movements", ["tenant_id", "receipt_id"], "receipts", ["tenant_id", "id"])
 
-    # Domain-state and numeric invariants.
+    _add_check(bind, "orders", "ck_orders_status_valid_stage9", "status IN ('draft', 'submitted', 'approved', 'sent', 'completed', 'cancelled')")
+    _add_check(bind, "supplier_product_offers", "ck_supplier_offers_price_nonnegative", "price >= 0")
+    _add_check(bind, "supplier_product_offers", "ck_supplier_offers_units_per_carton_positive", "units_per_carton IS NULL OR units_per_carton > 0")
+    _add_check(bind, "inventory_movements", "ck_inventory_movements_type_valid_stage9", "movement_type IN ('receipt', 'issue', 'adjustment', 'count')")
     _add_check(
-        bind, "orders", "ck_orders_status_valid_stage9",
-        "status IN ('draft', 'submitted', 'approved', 'sent', 'completed', 'cancelled')",
+        bind,
+        "inventory_movements",
+        "ck_inventory_movements_quantity_valid_stage9",
+        "((movement_type IN ('receipt', 'issue') AND quantity > 0) OR (movement_type IN ('adjustment', 'count') AND quantity >= 0))",
     )
-    _add_check(
-        bind, "supplier_product_offers", "ck_supplier_offers_price_nonnegative",
-        "price >= 0",
-    )
-    _add_check(
-        bind, "supplier_product_offers", "ck_supplier_offers_units_per_carton_positive",
-        "units_per_carton IS NULL OR units_per_carton > 0",
-    )
-    _add_check(
-        bind, "inventory_movements", "ck_inventory_movements_type_valid_stage9",
-        "movement_type IN ('receipt', 'issue', 'adjustment', 'count')",
-    )
-    _add_check(
-        bind, "inventory_movements", "ck_inventory_movements_quantity_valid_stage9",
-        "((movement_type IN ('receipt', 'issue') AND quantity > 0) OR "
-        "(movement_type IN ('adjustment', 'count') AND quantity >= 0))",
-    )
-    _add_check(
-        bind, "inventory_movements", "ck_inventory_movements_balance_nonnegative_stage9",
-        "balance_after IS NULL OR balance_after >= 0",
-    )
-    _add_check(
-        bind, "products", "ck_products_current_stock_nonnegative",
-        "current_stock IS NULL OR current_stock >= 0",
-    )
-    _add_check(
-        bind, "products", "ck_products_current_price_nonnegative",
-        "current_price >= 0",
-    )
-    _add_check(
-        bind, "order_items", "ck_order_items_quantity_positive_stage9",
-        "quantity > 0",
-    )
-    _add_check(
-        bind, "order_items", "ck_order_items_unit_price_nonnegative_stage9",
-        "unit_price >= 0",
-    )
-    _add_check(
-        bind, "receipts", "ck_receipts_status_valid_stage9",
-        "status IN ('draft', 'posted', 'cancelled')",
-    )
-    _add_check(
-        bind, "receipt_items", "ck_receipt_items_quantity_positive_stage9",
-        "quantity > 0",
-    )
+    _add_check(bind, "inventory_movements", "ck_inventory_movements_balance_nonnegative_stage9", "balance_after IS NULL OR balance_after >= 0")
+    _add_check(bind, "products", "ck_products_current_stock_nonnegative", "current_stock IS NULL OR current_stock >= 0")
+    _add_check(bind, "products", "ck_products_current_price_nonnegative", "current_price >= 0")
+    _add_check(bind, "order_items", "ck_order_items_quantity_positive_stage9", "quantity > 0")
+    _add_check(bind, "order_items", "ck_order_items_unit_price_nonnegative_stage9", "unit_price >= 0")
+    _add_check(bind, "receipts", "ck_receipts_status_valid_stage9", "status IN ('draft', 'posted', 'cancelled')")
+    _add_check(bind, "receipt_items", "ck_receipt_items_quantity_positive_stage9", "quantity > 0")
 
-    # InventoryMovement.receipt_id is intentionally nullable for historical
-    # movements; only receiving-generated movements must carry it.
-    if _column_exists(bind, "inventory_movements", "receipt_id") and not _index_exists(
-        bind, "inventory_movements", "ix_inventory_movements_tenant_receipt"
-    ):
-        op.create_index(
-            "ix_inventory_movements_tenant_receipt",
-            "inventory_movements",
-            ["tenant_id", "receipt_id"],
-            unique=False,
-        )
+    if _column_exists(bind, "inventory_movements", "receipt_id") and not _index_exists(bind, "inventory_movements", "ix_inventory_movements_tenant_receipt"):
+        op.create_index("ix_inventory_movements_tenant_receipt", "inventory_movements", ["tenant_id", "receipt_id"], unique=False)
 
 
 def downgrade():
@@ -372,7 +281,7 @@ def downgrade():
     if not _is_postgresql(bind):
         raise RuntimeError("20260917_db_integrity downgrade requires PostgreSQL")
 
-    checks = [
+    for table, name in (
         ("receipt_items", "ck_receipt_items_quantity_positive_stage9"),
         ("receipts", "ck_receipts_status_valid_stage9"),
         ("order_items", "ck_order_items_unit_price_nonnegative_stage9"),
@@ -385,12 +294,11 @@ def downgrade():
         ("supplier_product_offers", "ck_supplier_offers_units_per_carton_positive"),
         ("supplier_product_offers", "ck_supplier_offers_price_nonnegative"),
         ("orders", "ck_orders_status_valid_stage9"),
-    ]
-    for table, name in checks:
+    ):
         if _check_exists(bind, table, name):
             op.drop_constraint(name, table, type_="check")
 
-    fks = [
+    for name, table in (
         ("fk_inventory_movements_tenant_receipt", "inventory_movements"),
         ("fk_inventory_movements_tenant_product", "inventory_movements"),
         ("fk_receipt_items_tenant_order_item", "receipt_items"),
@@ -403,17 +311,14 @@ def downgrade():
         ("fk_offers_tenant_supplier", "supplier_product_offers"),
         ("fk_offers_tenant_product", "supplier_product_offers"),
         ("fk_products_tenant_supplier", "products"),
-    ]
-    for name, table in fks:
+    ):
         if _fk_exists(bind, table, name):
             op.drop_constraint(name, table, type_="foreignkey")
 
     if _unique_exists(bind, "supplier_product_offers", "uq_offer_tenant_product_supplier"):
         op.drop_constraint("uq_offer_tenant_product_supplier", "supplier_product_offers", type_="unique")
     if not _unique_exists(bind, "supplier_product_offers", "uq_offer_product_supplier"):
-        op.create_unique_constraint(
-            "uq_offer_product_supplier", "supplier_product_offers", ["product_id", "supplier_id"]
-        )
+        op.create_unique_constraint("uq_offer_product_supplier", "supplier_product_offers", ["product_id", "supplier_id"])
 
     for table, name in (
         ("receipts", "uq_receipts_tenant_id_integrity"),
@@ -423,7 +328,6 @@ def downgrade():
         ("products", "uq_products_tenant_id_integrity"),
         ("suppliers", "uq_suppliers_tenant_id_integrity"),
         ("users", "uq_users_tenant_id_integrity"),
-        ("tenants", "uq_tenants_id_tenant_integrity"),
     ):
         if _unique_exists(bind, table, name):
             op.drop_constraint(name, table, type_="unique")
