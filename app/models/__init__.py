@@ -8,6 +8,9 @@ from app.models.price_observation import PriceObservation
 from app.models.document_analysis import DocumentAnalysis
 from app.models.product_classification_feedback import ProductClassificationFeedback
 from app.models.order import Order
+from app.models.order_item import OrderItem
+from app.models.receipt import Receipt
+from app.models.receipt_item import ReceiptItem
 from app.models.audit import AuditLog
 from app.models.notification import Notification
 from app.models.google_calendar import GoogleCalendarConnection
@@ -25,6 +28,9 @@ __all__ = [
     "DocumentAnalysis",
     "ProductClassificationFeedback",
     "Order",
+    "OrderItem",
+    "Receipt",
+    "ReceiptItem",
     "AuditLog",
     "Notification",
     "GoogleCalendarConnection",
