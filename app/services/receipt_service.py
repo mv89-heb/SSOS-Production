@@ -7,7 +7,7 @@ from werkzeug.exceptions import BadRequest, Conflict, NotFound
 
 from app.extensions import db
 from app.models.inventory_movement import InventoryMovement, MOVEMENT_RECEIPT
-from app.models.order import STATUS_SENT, STATUS_COMPLETED
+from app.models.order import Order, STATUS_SENT, STATUS_COMPLETED
 from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.receipt import Receipt, RECEIPT_POSTED
@@ -29,10 +29,7 @@ class ReceiptService:
 
     def list_for_order(self, order_id: int) -> list[Receipt]:
         order = db.session.scalar(
-            select(__import__("app.models.order", fromlist=["Order"]).Order).where(
-                __import__("app.models.order", fromlist=["Order"]).Order.id == order_id,
-                __import__("app.models.order", fromlist=["Order"]).Order.tenant_id == self.tenant_id,
-            )
+            select(Order).where(Order.id == order_id, Order.tenant_id == self.tenant_id)
         )
         if order is None:
             raise NotFound("Order not found")
@@ -54,8 +51,6 @@ class ReceiptService:
         return receipt
 
     def create_receipt(self, user, order_id: int, payload: dict) -> Receipt:
-        from app.models.order import Order
-
         order = db.session.scalar(
             select(Order)
             .where(Order.id == order_id, Order.tenant_id == self.tenant_id)
