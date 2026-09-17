@@ -88,7 +88,12 @@ def update_order(order_id):
 @orders_bp.route("/<int:order_id>", methods=["DELETE"])
 @login_required
 def delete_order(order_id):
-    """Delete an order according to lifecycle/role rules."""
+    """Delete an order according to lifecycle/role rules.
+
+    Drafts can be removed by their creator; managers/admins can remove any
+    order. Google Calendar cleanup is best-effort and never blocks the DB
+    deletion.
+    """
     try:
         PermissionService.require_role_at_least("employee")
     except HTTPException as exc:
@@ -245,39 +250,31 @@ def get_order_receipt(order_id, receipt_id):
 @orders_bp.route("/<int:order_id>/ocr", methods=["POST"])
 @login_required
 def ocr_upload(order_id):
-    """Upload an invoice/receipt image and extract order data."""
     try:
         PermissionService.require_role_at_least("employee")
     except HTTPException as exc:
         return _handle(exc)
-
-    if "file" not in request.files:
-        return jsonify({"success": False, "error": "missing_file", "message": "No file uploaded"}), 400
-
-    file = request.files["file"]
-    if not file.filename:
-        return jsonify({"success": False, "error": "invalid_file", "message": "Filename is required"}), 400
-
+    service = OrderService(tenant_id=current_user.tenant_id)
     try:
-        validate_upload(file)
+        service.get_order(order_id)
     except HTTPException as exc:
         return _handle(exc)
-
-    temp_dir = current_app.config.get("OCR_TEMP_DIR", "/tmp/ssos_ocr")
-    os.makedirs(temp_dir, exist_ok=True)
-    temp_path = os.path.join(temp_dir, f"{uuid.uuid4().hex}_{secure_filename(file.filename)}")
+    if "file" not in request.files:
+        return jsonify({"success": False, "error": "no_file"}), 400
+    upload = request.files["file"]
+    if not upload.filename:
+        return jsonify({"success": False, "error": "no_file"}), 400
+    filename = secure_filename(upload.filename)
+    mime_type = upload.mimetype
+    upload.stream.seek(0, os.SEEK_END)
+    file_size = upload.stream.tell()
+    upload.stream.seek(0)
     try:
-        file.save(temp_path)
-        result = OCRService().process_file(temp_path)
-        return jsonify({"success": True, "order_id": order_id, "result": result})
+        validate_upload(filename, mime_type, file_size, max_size=current_app.config["MAX_CONTENT_LENGTH"])
     except OCRProviderError as exc:
-        return jsonify({"success": False, "error": "ocr_provider_error", "message": str(exc)}), 502
-    except Exception:
-        current_app.logger.exception("OCR processing failed: order_id=%s", order_id)
-        return jsonify({"success": False, "error": "ocr_processing_failed", "message": "OCR processing failed"}), 500
-    finally:
-        try:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-        except OSError:
-            current_app.logger.warning("Failed to remove OCR temp file: %s", temp_path)
+        return jsonify({"success": False, "error": "invalid_upload", "message": str(exc)}), 400
+    unique_name = f"{uuid.uuid4().hex}_{filename}"
+    save_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_name)
+    upload.save(save_path)
+    result = OCRService().process_document(save_path)
+    return jsonify({"success": result["status"] == "success", "result": result}), 200
