@@ -1,11 +1,11 @@
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 
 from app.models.inventory_movement import InventoryMovement, MOVEMENT_COUNT
 from app.models.order import Order, STATUS_APPROVED
 from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.supplier import Supplier
+from app.models.user import User
 from app.services.inventory_unified_planning_service import InventoryUnifiedPlanningService
 
 
@@ -61,7 +61,7 @@ def test_unified_planning_uses_physical_counts_and_open_inbound(db, tenant_a_adm
     assert without_order["available_for_planning"] == 20
     assert without_order["planning_engine"] == "unified-v1"
 
-    user_id = tenant_a_admin[0]["user"]["id"]
+    user_id = db.session.query(User).filter(User.email == "admin@acme.test").one().id
     order = Order(
         tenant_id=tenant_id,
         user_id=user_id,
