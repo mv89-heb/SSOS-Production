@@ -2,11 +2,12 @@ import os
 import uuid
 from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required, current_user
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, NotFound
 from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.services.order_service import OrderService
+from app.services.receipt_service import ReceiptService
 from app.services.ocr_service import OCRService, validate_upload, OCRProviderError
 from app.services.permission_service import PermissionService
 from app.services import google_calendar_service as gcal
@@ -46,6 +47,7 @@ def create_order():
     try:
         order = service.create_order(current_user, data)
     except HTTPException as exc:
+        db.session.rollback()
         return _handle(exc)
     db.session.commit()
     return jsonify({"success": True, "order": order.to_dict()}), 201
@@ -78,6 +80,7 @@ def update_order(order_id):
     try:
         order = service.update_order(current_user, order_id, data)
     except HTTPException as exc:
+        db.session.rollback()
         return _handle(exc)
     db.session.commit()
     return jsonify({"success": True, "order": order.to_dict()})
@@ -100,6 +103,7 @@ def delete_order(order_id):
     try:
         order = service.delete_order(current_user, order_id)
     except HTTPException as exc:
+        db.session.rollback()
         return _handle(exc)
 
     calendar_event_id = order.google_calendar_event_id
@@ -126,6 +130,7 @@ def submit_order(order_id):
     try:
         order = service.submit_order(current_user, order_id)
     except HTTPException as exc:
+        db.session.rollback()
         return _handle(exc)
     db.session.commit()
     return jsonify({"success": True, "order": order.to_dict()})
@@ -141,6 +146,7 @@ def approve_order(order_id):
     try:
         order = service.approve_order(current_user, order_id)
     except HTTPException as exc:
+        db.session.rollback()
         return _handle(exc)
     db.session.commit()
     return jsonify({"success": True, "order": order.to_dict()})
@@ -157,6 +163,7 @@ def reject_order(order_id):
     try:
         order = service.reject_order(current_user, order_id, reason=data.get("reason", ""))
     except HTTPException as exc:
+        db.session.rollback()
         return _handle(exc)
     db.session.commit()
     return jsonify({"success": True, "order": order.to_dict()})
@@ -172,6 +179,7 @@ def mark_order_sent(order_id):
     try:
         order = service.mark_sent(current_user, order_id)
     except HTTPException as exc:
+        db.session.rollback()
         return _handle(exc)
     db.session.commit()
     return jsonify({"success": True, "order": order.to_dict()})
@@ -187,9 +195,56 @@ def mark_order_completed(order_id):
     try:
         order = service.mark_completed(current_user, order_id)
     except HTTPException as exc:
+        db.session.rollback()
         return _handle(exc)
     db.session.commit()
     return jsonify({"success": True, "order": order.to_dict()})
+
+@orders_bp.route("/<int:order_id>/receipts", methods=["GET"])
+@login_required
+def list_receipts(order_id):
+    try:
+        receipts = ReceiptService(tenant_id=current_user.tenant_id).list_for_order(order_id)
+    except HTTPException as exc:
+        return _handle(exc)
+    return jsonify({"success": True, "receipts": [receipt.to_dict() for receipt in receipts]})
+
+@orders_bp.route("/<int:order_id>/receipts", methods=["POST"])
+@login_required
+def create_receipt(order_id):
+    try:
+        PermissionService.require_role_at_least("employee")
+    except HTTPException as exc:
+        return _handle(exc)
+    payload = request.get_json(silent=True) or {}
+    try:
+        receipt = ReceiptService(tenant_id=current_user.tenant_id).create_receipt(
+            current_user, order_id, payload
+        )
+        db.session.commit()
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Receipt transaction failed: order_id=%s", order_id)
+        return jsonify({
+            "success": False,
+            "error": "receipt_transaction_failed",
+            "message": "The receipt could not be posted",
+        }), 500
+    return jsonify({"success": True, "receipt": receipt.to_dict()}), 201
+
+@orders_bp.route("/<int:order_id>/receipts/<int:receipt_id>", methods=["GET"])
+@login_required
+def get_order_receipt(order_id, receipt_id):
+    try:
+        receipt = ReceiptService(tenant_id=current_user.tenant_id).get(receipt_id)
+        if receipt.order_id != order_id:
+            raise NotFound("Receipt not found")
+    except HTTPException as exc:
+        return _handle(exc)
+    return jsonify({"success": True, "receipt": receipt.to_dict()})
 
 @orders_bp.route("/<int:order_id>/ocr", methods=["POST"])
 @login_required
