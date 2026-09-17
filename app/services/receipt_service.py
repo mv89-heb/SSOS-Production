@@ -7,7 +7,7 @@ from werkzeug.exceptions import BadRequest, Conflict, NotFound
 
 from app.extensions import db
 from app.models.inventory_movement import InventoryMovement, MOVEMENT_RECEIPT
-from app.models.order import Order, STATUS_SENT, STATUS_COMPLETED
+from app.models.order import Order, STATUS_SENT
 from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.receipt import Receipt, RECEIPT_POSTED
@@ -58,7 +58,7 @@ class ReceiptService:
         )
         if order is None:
             raise NotFound("Order not found")
-        if order.status not in (STATUS_SENT, STATUS_COMPLETED):
+        if order.status != STATUS_SENT:
             raise Conflict("Only sent orders can be received")
 
         raw_items = payload.get("items")
