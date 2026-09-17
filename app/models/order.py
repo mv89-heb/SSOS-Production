@@ -18,10 +18,14 @@ REMINDER_COMPLETE = "complete"
 
 class Order(db.Model):
     __tablename__ = "orders"
+    __table_args__ = (
+        db.UniqueConstraint("tenant_id", "order_number", name="uq_orders_tenant_order_number"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    supplier_id = db.Column(db.Integer, db.ForeignKey("suppliers.id"), nullable=True, index=True)
     order_number = db.Column(db.String(40), nullable=False, index=True)
     supplier_name = db.Column(db.String(200), nullable=False)
     supplier_contact = db.Column(db.String(200))
@@ -46,12 +50,22 @@ class Order(db.Model):
 
     tenant = db.relationship("Tenant", back_populates="orders")
     user = db.relationship("User")
+    supplier = db.relationship("Supplier")
+    order_items = db.relationship(
+        "OrderItem",
+        back_populates="order",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="OrderItem.id",
+    )
+    receipts = db.relationship("Receipt", back_populates="order", passive_deletes=True, order_by="Receipt.id")
 
     def to_dict(self):
         return {
             "id": self.id,
             "tenant_id": self.tenant_id,
             "user_id": self.user_id,
+            "supplier_id": self.supplier_id,
             "order_number": self.order_number,
             "supplier_name": self.supplier_name,
             "supplier_contact": self.supplier_contact,
@@ -68,6 +82,8 @@ class Order(db.Model):
             "final_total": float(self.final_total) if self.final_total is not None else 0.0,
             "currency": self.currency,
             "items": self.items or [],
+            "order_items": [item.to_dict() for item in self.order_items],
+            "receipts": [receipt.to_dict() for receipt in self.receipts],
             "snapshot": self.snapshot,
             "snapshot_taken_at": self.snapshot_taken_at.isoformat() if self.snapshot_taken_at else None,
             "notes": self.notes,
