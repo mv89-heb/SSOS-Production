@@ -49,13 +49,11 @@ class InventoryCalendarService:
     def schedule_for_product(self, product, today=None, periods=None):
         today = today or datetime.now(timezone.utc).date()
         periods = periods if periods is not None else self.periods(start=today, end=today + timedelta(days=180), active_only=True)
-        supplier = db.session.scalar(
-            select(Supplier).where(
-                Supplier.id == product.supplier_id,
-                Supplier.tenant_id == self.tenant_id,
-                Supplier.active.is_(True),
-            )
-        )
+        supplier = db.session.scalar(select(Supplier).where(
+            Supplier.id == product.supplier_id,
+            Supplier.tenant_id == self.tenant_id,
+            Supplier.active.is_(True),
+        ))
         return self.engine._schedule(product, supplier, today, periods)
 
     def recommendation(self, product_id: int, *, lookback_days=60, safety_days=2, inbound_quantities=None):
@@ -66,19 +64,15 @@ class InventoryCalendarService:
 
     def count_status(self):
         today = datetime.now(timezone.utc).date()
-        products = db.session.scalars(
-            select(Product.id).where(Product.tenant_id == self.tenant_id, Product.active.is_(True))
-        ).all()
+        products = db.session.scalars(select(Product.id).where(Product.tenant_id == self.tenant_id, Product.active.is_(True))).all()
         product_count = len(products)
         window_start = today - timedelta(days=6)
-        counted_ids = db.session.scalars(
-            select(distinct(InventoryMovement.product_id)).where(
-                InventoryMovement.tenant_id == self.tenant_id,
-                InventoryMovement.movement_type == MOVEMENT_COUNT,
-                InventoryMovement.occurred_at >= datetime.combine(window_start, datetime.min.time(), tzinfo=timezone.utc),
-                InventoryMovement.product_id.in_(products or [-1]),
-            )
-        ).all()
+        counted_ids = db.session.scalars(select(distinct(InventoryMovement.product_id)).where(
+            InventoryMovement.tenant_id == self.tenant_id,
+            InventoryMovement.movement_type == MOVEMENT_COUNT,
+            InventoryMovement.occurred_at >= datetime.combine(window_start, datetime.min.time(), tzinfo=timezone.utc),
+            InventoryMovement.product_id.in_(products or [-1]),
+        )).all()
         counted_products = len(counted_ids)
         completed = product_count > 0 and counted_products == product_count
         days_until_due = (self.DEFAULT_COUNT_WEEKDAY - today.weekday()) % 7
