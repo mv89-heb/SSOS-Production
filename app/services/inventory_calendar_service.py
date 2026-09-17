@@ -1,13 +1,16 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import distinct, select
+from sqlalchemy import distinct, func, select
 
 from app.extensions import db
 from app.models.inventory_movement import InventoryMovement, MOVEMENT_COUNT, MOVEMENT_RECEIPT
 from app.models.inventory_planning_period import InventoryPlanningPeriod
 from app.models.order import Order, STATUS_APPROVED, STATUS_SENT
+from app.models.order_item import OrderItem
 from app.models.product import Product
+from app.models.receipt import Receipt, RECEIPT_POSTED
+from app.models.receipt_item import ReceiptItem
 from app.services.inventory_planning_service import InventoryPlanningService
 
 
@@ -129,20 +132,48 @@ class InventoryCalendarService:
             total_receipts += received
         return estimated_consumption, observed_days, total_receipts, len(counts)
 
-    def _inbound_quantities(self):
+    def _inbound_quantities(self, product_ids=None):
+        """Return remaining committed inbound quantity by product.
+
+        Only approved/sent orders are considered committed. Receiving is read
+        from posted ReceiptItem rows, so a partial receipt reduces inbound and
+        a fully received line contributes zero. Legacy Order.items JSON is not
+        consulted once the relational procurement model exists.
+        """
+        order_item_stmt = (
+            select(OrderItem.product_id, func.coalesce(func.sum(OrderItem.quantity), 0))
+            .join(Order, Order.id == OrderItem.order_id)
+            .where(
+                OrderItem.tenant_id == self.tenant_id,
+                Order.tenant_id == self.tenant_id,
+                Order.status.in_((STATUS_APPROVED, STATUS_SENT)),
+            )
+            .group_by(OrderItem.product_id)
+        )
+        receipt_stmt = (
+            select(OrderItem.product_id, func.coalesce(func.sum(ReceiptItem.quantity), 0))
+            .join(ReceiptItem, ReceiptItem.order_item_id == OrderItem.id)
+            .join(Receipt, Receipt.id == ReceiptItem.receipt_id)
+            .where(
+                OrderItem.tenant_id == self.tenant_id,
+                ReceiptItem.tenant_id == self.tenant_id,
+                Receipt.tenant_id == self.tenant_id,
+                Receipt.status == RECEIPT_POSTED,
+            )
+            .group_by(OrderItem.product_id)
+        )
+        if product_ids:
+            ids = [int(product_id) for product_id in product_ids]
+            order_item_stmt = order_item_stmt.where(OrderItem.product_id.in_(ids))
+            receipt_stmt = receipt_stmt.where(OrderItem.product_id.in_(ids))
+
+        ordered = {product_id: Decimal(str(quantity or 0)) for product_id, quantity in db.session.execute(order_item_stmt).all()}
+        received = {product_id: Decimal(str(quantity or 0)) for product_id, quantity in db.session.execute(receipt_stmt).all()}
         totals = {}
-        orders = db.session.scalars(
-            select(Order).where(Order.tenant_id == self.tenant_id, Order.status.in_((STATUS_APPROVED, STATUS_SENT)))
-        ).all()
-        for order in orders:
-            for item in order.items or []:
-                try:
-                    product_id = int(item.get("product_id"))
-                    quantity = Decimal(str(item.get("quantity") or 0))
-                except (AttributeError, TypeError, ValueError):
-                    continue
-                if quantity > 0:
-                    totals[product_id] = totals.get(product_id, Decimal("0")) + quantity
+        for product_id in set(ordered) | set(received):
+            remaining = max(Decimal("0"), ordered.get(product_id, Decimal("0")) - received.get(product_id, Decimal("0")))
+            if remaining > 0:
+                totals[product_id] = remaining
         return totals
 
     def _forecast_demand(self, daily_rate: Decimal, start: date, end: date, periods):
@@ -180,7 +211,8 @@ class InventoryCalendarService:
         holiday_adjusted_demand = self._forecast_demand(daily_rate, today, target_end, periods)
         safety_stock = self._forecast_demand(daily_rate, target_end + timedelta(days=1), target_end + timedelta(days=max(1, int(safety_days))), periods)
         target_stock = holiday_adjusted_demand + safety_stock
-        recommended_order = max(Decimal("0"), target_stock - current_stock - inbound)
+        available_for_planning = current_stock + inbound
+        recommended_order = max(Decimal("0"), target_stock - available_for_planning)
         coverage_days = current_stock / daily_rate if daily_rate > 0 else None
         days_until_order = (date.fromisoformat(schedule["next_order_date"]) - today).days if schedule.get("next_order_date") else None
         active_periods = [p for p in periods if p.end_date >= today and p.start_date <= target_end]
@@ -189,7 +221,7 @@ class InventoryCalendarService:
             status = "insufficient_data"
         elif current_stock <= 0:
             status = "urgent"
-        elif current_stock <= target_stock:
+        elif current_stock + inbound <= target_stock:
             status = "reorder"
         else:
             status = "healthy"
@@ -202,7 +234,9 @@ class InventoryCalendarService:
             "average_daily_usage": round(float(daily_rate), 3),
             "base_average_daily_usage": round(float(daily_rate), 3),
             "receipts_in_observation_period": round(float(total_receipts), 3),
+            "open_inbound": float(inbound),
             "confirmed_inbound": float(inbound),
+            "available_for_planning": float(available_for_planning),
             "holiday_adjusted_demand": round(float(holiday_adjusted_demand), 3),
             "holiday_adjusted_target_stock": round(float(target_stock), 3),
             "safety_stock": round(float(safety_stock), 3),
@@ -219,7 +253,7 @@ class InventoryCalendarService:
                 "הצריכה מחושבת מנקודות ספירה פיזיות: מלאי פתיחה + רכישות בין הספירות - מלאי סיום.",
                 "אין צורך לדווח על ניפוקים; לקיחות לא מדווחות מתגלמות בירידה בין הספירות.",
                 "תקופות מיוחדות משנות את התחזית לפי מכפיל הצריכה שהוגדר.",
-                "הזמנות פתוחות במצב מאושר/נשלח נלקחות כמלאי נכנס כאשר שורת ההזמנה כוללת product_id.",
+                "מלאי נכנס מחושב לפי כמות שהוזמנה פחות קליטות שבוצעו בפועל; קליטה חלקית משאירה רק את היתרה כ-inbound.",
             ],
         })
         return row
@@ -228,7 +262,7 @@ class InventoryCalendarService:
         products = db.session.scalars(
             select(Product).where(Product.tenant_id == self.tenant_id, Product.active.is_(True)).order_by(Product.name.asc()).limit(max(1, min(int(limit), 500)))
         ).all()
-        inbound = self._inbound_quantities()
+        inbound = self._inbound_quantities([product.id for product in products]) if products else {}
         rows = [self.recommendation(product.id, lookback_days=lookback_days, safety_days=safety_days, inbound_quantities=inbound) for product in products]
         priority = {"urgent": 0, "reorder": 1, "healthy": 2, "insufficient_data": 3}
         rows.sort(key=lambda row: (priority.get(row.get("status"), 4), -(row.get("recommended_order") or 0), row.get("product_name", "")))
