@@ -53,7 +53,7 @@ class ReceiptService:
 
     def create_receipt(self, user, order_id: int, payload: dict, idempotency_key: str | None = None) -> tuple[Receipt, bool]:
         idempotency_key = self._validate_idempotency_key(idempotency_key)
-        request_hash = self._request_hash(payload)
+        request_hash = self._request_hash(order_id, payload)
         if idempotency_key:
             existing = self._claim_or_replay_idempotency_key(
                 user_id=user.id,
@@ -220,8 +220,13 @@ class ReceiptService:
         return receipt, True
 
     @staticmethod
-    def _request_hash(payload: dict) -> str:
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    def _request_hash(order_id: int, payload: dict) -> str:
+        canonical = json.dumps(
+            {"order_id": order_id, "payload": payload},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     def _received_quantity(self, order_item_id: int) -> Decimal:
