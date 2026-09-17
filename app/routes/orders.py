@@ -2,7 +2,7 @@ import os
 import uuid
 from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required, current_user
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, NotFound
 from werkzeug.utils import secure_filename
 
 from app.extensions import db
@@ -241,7 +241,7 @@ def get_order_receipt(order_id, receipt_id):
     try:
         receipt = ReceiptService(tenant_id=current_user.tenant_id).get(receipt_id)
         if receipt.order_id != order_id:
-            raise HTTPException(description="Receipt not found", response=None)
+            raise NotFound("Receipt not found")
     except HTTPException as exc:
         return _handle(exc)
     return jsonify({"success": True, "receipt": receipt.to_dict()})
