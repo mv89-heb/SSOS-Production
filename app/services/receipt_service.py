@@ -1,11 +1,15 @@
+import hashlib
+import json
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import BadRequest, Conflict, NotFound
 
 from app.extensions import db
+from app.models.idempotency_key import IdempotencyKey
 from app.models.inventory_movement import InventoryMovement, MOVEMENT_RECEIPT
 from app.models.order import Order, STATUS_SENT
 from app.models.order_item import OrderItem
@@ -16,13 +20,10 @@ from app.services.audit_service import AuditService
 
 
 class ReceiptService:
-    """Transactional receiving: Receipt -> ReceiptItem -> stock movement.
-
-    A receipt is posted atomically. Order status remains independent from
-    receiving status; receiving progress is derived from posted receipts.
-    """
+    """Transactional receiving with request-level idempotency."""
 
     MAX_LINE_QUANTITY = Decimal("100000")
+    MAX_IDEMPOTENCY_KEY_LENGTH = 255
 
     def __init__(self, tenant_id: int):
         self.tenant_id = tenant_id
@@ -50,7 +51,13 @@ class ReceiptService:
             raise NotFound("Receipt not found")
         return receipt
 
-    def create_receipt(self, user, order_id: int, payload: dict) -> Receipt:
+    def create_receipt(self, user, order_id: int, payload: dict, idempotency_key: str | None = None) -> tuple[Receipt, bool]:
+        request_hash = self._request_hash(payload)
+        if idempotency_key:
+            existing = self._get_idempotency_key(idempotency_key)
+            if existing:
+                return self._replay_or_conflict(existing, request_hash)
+
         order = db.session.scalar(
             select(Order)
             .where(Order.id == order_id, Order.tenant_id == self.tenant_id)
@@ -84,8 +91,6 @@ class ReceiptService:
         if missing:
             raise NotFound(f"Order item {missing[0]} not found")
 
-        # Lock products in deterministic order before changing stock. This
-        # serializes concurrent receipts touching the same products.
         product_ids = sorted({item.product_id for item in order_items})
         products = db.session.scalars(
             select(Product)
@@ -149,6 +154,14 @@ class ReceiptService:
                 )
             )
 
+        if idempotency_key:
+            self._store_idempotency_key(
+                user_id=user.id,
+                key=idempotency_key,
+                request_hash=request_hash,
+                resource_id=receipt.id,
+            )
+
         AuditService.log_event(
             self.tenant_id,
             user.id,
@@ -161,7 +174,48 @@ class ReceiptService:
                 "item_count": len(parsed),
             },
         )
-        return receipt
+        return receipt, False
+
+    def _get_idempotency_key(self, key: str) -> IdempotencyKey | None:
+        return db.session.scalar(
+            select(IdempotencyKey).where(
+                IdempotencyKey.tenant_id == self.tenant_id,
+                IdempotencyKey.key == key,
+            )
+        )
+
+    def _replay_or_conflict(self, record: IdempotencyKey, request_hash: str) -> tuple[Receipt, bool]:
+        if record.request_hash != request_hash:
+            raise Conflict("Idempotency-Key was already used with a different request")
+        if record.resource_type != "receipt":
+            raise Conflict("Idempotency-Key is already associated with another resource")
+        receipt = self.get(record.resource_id)
+        return receipt, True
+
+    def _store_idempotency_key(self, user_id: int, key: str, request_hash: str, resource_id: int) -> None:
+        record = IdempotencyKey(
+            tenant_id=self.tenant_id,
+            user_id=user_id,
+            key=key,
+            request_hash=request_hash,
+            resource_type="receipt",
+            resource_id=resource_id,
+            response_status=201,
+        )
+        db.session.add(record)
+        try:
+            db.session.flush()
+        except IntegrityError:
+            db.session.rollback()
+            existing = self._get_idempotency_key(key)
+            if existing and existing.request_hash == request_hash and existing.resource_type == "receipt":
+                raise Conflict("Duplicate idempotent receipt request")
+            raise Conflict("Idempotency-Key is already in use")
+
+    @staticmethod
+    def _request_hash(payload: dict) -> str:
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     def _received_quantity(self, order_item_id: int) -> Decimal:
         value = db.session.scalar(
@@ -207,6 +261,15 @@ class ReceiptService:
         if len(value) > 5000:
             raise BadRequest("notes is too long")
         return value or None
+
+    @classmethod
+    def _validate_idempotency_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value or len(value) > cls.MAX_IDEMPOTENCY_KEY_LENGTH:
+            raise BadRequest("Idempotency-Key must contain 1-255 characters")
+        return value
 
     @staticmethod
     def _receipt_number(value) -> str:
