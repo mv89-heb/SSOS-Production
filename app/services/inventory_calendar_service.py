@@ -7,6 +7,7 @@ from app.extensions import db
 from app.models.inventory_movement import InventoryMovement, MOVEMENT_COUNT
 from app.models.inventory_planning_period import InventoryPlanningPeriod
 from app.models.product import Product
+from app.models.supplier import Supplier
 from app.services.inventory_unified_planning_service import InventoryUnifiedPlanningService
 
 
@@ -49,10 +50,10 @@ class InventoryCalendarService:
         today = today or datetime.now(timezone.utc).date()
         periods = periods if periods is not None else self.periods(start=today, end=today + timedelta(days=180), active_only=True)
         supplier = db.session.scalar(
-            select(__import__("app.models.supplier", fromlist=["Supplier"]).Supplier).where(
-                __import__("app.models.supplier", fromlist=["Supplier"]).Supplier.id == product.supplier_id,
-                __import__("app.models.supplier", fromlist=["Supplier"]).Supplier.tenant_id == self.tenant_id,
-                __import__("app.models.supplier", fromlist=["Supplier"]).Supplier.active.is_(True),
+            select(Supplier).where(
+                Supplier.id == product.supplier_id,
+                Supplier.tenant_id == self.tenant_id,
+                Supplier.active.is_(True),
             )
         )
         return self.engine._schedule(product, supplier, today, periods)
