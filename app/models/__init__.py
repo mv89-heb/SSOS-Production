@@ -13,6 +13,7 @@ from app.models.receipt import Receipt
 from app.models.receipt_item import ReceiptItem
 from app.models.audit import AuditLog
 from app.models.notification import Notification
+from app.models.idempotency_key import IdempotencyKey
 from app.models.google_calendar import GoogleCalendarConnection
 from app.models.inventory_movement import InventoryMovement
 from app.models.inventory_planning_period import InventoryPlanningPeriod
@@ -33,6 +34,7 @@ __all__ = [
     "ReceiptItem",
     "AuditLog",
     "Notification",
+    "IdempotencyKey",
     "GoogleCalendarConnection",
     "InventoryMovement",
     "InventoryPlanningPeriod",
