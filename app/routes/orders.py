@@ -88,12 +88,7 @@ def update_order(order_id):
 @orders_bp.route("/<int:order_id>", methods=["DELETE"])
 @login_required
 def delete_order(order_id):
-    """Delete an order according to lifecycle/role rules.
-
-    Drafts can be removed by their creator; managers/admins can remove any
-    order. Google Calendar cleanup is best-effort and never blocks the DB
-    deletion.
-    """
+    """Delete an order according to lifecycle/role rules."""
     try:
         PermissionService.require_role_at_least("employee")
     except HTTPException as exc:
@@ -217,9 +212,10 @@ def create_receipt(order_id):
     except HTTPException as exc:
         return _handle(exc)
     payload = request.get_json(silent=True) or {}
+    idempotency_key = request.headers.get("Idempotency-Key")
     try:
-        receipt = ReceiptService(tenant_id=current_user.tenant_id).create_receipt(
-            current_user, order_id, payload
+        receipt, replayed = ReceiptService(tenant_id=current_user.tenant_id).create_receipt(
+            current_user, order_id, payload, idempotency_key=idempotency_key
         )
         db.session.commit()
     except HTTPException as exc:
@@ -233,7 +229,7 @@ def create_receipt(order_id):
             "error": "receipt_transaction_failed",
             "message": "The receipt could not be posted",
         }), 500
-    return jsonify({"success": True, "receipt": receipt.to_dict()}), 201
+    return jsonify({"success": True, "receipt": receipt.to_dict(), "replayed": replayed}), (200 if replayed else 201)
 
 @orders_bp.route("/<int:order_id>/receipts/<int:receipt_id>", methods=["GET"])
 @login_required
@@ -249,31 +245,39 @@ def get_order_receipt(order_id, receipt_id):
 @orders_bp.route("/<int:order_id>/ocr", methods=["POST"])
 @login_required
 def ocr_upload(order_id):
+    """Upload an invoice/receipt image and extract order data."""
     try:
         PermissionService.require_role_at_least("employee")
     except HTTPException as exc:
         return _handle(exc)
-    service = OrderService(tenant_id=current_user.tenant_id)
+
+    if "file" not in request.files:
+        return jsonify({"success": False, "error": "missing_file", "message": "No file uploaded"}), 400
+
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"success": False, "error": "invalid_file", "message": "Filename is required"}), 400
+
     try:
-        service.get_order(order_id)
+        validate_upload(file)
     except HTTPException as exc:
         return _handle(exc)
-    if "file" not in request.files:
-        return jsonify({"success": False, "error": "no_file"}), 400
-    upload = request.files["file"]
-    if not upload.filename:
-        return jsonify({"success": False, "error": "no_file"}), 400
-    filename = secure_filename(upload.filename)
-    mime_type = upload.mimetype
-    upload.stream.seek(0, os.SEEK_END)
-    file_size = upload.stream.tell()
-    upload.stream.seek(0)
+
+    temp_dir = current_app.config.get("OCR_TEMP_DIR", "/tmp/ssos_ocr")
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_path = os.path.join(temp_dir, f"{uuid.uuid4().hex}_{secure_filename(file.filename)}")
     try:
-        validate_upload(filename, mime_type, file_size, max_size=current_app.config["MAX_CONTENT_LENGTH"])
+        file.save(temp_path)
+        result = OCRService().process_file(temp_path)
+        return jsonify({"success": True, "order_id": order_id, "result": result})
     except OCRProviderError as exc:
-        return jsonify({"success": False, "error": "invalid_upload", "message": str(exc)}), 400
-    unique_name = f"{uuid.uuid4().hex}_{filename}"
-    save_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_name)
-    upload.save(save_path)
-    result = OCRService().process_document(save_path)
-    return jsonify({"success": result["status"] == "success", "result": result}), 200
+        return jsonify({"success": False, "error": "ocr_provider_error", "message": str(exc)}), 502
+    except Exception:
+        current_app.logger.exception("OCR processing failed: order_id=%s", order_id)
+        return jsonify({"success": False, "error": "ocr_processing_failed", "message": "OCR processing failed"}), 500
+    finally:
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except OSError:
+            current_app.logger.warning("Failed to remove OCR temp file: %s", temp_path)
