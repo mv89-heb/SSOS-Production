@@ -8,6 +8,7 @@ from app.models.inventory_movement import InventoryMovement, MOVEMENT_COUNT
 from app.models.inventory_planning_period import InventoryPlanningPeriod
 from app.models.product import Product
 from app.models.supplier import Supplier
+from app.services.inventory_consumption_planning_service import InventoryConsumptionPlanningService
 from app.services.inventory_unified_planning_service import InventoryUnifiedPlanningService
 
 
@@ -20,7 +21,7 @@ class InventoryCalendarService:
 
     def __init__(self, tenant_id: int):
         self.tenant_id = tenant_id
-        self.engine = InventoryUnifiedPlanningService(tenant_id)
+        self.engine = InventoryConsumptionPlanningService(tenant_id)
 
     @staticmethod
     def _parse_weekdays(value):
