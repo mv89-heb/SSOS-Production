@@ -217,9 +217,10 @@ def create_receipt(order_id):
     except HTTPException as exc:
         return _handle(exc)
     payload = request.get_json(silent=True) or {}
+    idempotency_key = request.headers.get("Idempotency-Key")
     try:
-        receipt = ReceiptService(tenant_id=current_user.tenant_id).create_receipt(
-            current_user, order_id, payload
+        receipt, replayed = ReceiptService(tenant_id=current_user.tenant_id).create_receipt(
+            current_user, order_id, payload, idempotency_key=idempotency_key
         )
         db.session.commit()
     except HTTPException as exc:
@@ -233,7 +234,7 @@ def create_receipt(order_id):
             "error": "receipt_transaction_failed",
             "message": "The receipt could not be posted",
         }), 500
-    return jsonify({"success": True, "receipt": receipt.to_dict()}), 201
+    return jsonify({"success": True, "receipt": receipt.to_dict(), "replayed": replayed}), (200 if replayed else 201)
 
 @orders_bp.route("/<int:order_id>/receipts/<int:receipt_id>", methods=["GET"])
 @login_required
