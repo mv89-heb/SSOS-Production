@@ -15,6 +15,7 @@ const navigation = [
   { name: "מחסן ומלאי", href: "/dashboard/inventory", icon: Warehouse },
   { name: "דיווח ספירת מלאי", href: "/dashboard/inventory/count", icon: ClipboardCheck },
   { name: "הזמנות רכש", href: "/dashboard/orders", icon: ShoppingCart },
+  { name: "לוח שנה", href: "/dashboard/calendar", icon: CalendarDays },
   { name: "תזכורות", href: "/dashboard/reminders", icon: Bell },
   { name: "השוואת ספקים", href: "/dashboard/price-intelligence/overview", icon: BarChart3 },
   { name: "מרכז מודיעין רכש", href: "/dashboard/procurement-intelligence", icon: BrainCircuit },
