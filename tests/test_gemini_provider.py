@@ -72,3 +72,12 @@ def test_pdf_uses_single_whole_document_request(tmp_path):
     assert result.data["pages_processed"] == 2
     assert result.data["extraction_mode"] == "pdf_whole_document"
     assert provider._client.models.generate_content.call_count == 1
+
+
+def test_provider_defaults_to_flash_lite():
+    provider = GeminiProvider.__new__(GeminiProvider)
+    provider.model = "gemini-3.5-flash-lite"
+    provider.fallback_model = "gemini-3.6-flash"
+    provider.thinking_level = "low"
+    assert provider.model == "gemini-3.5-flash-lite"
+    assert provider.fallback_model == "gemini-3.6-flash"
