@@ -184,15 +184,18 @@ class DocumentIntelligenceService:
                     raise BadRequest("Supplier does not belong to this tenant or is inactive")
                 if product is None:
                     raise BadRequest("Product does not belong to this tenant or is inactive")
-                try:
-                    price_value = float(price)
-                except (TypeError, ValueError):
-                    raise BadRequest("Reviewed price must be numeric")
-                if price_value <= 0:
-                    raise BadRequest("Reviewed price must be greater than zero")
+                price_value = None
+                if price not in (None, ""):
+                    try:
+                        parsed_price = float(price)
+                    except (TypeError, ValueError):
+                        raise BadRequest("Reviewed price must be numeric when provided")
+                    if parsed_price > 0:
+                        price_value = parsed_price
                 currency = (item.get("currency") or row.extracted_data.get("currency") or "ILS").upper()
-                intelligence.record_observation(product_id=product_id, supplier_id=supplier_id, observed_price=price_value, currency=currency, unit=item.get("unit"), package_quantity=item.get("package_quantity"), source_type=row.document_type or "OTHER", source_document_id=row.id, match_method=item.get("match_method") or "MANUAL_REVIEW", match_confidence=item.get("match_confidence"))
-                if not bool(item.get("update_price", False)):
+                if price_value is not None:
+                    intelligence.record_observation(product_id=product_id, supplier_id=supplier_id, observed_price=price_value, currency=currency, unit=item.get("unit"), package_quantity=item.get("package_quantity"), source_type=row.document_type or "OTHER", source_document_id=row.id, match_method=item.get("match_method") or "MANUAL_REVIEW", match_confidence=item.get("match_confidence"))
+                if not bool(item.get("update_price", False)) or price_value is None:
                     continue
                 intelligence.accept_price_change(product_id=product_id, supplier_id=supplier_id, new_price=price_value, currency=currency, unit=item.get("unit"), source_type=row.document_type or "OTHER", source_document_id=row.id)
                 if supplier_id == product.supplier_id:
