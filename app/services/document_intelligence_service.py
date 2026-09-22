@@ -13,6 +13,7 @@ from app.models.product import Product
 from app.models.supplier import Supplier
 from app.models.supplier_offer import SupplierProductOffer
 from app.services.ai_service import AIService
+from app.services.catalog_service import CatalogService
 from app.services.permission_service import PermissionService
 from app.services.price_intelligence_service import PriceIntelligenceService
 from app.services.product_matching_service import ProductMatchingService
@@ -157,6 +158,102 @@ class DocumentIntelligenceService:
             self._finalize_temp_file(row)
             db.session.commit()
             raise
+
+    def create_product_from_line(self, analysis_id: int, line_index: int, data: dict | None = None):
+        """Create a catalog product from one extracted line and apply that line atomically."""
+        PermissionService.require_role_at_least("manager")
+        row = self._get(analysis_id)
+        if row.status not in {"ANALYZED", "PARTIALLY_APPLIED"} or not isinstance(row.extracted_data, dict):
+            raise BadRequest("Document must be successfully analyzed before creating a catalog product")
+        extracted_items = row.extracted_data.get("items") if isinstance(row.extracted_data.get("items"), list) else []
+        if not isinstance(line_index, int) or isinstance(line_index, bool) or line_index < 0 or line_index >= len(extracted_items):
+            raise BadRequest("A valid line_index is required")
+        applied_indexes = {int(index) for index in (row.extracted_data.get("applied_line_indexes") or []) if str(index).isdigit()}
+        if line_index in applied_indexes:
+            raise BadRequest("This document line was already applied")
+        item = extracted_items[line_index]
+        if not isinstance(item, dict):
+            raise BadRequest("The selected document line is invalid")
+        payload = data if isinstance(data, dict) else {}
+        supplier_id = payload.get("supplier_id")
+        if not isinstance(supplier_id, int) or isinstance(supplier_id, bool) or supplier_id <= 0:
+            supplier_id = (item.get("supplier_matching") or {}).get("supplier_id")
+        if not isinstance(supplier_id, int) or isinstance(supplier_id, bool) or supplier_id <= 0:
+            raise BadRequest("A supplier must be selected before adding the product")
+        supplier = Supplier.query.filter_by(id=supplier_id, tenant_id=self.tenant_id, active=True).first()
+        if supplier is None:
+            raise BadRequest("Supplier does not belong to this tenant or is inactive")
+
+        name = str(payload.get("name") or item.get("description") or "").strip()
+        if not name:
+            raise BadRequest("Product name is required")
+        supplier_sku = str(
+            payload.get("supplier_sku")
+            if payload.get("supplier_sku") is not None
+            else item.get("supplier_sku") or ""
+        ).strip() or None
+        barcode = str(
+            payload.get("barcode")
+            if payload.get("barcode") is not None
+            else item.get("barcode") or ""
+        ).strip() or None
+        unit = str(
+            payload.get("unit")
+            if payload.get("unit") is not None
+            else item.get("unit") or ""
+        ).strip() or None
+
+        price_raw = payload.get("current_price") if "current_price" in payload else item.get("unit_price")
+        price = 0.0
+        if price_raw not in (None, ""):
+            try:
+                price = float(price_raw)
+            except (TypeError, ValueError):
+                raise BadRequest("Product price must be numeric when provided")
+            if price < 0:
+                raise BadRequest("Product price cannot be negative")
+
+        package_raw = (
+            payload.get("units_per_carton")
+            if "units_per_carton" in payload
+            else item.get("package_quantity")
+        )
+        units_per_carton = None
+        if package_raw not in (None, ""):
+            try:
+                package_value = float(package_raw)
+            except (TypeError, ValueError):
+                raise BadRequest("Units per carton must be numeric when provided")
+            if package_value <= 0 or not package_value.is_integer():
+                raise BadRequest("Units per carton must be a positive whole number")
+            units_per_carton = int(package_value)
+
+        currency = str(payload.get("currency") or row.extracted_data.get("currency") or "ILS").upper()
+        product = CatalogService(self.tenant_id, self.user_id).create_product({
+            "supplier_id": supplier_id,
+            "name": name,
+            "description": str(payload.get("description") or item.get("description") or "").strip() or None,
+            "current_price": price,
+            "currency": currency,
+            "barcode": barcode,
+            "unit": unit,
+            "units_per_carton": units_per_carton,
+            "supplier_sku": supplier_sku,
+        })
+        db.session.flush()
+        applied = self.apply(analysis_id, [{
+            "line_index": line_index,
+            "product_id": product.id,
+            "supplier_id": supplier_id,
+            "price": price if price > 0 else None,
+            "currency": currency,
+            "unit": unit,
+            "package_quantity": units_per_carton,
+            "update_price": price > 0,
+            "match_method": "NEW_PRODUCT_FROM_DOCUMENT",
+            "match_confidence": 1.0,
+        }])
+        return applied, product
 
     def apply(self, analysis_id: int, lines: list[dict]):
         """Apply only explicitly reviewed mappings; Gemini never mutates catalog state."""

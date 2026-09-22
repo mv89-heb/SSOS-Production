@@ -117,6 +117,25 @@ def apply_document(analysis_id):
         return _internal_error(exc, "apply")
 
 
+@document_intelligence_bp.route("/<int:analysis_id>/create-product", methods=["POST"])
+@login_required
+def create_product_from_document_line(analysis_id):
+    try:
+        payload = request.get_json(silent=True) or {}
+        line_index = payload.get("line_index")
+        if not isinstance(line_index, int) or isinstance(line_index, bool):
+            raise BadRequest("line_index is required")
+        product_data = payload.get("product") if isinstance(payload.get("product"), dict) else {}
+        row, product = DocumentIntelligenceService(
+            current_user.tenant_id, current_user.id
+        ).create_product_from_line(analysis_id, line_index, product_data)
+        return jsonify({"success": True, "analysis": row.to_dict(), "product": product.to_dict()}), 201
+    except HTTPException as exc:
+        return _handle(exc)
+    except Exception as exc:
+        return _internal_error(exc, "create-product")
+
+
 @document_intelligence_bp.route("/<int:analysis_id>", methods=["GET"])
 @login_required
 def get_document_analysis(analysis_id):

@@ -59,4 +59,5 @@ export const documentIntelligenceService = {
   analyze: async (id: number) => { const { data } = await apiClient.post<{ success: boolean; analysis: DocumentAnalysis }>(`/api/document-intelligence/${id}/analyze`); return data.analysis; },
   get: async (id: number) => { const { data } = await apiClient.get<{ success: boolean; analysis: DocumentAnalysis }>(`/api/document-intelligence/${id}`); return data.analysis; },
   apply: async (id: number, lines: Array<Record<string, unknown>>) => { const { data } = await apiClient.post<{ success: boolean; analysis: DocumentAnalysis }>(`/api/document-intelligence/${id}/apply`, { lines }); return data.analysis; },
+  createProductFromLine: async (id: number, lineIndex: number, product: Record<string, unknown>) => { const { data } = await apiClient.post<{ success: boolean; analysis: DocumentAnalysis; product: any }>(`/api/document-intelligence/${id}/create-product`, { line_index: lineIndex, product }); return data; },
 };
