@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import time
 from difflib import SequenceMatcher
 from typing import Any, Callable
 
@@ -151,6 +152,15 @@ class GeminiProvider:
             merged["supplier"] = aggregate_supplier
         return merged
 
+    @staticmethod
+    def _is_retryable_error(exc: Exception) -> bool:
+        """Identify transient Gemini/network failures that are safe to retry."""
+        detail = str(exc).lower()
+        return any(marker in detail for marker in (
+            "timeout", "timed out", "deadline exceeded", "temporarily unavailable",
+            "service unavailable", "unavailable", "resource exhausted", "429", "500", "502", "503", "504",
+        ))
+
     def _generate_structured_page(self, page_bytes: bytes, page_number: int, page_count: int, schema: dict, system_instruction: str | None) -> dict:
         from google.genai import types
         page_instruction = (
@@ -167,11 +177,38 @@ class GeminiProvider:
         )
         instruction = f"{system_instruction}\n\n{page_instruction}" if system_instruction else page_instruction
         config = types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema, system_instruction=instruction)
-        response = self._client.models.generate_content(model=self.model, contents=[types.Part.from_text(text=f"Extract all procurement data from page {page_number} of {page_count}, separating all supplier sections."), types.Part.from_bytes(data=page_bytes, mime_type="application/pdf")], config=config)
-        text = (response.text or "").strip()
-        if not text:
-            raise ValueError(f"Gemini returned an empty response for page {page_number}")
-        return json.loads(text)
+        contents = [
+            types.Part.from_text(text=f"Extract all procurement data from page {page_number} of {page_count}, separating all supplier sections."),
+            types.Part.from_bytes(data=page_bytes, mime_type="application/pdf"),
+        ]
+
+        max_attempts = 2
+        last_error: Exception | None = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = self._client.models.generate_content(
+                    model=self.model,
+                    contents=contents,
+                    config=config,
+                )
+                text = (response.text or "").strip()
+                if not text:
+                    raise ValueError(f"Gemini returned an empty response for page {page_number}")
+                return json.loads(text)
+            except json.JSONDecodeError:
+                raise
+            except Exception as exc:
+                last_error = exc
+                if attempt >= max_attempts or not self._is_retryable_error(exc):
+                    raise
+                delay = min(8, 2 ** (attempt - 1))
+                logger.warning(
+                    "Retrying Gemini page %s/%s after transient failure (attempt %s/%s): %s",
+                    page_number, page_count, attempt, max_attempts, _safe_provider_error(exc),
+                )
+                time.sleep(delay)
+
+        raise last_error or RuntimeError(f"Gemini failed to analyze page {page_number}")
 
     def generate_structured_from_file(self, file_path: str, schema: dict, *, system_instruction: str | None = None, progress_callback: ProgressCallback | None = None) -> AIResult:
         """Extract structured procurement data and report live progress for PDF pages."""
