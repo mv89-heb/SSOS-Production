@@ -36,6 +36,12 @@ export default function InventoryCountPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const scanTimer = useRef<number | null>(null);
 
+  const latestCount = useQuery({
+    queryKey: ["inventory", "latest-count"],
+    queryFn: inventoryService.getLatestCount,
+    staleTime: 10_000,
+  });
+
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["inventory", "summary"],
     queryFn: inventoryService.getSummary,
@@ -142,7 +148,7 @@ export default function InventoryCountPage() {
       if (items.some((item) => !Number.isInteger(item.quantity) || item.quantity < 0)) {
         throw new Error("יש להזין כמויות שלמות שאינן שליליות.");
       }
-      const result = await apiClient.post<{ success: boolean; counted: number }>(
+      const result = await apiClient.post<{ success: boolean; count_id: string; counted: number; counted_at: string; movements: any[] }>(
         "/api/inventory/count/bulk",
         { items, note: note.trim() || undefined }
       );
@@ -152,6 +158,8 @@ export default function InventoryCountPage() {
       localStorage.removeItem(DRAFT_KEY);
       setFilter("remaining");
       await qc.invalidateQueries({ queryKey: ["inventory"] });
+      await qc.invalidateQueries({ queryKey: ["inventory", "latest-count"] });
+      await latestCount.refetch();
       await refetch();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "שמירת הספירה נכשלה.");
@@ -247,6 +255,29 @@ export default function InventoryCountPage() {
           <CheckCircle2 className="mt-0.5 shrink-0" size={18}/><span>{message}</span>
         </div>
       )}
+      {latestCount.data?.has_count && (
+        <section className="overflow-hidden rounded-3xl border border-indigo-200 bg-white shadow-sm dark:border-indigo-900/60 dark:bg-slate-950">
+          <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"><ClipboardCheck size={21}/></div>
+              <div>
+                <div className="text-xs font-bold text-indigo-600 dark:text-indigo-300">הספירה האחרונה שנשמרה</div>
+                <div className="mt-1 text-lg font-black">{latestCount.data.counted} מוצרים</div>
+                <div className="mt-1 text-xs text-slate-500">{latestCount.data.counted_at ? new Intl.DateTimeFormat("he-IL", { dateStyle: "medium", timeStyle: "short" }).format(new Date(latestCount.data.counted_at)) : ""}</div>
+              </div>
+            </div>
+            <button onClick={() => setFilter("counted")} className="min-h-11 rounded-xl bg-indigo-600 px-4 text-sm font-black text-white">הצג את המוצרים שנספרו</button>
+          </div>
+          <div className="border-t border-indigo-100 px-5 py-3 text-xs text-slate-500 dark:border-indigo-950">
+            {latestCount.data.movements.slice(0, 4).map((movement) => {
+              const product = products.find((item) => item.id === movement.product_id);
+              return <span key={movement.id} className="ml-3 inline-block font-bold">{product?.name || `מוצר #${movement.product_id}`}: {fmt(movement.quantity)}</span>;
+            })}
+            {latestCount.data.movements.length > 4 && <span>ועוד {latestCount.data.movements.length - 4}…</span>}
+          </div>
+        </section>
+      )}
+
 
       <section className="sticky top-1 z-30 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
         <div className="flex gap-2">

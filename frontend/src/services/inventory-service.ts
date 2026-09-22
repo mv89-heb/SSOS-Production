@@ -41,6 +41,16 @@ export interface InventoryPlanningPeriod {
   notes: string | null;
 }
 
+export interface LatestInventoryCount {
+  success: boolean;
+  has_count: boolean;
+  count_id: string | null;
+  counted_at: string | null;
+  counted: number;
+  note?: string | null;
+  movements: InventoryMovement[];
+}
+
 export interface InventoryCountStatus {
   count_weekday: number;
   count_time: string;
@@ -128,6 +138,7 @@ export const inventoryService = {
     (await apiClient.get<{ success: boolean; periods: InventoryPlanningPeriod[] }>("/api/inventory/planning/periods")).data.periods,
   seedHolidayPeriods: async () =>
     (await apiClient.post<{ success: boolean; created_count: number; periods: InventoryPlanningPeriod[] }>("/api/inventory/planning/seed-holidays")).data,
+  getLatestCount: async () => (await apiClient.get<LatestInventoryCount>("/api/inventory/count/latest")).data,
   getCountStatus: async () =>
     (await apiClient.get<{ success: boolean } & InventoryCountStatus>("/api/inventory/planning/count-status")).data,
 };
