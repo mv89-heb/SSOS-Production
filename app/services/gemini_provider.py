@@ -349,7 +349,7 @@ class GeminiProvider:
                         "response_mime_type": "application/json",
                         "response_schema": schema,
                         "system_instruction": instruction,
-                        "thinking_config": types.ThinkingConfig(thinking_level=self.thinking_level) if self.thinking_level else None,
+                        "thinking_config": types.ThinkingConfig(thinking_level=getattr(self, "thinking_level", "low")) if getattr(self, "thinking_level", "low") else None,
                     }
 
                     if use_files_api:
