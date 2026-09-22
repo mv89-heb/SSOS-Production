@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle, ArrowDown, ArrowUp, Award, BarChart3, BrainCircuit, CheckCircle2,
@@ -52,7 +53,9 @@ function GeminiCard({ insight, model, isLoading, error, onRun }: { insight?: Gem
 export default function PriceIntelligencePage() {
   const { data: products = [], isLoading: productsLoading, isError: productsError } = useProducts();
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const searchParams = useSearchParams();
+  const initialProductId = Number(searchParams.get("product")) || null;
+  const [selectedId, setSelectedId] = useState<number | null>(initialProductId);
   const [quantity, setQuantity] = useState("100");
   const [geminiError, setGeminiError] = useState<string>();
   const [geminiInsight, setGeminiInsight] = useState<GeminiInsight>();
