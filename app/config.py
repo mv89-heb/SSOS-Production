@@ -67,6 +67,7 @@ class BaseConfig:
     GEMINI_ENABLED = _env_bool("GEMINI_ENABLED", False)
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
     GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
+    GEMINI_THINKING_LEVEL = os.environ.get("GEMINI_THINKING_LEVEL", "low").strip()
     GEMINI_FALLBACK_MODEL = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite").strip()
     GEMINI_TIMEOUT = float(os.environ.get("GEMINI_TIMEOUT", "120"))
 
@@ -122,6 +123,7 @@ class ProductionConfig(BaseConfig):
         app.config["AI_ENABLED"] = _env_bool("AI_ENABLED", bool(gemini_api_key))
         app.config["GEMINI_ENABLED"] = _env_bool("GEMINI_ENABLED", bool(gemini_api_key))
         app.config["GEMINI_MODEL"] = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
+        app.config["GEMINI_THINKING_LEVEL"] = os.environ.get("GEMINI_THINKING_LEVEL", "low").strip()
         app.config["GEMINI_FALLBACK_MODEL"] = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite").strip()
         app.config["GEMINI_TIMEOUT"] = float(os.environ.get("GEMINI_TIMEOUT", "120"))
         app.config["GOOGLE_CALENDAR_CLIENT_ID"] = os.environ.get("GOOGLE_CALENDAR_CLIENT_ID", "").strip()
