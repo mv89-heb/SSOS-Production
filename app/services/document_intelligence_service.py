@@ -240,6 +240,7 @@ class DocumentIntelligenceService:
             "units_per_carton": units_per_carton,
             "supplier_sku": supplier_sku,
         })
+        db.session.flush()
         applied = self.apply(analysis_id, [{
             "line_index": line_index,
             "product_id": product.id,
