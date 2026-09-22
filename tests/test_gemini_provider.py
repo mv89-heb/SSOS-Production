@@ -36,3 +36,10 @@ def test_merge_page_results_handles_pages_without_items():
 
     assert result["pages_processed"] == 2
     assert result["items"] == [{"description": "Item", "page_number": 2}]
+
+
+def test_retryable_error_detection():
+    assert GeminiProvider._is_retryable_error(TimeoutError("read operation timed out"))
+    assert GeminiProvider._is_retryable_error(RuntimeError("503 UNAVAILABLE"))
+    assert GeminiProvider._is_retryable_error(RuntimeError("429 RESOURCE_EXHAUSTED"))
+    assert not GeminiProvider._is_retryable_error(ValueError("400 invalid argument"))
