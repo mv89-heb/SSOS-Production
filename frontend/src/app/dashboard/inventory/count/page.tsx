@@ -371,7 +371,7 @@ function CountCard({
             <span>במערכת: <b>{fmt(current)}</b> {unit}</span>
           </div>
         </div>
-        {counted && <div className={`shrink-0 text-left text-sm font-black ${delta === 0 ? "text-slate-500" : delta > 0 ? "text-emerald-600" : "text-red-600"}`}>{delta > 0 ? "+" : ""}{fmt(delta ?? 0)}</div>}
+        {counted && <div className={`shrink-0 text-left text-sm font-black ${(delta ?? 0) === 0 ? "text-slate-500" : (delta ?? 0) > 0 ? "text-emerald-600" : "text-red-600"}`}>{(delta ?? 0) > 0 ? "+" : ""}{fmt(delta ?? 0)}</div>}
         {expanded ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}
       </button>
 
