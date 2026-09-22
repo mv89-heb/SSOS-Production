@@ -138,9 +138,11 @@ class ProductMatchingService:
             return None
         score, method, supplier = candidates[0]
         second_score = candidates[1][0] if len(candidates) > 1 else 0.0
+        if second_score >= 0.75 and score - second_score < 0.08:
+            return {"supplier_id": None, "supplier_name": name, "confidence": round(score, 4), "method": method, "decision": "REVIEW"}
         if method == "NAME_CORE":
             return {"supplier_id": supplier.id, "supplier_name": supplier.name, "confidence": 1.0, "method": method, "decision": "AUTO_MATCH"}
-        if score < 0.75 or (second_score >= 0.75 and score - second_score < 0.08):
+        if score < 0.75:
             return {"supplier_id": None, "supplier_name": name, "confidence": round(score, 4), "method": method, "decision": "REVIEW"}
         return {"supplier_id": supplier.id, "supplier_name": supplier.name, "confidence": round(score, 4), "method": method, "decision": "AUTO_MATCH" if score >= 0.88 else "REVIEW"}
 
