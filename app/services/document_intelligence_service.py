@@ -164,15 +164,24 @@ class DocumentIntelligenceService:
         row = self._get(analysis_id)
         if row.status == "APPLIED":
             return row
-        if row.status != "ANALYZED" or not isinstance(row.extracted_data, dict):
+        if row.status not in {"ANALYZED", "PARTIALLY_APPLIED"} or not isinstance(row.extracted_data, dict):
             raise BadRequest("Document must be successfully analyzed before apply")
         if not isinstance(lines, list) or not lines:
             raise BadRequest("lines must contain at least one reviewed mapping")
         intelligence = PriceIntelligenceService(self.tenant_id)
+        extracted_items = row.extracted_data.get("items") if isinstance(row.extracted_data.get("items"), list) else []
+        applied_indexes = {int(index) for index in (row.extracted_data.get("applied_line_indexes") or []) if str(index).isdigit()}
+        requested_indexes = []
         try:
             for item in lines:
                 if not isinstance(item, dict):
                     raise BadRequest("Each reviewed line must be an object")
+                line_index = item.get("line_index")
+                if not isinstance(line_index, int) or isinstance(line_index, bool) or line_index < 0 or line_index >= len(extracted_items):
+                    raise BadRequest("Each reviewed line requires a valid line_index")
+                if line_index in applied_indexes:
+                    raise BadRequest(f"Line {line_index + 1} was already applied")
+                requested_indexes.append(line_index)
                 product_id, supplier_id, price = item.get("product_id"), item.get("supplier_id"), item.get("price")
                 if not isinstance(product_id, int) or isinstance(product_id, bool) or product_id <= 0:
                     raise BadRequest("Each reviewed line requires a valid product_id")
@@ -215,7 +224,9 @@ class DocumentIntelligenceService:
                             offer.unit = item["unit"]
                         offer.active = True
                 db.session.flush()
-            row.status = "APPLIED"
+            applied_indexes.update(requested_indexes)
+            row.extracted_data["applied_line_indexes"] = sorted(applied_indexes)
+            row.status = "APPLIED" if len(applied_indexes) >= len(extracted_items) else "PARTIALLY_APPLIED"
             row.applied_at = datetime.now(timezone.utc)
             row.applied_by = self.user_id
             db.session.commit()
