@@ -162,15 +162,24 @@ class ProductMatchingService:
             {"product_id": product.id, "product_name": product.name, "supplier_id": product.supplier_id, "supplier_name": product.supplier.name if product.supplier else None, "confidence": round(score, 4), "method": method}
             for score, method, product in scored[: max(1, limit)]
         ]
-        best = suggestions[0] if suggestions else None
-        if best is None:
-            decision = "NO_MATCH"
-        elif best["confidence"] >= 0.93:
+        candidate = suggestions[0] if suggestions else None
+        if candidate is None:
+            return {"decision": "NO_MATCH", "best_match": None, "suggestions": []}
+
+        confidence = candidate["confidence"]
+        if confidence >= 0.93:
             decision = "AUTO_MATCH"
-        elif best["confidence"] >= 0.75:
+            best = candidate
+        elif confidence >= 0.75:
             decision = "REVIEW"
+            best = candidate
         else:
+            # Keep low-confidence candidates as suggestions for human review, but
+            # never present a weak fuzzy match as the selected product. This is
+            # especially important for generic invoice rows such as packaging.
             decision = "LOW_CONFIDENCE"
+            best = None
+
         if best is not None:
             best["decision"] = decision
         return {"decision": decision, "best_match": best, "suggestions": suggestions}
