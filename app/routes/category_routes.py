@@ -37,7 +37,7 @@ def classify_product(product_id):
         product = Product.query.filter_by(id=product_id, tenant_id=current_user.tenant_id).first()
         if not product:
             raise NotFound("Product not found")
-        result = classifier.classify(current_user.tenant_id, product.name)
+        result = classifier.classify(current_user.tenant_id, product.name, product.description, product.supplier.name if product.supplier else None)
         _apply_classification(product, result)
         AuditService.log_event(
             current_user.tenant_id,
