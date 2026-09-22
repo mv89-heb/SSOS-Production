@@ -233,66 +233,201 @@ class GeminiProvider:
         raise last_error or RuntimeError(f"Gemini failed to analyze page {page_number}")
 
     def generate_structured_from_file(self, file_path: str, schema: dict, *, system_instruction: str | None = None, progress_callback: ProgressCallback | None = None) -> AIResult:
-        """Extract structured procurement data and report live progress for PDF pages."""
+        """Extract structured procurement data with a whole-document PDF request when practical."""
         try:
             from google.genai import types
             config_kwargs = {"response_mime_type": "application/json", "response_schema": schema}
             if system_instruction:
                 config_kwargs["system_instruction"] = system_instruction
-            if os.path.splitext(file_path)[1].lower() == ".svg":
+
+            def run_with_model_fallback(contents: Any, request_config: dict[str, Any] | None = None) -> tuple[str, str]:
+                request_config = request_config or config_kwargs
+                models_to_try = [self.model]
+                if self.fallback_model:
+                    models_to_try.append(self.fallback_model)
+                last_error: Exception | None = None
+
+                for model_index, model_name in enumerate(models_to_try):
+                    for attempt in range(1, 3):
+                        try:
+                            response = self._client.models.generate_content(
+                                model=model_name,
+                                contents=contents,
+                                config=types.GenerateContentConfig(**request_config),
+                            )
+                            text = (response.text or "").strip()
+                            if not text:
+                                raise ValueError("Gemini returned an empty response")
+                            return text, model_name
+                        except json.JSONDecodeError:
+                            raise
+                        except Exception as exc:
+                            last_error = exc
+                            retryable = self._is_retryable_error(exc)
+                            if retryable and attempt < 2:
+                                delay = min(8, 2 ** (attempt - 1))
+                                logger.warning(
+                                    "Retrying Gemini document analysis on model %s "
+                                    "(attempt %s/2): %s",
+                                    model_name, attempt, _safe_provider_error(exc),
+                                )
+                                time.sleep(delay)
+                                continue
+                            if retryable and model_index < len(models_to_try) - 1:
+                                logger.warning(
+                                    "Gemini model %s unavailable; falling back to %s: %s",
+                                    model_name, models_to_try[model_index + 1],
+                                    _safe_provider_error(exc),
+                                )
+                                break
+                            raise
+                raise last_error or RuntimeError("Gemini document analysis failed")
+
+            extension = os.path.splitext(file_path)[1].lower()
+
+            if extension == ".svg":
                 if progress_callback:
                     progress_callback({"phase": "processing", "percent": 10, "pages_total": None, "pages_processed": None, "eta_seconds": None})
                 with open(file_path, "r", encoding="utf-8", errors="replace") as handle:
                     svg_text = handle.read()
                 if not svg_text.strip():
                     return AIResult(success=False, error="empty_svg", provider=self.name, model=self.model)
-                prompt = "Analyze the following SVG/XML procurement document. Extract only facts visible in its text/XML content. Do not invent missing values. Separate all distinct supplier sections.\n\nSVG/XML:\n" + svg_text
-                response = self._client.models.generate_content(model=self.model, contents=prompt, config=types.GenerateContentConfig(**config_kwargs))
-                text = (response.text or "").strip()
-                if not text:
-                    return AIResult(success=False, error="empty_ai_response", provider=self.name, model=self.model)
+                prompt = (
+                    "Analyze the following SVG/XML procurement document. Extract only facts visible in "
+                    "its text/XML content. Do not invent missing values. Separate all distinct supplier sections.\n\n"
+                    "SVG/XML:\n" + svg_text
+                )
+                text, used_model = run_with_model_fallback(prompt)
                 data = json.loads(text)
                 if progress_callback:
                     progress_callback({"phase": "completed", "percent": 100, "pages_total": None, "pages_processed": None, "eta_seconds": 0})
-                return AIResult(success=True, text=text, data=data, provider=self.name, model=self.model)
-            if os.path.splitext(file_path)[1].lower() == ".pdf":
-                from pypdf import PdfReader, PdfWriter
+                return AIResult(success=True, text=text, data=data, provider=self.name, model=used_model)
+
+            if extension == ".pdf":
+                from pypdf import PdfReader
+
                 reader = PdfReader(file_path, strict=False)
                 page_count = len(reader.pages)
                 if page_count <= 0:
                     return AIResult(success=False, error="empty_pdf", provider=self.name, model=self.model)
+
                 if progress_callback:
-                    progress_callback({"phase": "processing", "percent": 0, "pages_total": page_count, "pages_processed": 0, "eta_seconds": None})
+                    progress_callback({
+                        "phase": "processing", "percent": 5,
+                        "pages_total": page_count, "pages_processed": 0, "eta_seconds": None,
+                    })
+
+                # Gemini natively understands an entire PDF. For normal procurement
+                # documents, one document-level request is much faster than one request
+                # per page. Keep the existing page-by-page strategy only for unusually
+                # large PDFs where the structured response could become excessive.
+                max_whole_document_pages = 40
+                file_size = os.path.getsize(file_path)
+                use_files_api = file_size > 10 * 1024 * 1024
+
+                if page_count <= max_whole_document_pages:
+                    document_instruction = (
+                        f"Analyze the ENTIRE PDF ({page_count} pages) as one procurement document. "
+                        "Do not analyze it page-by-page independently. Identify EVERY supplier and EVERY "
+                        "product/line item across the entire document. The document may contain multiple "
+                        "suppliers on the same page or across pages. Preserve supplier-to-line-item association. "
+                        "For every extracted line item, include its source page number when the schema supports it. "
+                        "Do not invent values. If a supplier continues across pages, merge its lines into the same "
+                        "supplier section when the supplier identity is clear. Return only structured JSON matching "
+                        "the supplied schema."
+                    )
+                    instruction = f"{system_instruction}\n\n{document_instruction}" if system_instruction else document_instruction
+                    request_config = {
+                        "response_mime_type": "application/json",
+                        "response_schema": schema,
+                        "system_instruction": instruction,
+                    }
+
+                    if use_files_api:
+                        uploaded = self._client.files.upload(
+                            file=file_path,
+                            config={"mime_type": "application/pdf"},
+                        )
+                        contents = [
+                            types.Part.from_text(text="Extract all procurement data from this complete PDF."),
+                            uploaded,
+                        ]
+                    else:
+                        with open(file_path, "rb") as handle:
+                            pdf_bytes = handle.read()
+                        contents = [
+                            types.Part.from_text(text="Extract all procurement data from this complete PDF."),
+                            types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                        ]
+
+                    text, used_model = run_with_model_fallback(contents, request_config)
+                    data = json.loads(text)
+                    if not isinstance(data, dict):
+                        raise ValueError("Gemini returned structured data in an unexpected format")
+                    data["page_count"] = page_count
+                    data["pages_processed"] = page_count
+                    data["extraction_mode"] = "pdf_whole_document"
+
+                    if progress_callback:
+                        progress_callback({
+                            "phase": "completed", "percent": 100,
+                            "pages_total": page_count, "pages_processed": page_count, "eta_seconds": 0,
+                        })
+                    return AIResult(
+                        success=True,
+                        text=json.dumps(data, ensure_ascii=False),
+                        data=data,
+                        provider=self.name,
+                        model=used_model,
+                    )
+
+                # Very large PDFs retain page-level extraction to avoid oversized
+                # structured responses.
+                if progress_callback:
+                    progress_callback({
+                        "phase": "processing", "percent": 10,
+                        "pages_total": page_count, "pages_processed": 0, "eta_seconds": None,
+                    })
                 page_results: list[dict] = []
+                from pypdf import PdfWriter
                 for page_index, page in enumerate(reader.pages, start=1):
                     writer = PdfWriter()
                     writer.add_page(page)
                     page_buffer = io.BytesIO()
                     writer.write(page_buffer)
                     writer.close()
-                    page_results.append(self._generate_structured_page(page_buffer.getvalue(), page_index, page_count, schema, system_instruction))
-                    processed = page_index
-                    percent = round(processed / page_count * 100)
+                    page_results.append(
+                        self._generate_structured_page(
+                            page_buffer.getvalue(), page_index, page_count, schema, system_instruction
+                        )
+                    )
                     if progress_callback:
-                        progress_callback({"phase": "processing", "percent": percent, "pages_total": page_count, "pages_processed": processed})
+                        progress_callback({
+                            "phase": "processing",
+                            "percent": round(page_index / page_count * 100),
+                            "pages_total": page_count, "pages_processed": page_index,
+                        })
                 data = self._merge_page_results(page_results, page_count)
                 text = json.dumps(data, ensure_ascii=False)
                 if data["pages_processed"] != page_count:
-                    return AIResult(success=False, text=text, data=data, error=f"pdf_page_coverage_error: processed {data['pages_processed']} of {page_count} pages", provider=self.name, model=self.model)
+                    return AIResult(
+                        success=False, text=text, data=data,
+                        error=f"pdf_page_coverage_error: processed {data['pages_processed']} of {page_count} pages",
+                        provider=self.name, model=self.model,
+                    )
                 if progress_callback:
                     progress_callback({"phase": "completed", "percent": 100, "pages_total": page_count, "pages_processed": page_count, "eta_seconds": 0})
                 return AIResult(success=True, text=text, data=data, provider=self.name, model=self.model)
+
             if progress_callback:
                 progress_callback({"phase": "processing", "percent": 10, "pages_total": None, "pages_processed": None, "eta_seconds": None})
             uploaded = self._client.files.upload(file=file_path)
-            response = self._client.models.generate_content(model=self.model, contents=[uploaded], config=types.GenerateContentConfig(**config_kwargs))
-            text = (response.text or "").strip()
-            if not text:
-                return AIResult(success=False, error="empty_ai_response", provider=self.name, model=self.model)
+            text, used_model = run_with_model_fallback([uploaded])
             data = json.loads(text)
             if progress_callback:
                 progress_callback({"phase": "completed", "percent": 100, "pages_total": None, "pages_processed": None, "eta_seconds": 0})
-            return AIResult(success=True, text=text, data=data, provider=self.name, model=self.model)
+            return AIResult(success=True, text=text, data=data, provider=self.name, model=used_model)
+
         except json.JSONDecodeError:
             logger.exception("Gemini returned invalid structured JSON")
             return AIResult(success=False, error="invalid_structured_response", provider=self.name, model=self.model)
