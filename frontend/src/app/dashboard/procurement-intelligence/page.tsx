@@ -81,6 +81,11 @@ export default function ProcurementIntelligencePage() {
     queryFn: () => catalogService.listProducts(undefined, true),
     retry: 1,
   });
+  const supplierCatalog = useQuery({
+    queryKey: ["procurement-intelligence", "catalog-suppliers"],
+    queryFn: () => catalogService.listSuppliers(true),
+    retry: 1,
+  });
   const inventory = useQuery({
     queryKey: ["procurement-intelligence", "inventory-recommendations"],
     queryFn: () => priceIntelligenceService.getInventoryRecommendations({ lookback_days: 60, safety_days: 2, limit: 100 }),
@@ -101,6 +106,7 @@ export default function ProcurementIntelligencePage() {
     void summary.refetch();
     void suppliers.refetch();
     void products.refetch();
+    void supplierCatalog.refetch();
     void readiness.refetch();
     void inventory.refetch();
   };
@@ -120,7 +126,7 @@ export default function ProcurementIntelligencePage() {
   const data = summary.data;
   const supplierData = suppliers.data;
   const productRows = products.data ?? [];
-  const supplierNames = useMemo(() => new Map((suppliers.data ?? []).map((supplier) => [supplier.id, supplier.name])), [suppliers.data]);
+  const supplierNames = useMemo(() => new Map((supplierCatalog.data ?? []).map((supplier) => [supplier.id, supplier.name])), [supplierCatalog.data]);
   const readinessData = readiness.data;
   const inventoryRows = inventory.data?.recommendations ?? [];
   const urgentStock = inventoryRows.filter((row) => row.status === "urgent");
@@ -142,7 +148,7 @@ export default function ProcurementIntelligencePage() {
     if (!q) return productRows.slice(0, 40);
     return productRows.filter((product) => [product.name, product.sku, product.barcode, product.category, supplierNames.get(product.supplier_id)].some((value) => String(value ?? "").toLocaleLowerCase("he-IL").includes(q))).slice(0, 40);
   }, [productRows, productSearch]);
-  const loading = summary.isLoading || suppliers.isLoading || products.isLoading || readiness.isLoading || inventory.isLoading;
+  const loading = summary.isLoading || suppliers.isLoading || products.isLoading || supplierCatalog.isLoading || readiness.isLoading || inventory.isLoading;
 
   return (
     <div dir="rtl" className="space-y-6 pb-10">
@@ -171,7 +177,7 @@ export default function ProcurementIntelligencePage() {
         </div>
       </header>
 
-      {(summary.isError || suppliers.isError || products.isError || readiness.isError || inventory.isError) && (
+      {(summary.isError || suppliers.isError || products.isError || supplierCatalog.isError || readiness.isError || inventory.isError) && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
           <div className="font-bold">חלק מנתוני המודיעין לא נטענו</div>
           <div className="mt-1">הקטלוג והנתונים הזמינים עדיין מוצגים. לחץ על רענן נתונים לאחר שהשרת זמין.</div>
