@@ -15,6 +15,13 @@ class ProductMatchingService:
         "של", "עם", "ל", "ב", "מ", "ו", "ה", "את", "על", "או", "גרם", "קג",
         "קילו", "מיליליטר", "מ\"ל", "ליטר", "יח", "יחידה", "יחידות", "מארז", "אריזה",
         "the", "and", "of", "for", "with", "pack", "package", "unit", "units",
+        "חלבי", "פרווה", "במשקל", "קפוא", "קפואה", "קפואים", "לשוק", "חיצוני",
+        "מחיר", "לקג", "מוסדי", "בטעם", "מוצר",
+    }
+
+    SUPPLIER_STOP_WORDS = {
+        "בעמ", "בע"מ", "חברה", "חברות", "תעשיות", "תעשיה", "יבוא", "ושיווק",
+        "שיווק", "מסחר", "מסחרית",
     }
 
     def __init__(self, tenant_id: int):
@@ -27,6 +34,7 @@ class ProductMatchingService:
         if value is None:
             return ""
         text = unicodedata.normalize("NFKC", str(value)).casefold()
+        text = text.replace('תפו"ע', 'תפוח עץ').replace('תפו"א', 'תפוח אדמה').replace("מאפינס", "מאפין")
         text = text.replace("\u05f3", "'").replace("\u05f4", '"')
         text = re.sub(r"[\u200e\u200f\u202a-\u202e]", "", text)
         text = re.sub(r"[^\w\u0590-\u05ff\"]+", " ", text, flags=re.UNICODE)
@@ -50,6 +58,19 @@ class ProductMatchingService:
         if at and bt:
             return max(sequence, len(at & bt) / max(len(at), len(bt)))
         return sequence
+
+    @classmethod
+    def _supplier_name_score(cls, extracted_name, catalog_name) -> tuple[float, str]:
+        extracted_tokens = {t for t in cls.normalize(extracted_name).split() if len(t) > 1 and t not in cls.SUPPLIER_STOP_WORDS}
+        catalog_tokens = {t for t in cls.normalize(catalog_name).split() if len(t) > 1 and t not in cls.SUPPLIER_STOP_WORDS}
+        if not extracted_tokens or not catalog_tokens:
+            return cls._text_score(extracted_name, catalog_name), "NAME_SIMILARITY"
+        overlap = len(extracted_tokens & catalog_tokens)
+        if catalog_tokens <= extracted_tokens or extracted_tokens <= catalog_tokens:
+            return 1.0, "NAME_CORE"
+        coverage = overlap / max(len(extracted_tokens), len(catalog_tokens))
+        containment = overlap / min(len(extracted_tokens), len(catalog_tokens))
+        return max(coverage, containment if containment >= 0.8 else 0.0, cls._text_score(extracted_name, catalog_name)), "NAME_SIMILARITY"
 
     @classmethod
     def _identity_score(cls, extracted, product) -> tuple[float, str | None]:
@@ -106,32 +127,32 @@ class ProductMatchingService:
             number = self.compact(supplier.customer_number)
             if customer_number and number and customer_number == number:
                 return {"supplier_id": supplier.id, "supplier_name": supplier.name, "confidence": 1.0, "method": "CUSTOMER_NUMBER", "decision": "AUTO_MATCH"}
-            score = self._text_score(name, supplier.name)
+            score, method = self._supplier_name_score(name, supplier.name)
             if score > 0:
-                candidates.append((score, supplier))
+                candidates.append((score, method, supplier))
         candidates.sort(key=lambda row: row[0], reverse=True)
         if not candidates:
             return None
-        score, supplier = candidates[0]
+        score, method, supplier = candidates[0]
         second_score = candidates[1][0] if len(candidates) > 1 else 0.0
+        if method == "NAME_CORE":
+            return {"supplier_id": supplier.id, "supplier_name": supplier.name, "confidence": 1.0, "method": method, "decision": "AUTO_MATCH"}
         if score < 0.75 or (second_score >= 0.75 and score - second_score < 0.08):
-            return {"supplier_id": None, "supplier_name": supplier.name, "confidence": round(score, 4), "method": "NAME_SIMILARITY", "decision": "REVIEW"}
-        return {"supplier_id": supplier.id, "supplier_name": supplier.name, "confidence": round(score, 4), "method": "NAME_SIMILARITY", "decision": "AUTO_MATCH" if score >= 0.93 else "REVIEW"}
+            return {"supplier_id": None, "supplier_name": name, "confidence": round(score, 4), "method": method, "decision": "REVIEW"}
+        return {"supplier_id": supplier.id, "supplier_name": supplier.name, "confidence": round(score, 4), "method": method, "decision": "AUTO_MATCH" if score >= 0.88 else "REVIEW"}
 
     def match_line(self, extracted: dict, limit: int = 3, supplier_id: int | None = None):
         self._load_catalog()
         scored = []
-        for product in self._products or []:
+        catalog = self._products or []
+        if supplier_id is not None:
+            supplier_catalog = [product for product in catalog if product.supplier_id == supplier_id]
+            catalog = supplier_catalog or catalog
+        for product in catalog:
             score, method = self._candidate_score(extracted, product, supplier_id=supplier_id)
             if score >= 0.45:
                 scored.append((score, method, product))
-        scored.sort(
-            key=lambda row: (
-                -(1 if supplier_id is not None and row[2].supplier_id == supplier_id else 0),
-                -row[0],
-                row[2].id,
-            )
-        )
+        scored.sort(key=lambda row: (-row[0], row[2].id))
         suggestions = [
             {"product_id": product.id, "product_name": product.name, "supplier_id": product.supplier_id, "supplier_name": product.supplier.name if product.supplier else None, "confidence": round(score, 4), "method": method}
             for score, method, product in scored[: max(1, limit)]
