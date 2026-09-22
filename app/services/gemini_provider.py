@@ -182,7 +182,10 @@ class GeminiProvider:
             "Return only facts visible on this page. If there are no line items, return an empty supplier_sections array."
         )
         instruction = f"{system_instruction}\n\n{page_instruction}" if system_instruction else page_instruction
-        config = types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema, system_instruction=instruction)
+        config_kwargs = {"response_mime_type": "application/json", "response_schema": schema, "system_instruction": instruction}
+        if self.thinking_level:
+            config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level=self.thinking_level)
+        config = types.GenerateContentConfig(**config_kwargs)
         contents = [
             types.Part.from_text(text=f"Extract all procurement data from page {page_number} of {page_count}, separating all supplier sections."),
             types.Part.from_bytes(data=page_bytes, mime_type="application/pdf"),
@@ -346,6 +349,7 @@ class GeminiProvider:
                         "response_mime_type": "application/json",
                         "response_schema": schema,
                         "system_instruction": instruction,
+                        "thinking_config": types.ThinkingConfig(thinking_level=self.thinking_level) if self.thinking_level else None,
                     }
 
                     if use_files_api:
