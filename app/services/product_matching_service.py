@@ -77,7 +77,7 @@ class ProductMatchingService:
 
     @classmethod
     def _is_synthetic_barcode(cls, value) -> bool:
-        return bool(re.fullmatch(r"990000010000\\d+", cls.compact(value)))
+        return bool(re.fullmatch(r"990000010000\d+", cls.compact(value)))
 
     @classmethod
     def _identity_score(cls, extracted, product) -> tuple[float, str | None]:
