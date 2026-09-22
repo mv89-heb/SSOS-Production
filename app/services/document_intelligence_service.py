@@ -47,7 +47,7 @@ DOCUMENT_SCHEMA = {
     "required": ["document_type", "items", "supplier_sections"],
 }
 
-SYSTEM_INSTRUCTION = """You extract structured procurement data from supplier documents. Return only facts visible in the document. Never invent SKU, barcode, price, supplier or totals. If a value is absent, omit it or use the schema's natural empty value. Preserve decimal numbers exactly as shown. Identify whether the document is an invoice, delivery note, price list, or other document.
+SYSTEM_INSTRUCTION = """You extract structured procurement data from supplier documents. Return only facts visible in the document. Never invent SKU, barcode, price, supplier or totals. If a value is absent, omit it or use the schema's natural empty value. Never use 0 as a placeholder for a missing price. If a price is visible, extract the actual numeric value exactly as shown; if no price is visible, omit unit_price. Preserve decimal numbers exactly as shown. Identify whether the document is an invoice, delivery note, price list, or other document.
 
 RECIPIENT RULES: Identify the document recipient/customer exactly when visible. For this organization, preserve the visible name and address rather than inferring or normalizing it away.\n\nMULTI-SUPPLIER RULES: A single uploaded document can contain multiple suppliers, including multiple suppliers on one page. You MUST identify every distinct supplier context visible in the document and return one supplier_sections entry for each. Assign every extracted line item to exactly one supplier section. Use explicit supplier names, supplier/customer numbers, table headers, section headers, and unambiguous layout/context. Never assume the whole document belongs to the first supplier you see. Never merge two suppliers just because they sell similar products. If a line's supplier cannot be established from visible evidence, keep that line in a supplier section with an empty supplier object rather than guessing. For a supplier that continues across pages, keep it as the same supplier when the identity is clear."""
 
@@ -184,15 +184,18 @@ class DocumentIntelligenceService:
                     raise BadRequest("Supplier does not belong to this tenant or is inactive")
                 if product is None:
                     raise BadRequest("Product does not belong to this tenant or is inactive")
-                try:
-                    price_value = float(price)
-                except (TypeError, ValueError):
-                    raise BadRequest("Reviewed price must be numeric")
-                if price_value <= 0:
-                    raise BadRequest("Reviewed price must be greater than zero")
+                price_value = None
+                if price not in (None, ""):
+                    try:
+                        parsed_price = float(price)
+                    except (TypeError, ValueError):
+                        raise BadRequest("Reviewed price must be numeric when provided")
+                    if parsed_price > 0:
+                        price_value = parsed_price
                 currency = (item.get("currency") or row.extracted_data.get("currency") or "ILS").upper()
-                intelligence.record_observation(product_id=product_id, supplier_id=supplier_id, observed_price=price_value, currency=currency, unit=item.get("unit"), package_quantity=item.get("package_quantity"), source_type=row.document_type or "OTHER", source_document_id=row.id, match_method=item.get("match_method") or "MANUAL_REVIEW", match_confidence=item.get("match_confidence"))
-                if not bool(item.get("update_price", False)):
+                if price_value is not None:
+                    intelligence.record_observation(product_id=product_id, supplier_id=supplier_id, observed_price=price_value, currency=currency, unit=item.get("unit"), package_quantity=item.get("package_quantity"), source_type=row.document_type or "OTHER", source_document_id=row.id, match_method=item.get("match_method") or "MANUAL_REVIEW", match_confidence=item.get("match_confidence"))
+                if not bool(item.get("update_price", False)) or price_value is None:
                     continue
                 intelligence.accept_price_change(product_id=product_id, supplier_id=supplier_id, new_price=price_value, currency=currency, unit=item.get("unit"), source_type=row.document_type or "OTHER", source_document_id=row.id)
                 if supplier_id == product.supplier_id:
