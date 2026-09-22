@@ -35,6 +35,14 @@ class DocumentAnalysis(db.Model):
     uploader = db.relationship("User", foreign_keys=[uploaded_by])
     applier = db.relationship("User", foreign_keys=[applied_by])
 
+    def is_stale_processing(self, stale_minutes: int = 20):
+        """Whether a PROCESSING row is old enough to be offered for retry."""
+        if self.status != "PROCESSING" or not self.created_at:
+            return False
+        created = self.created_at.replace(tzinfo=timezone.utc) if self.created_at.tzinfo is None else self.created_at
+        age_seconds = (datetime.now(timezone.utc) - created).total_seconds()
+        return age_seconds >= stale_minutes * 60
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -42,6 +50,7 @@ class DocumentAnalysis(db.Model):
             "mime_type": self.mime_type,
             "document_type": self.document_type,
             "status": self.status,
+            "processing_stale": self.is_stale_processing(),
             "extracted_data": self.extracted_data,
             "error_message": self.error_message,
             "provider": self.provider,
