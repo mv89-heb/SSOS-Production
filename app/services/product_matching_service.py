@@ -76,11 +76,17 @@ class ProductMatchingService:
         return max(coverage, containment if containment >= 0.8 else 0.0, cls._text_score(extracted_name, catalog_name)), "NAME_SIMILARITY"
 
     @classmethod
+    def _is_synthetic_barcode(cls, value) -> bool:
+        return bool(re.fullmatch(r"990000010000\d+", cls.compact(value)))
+
+    @classmethod
     def _identity_score(cls, extracted, product) -> tuple[float, str | None]:
         barcode = cls.compact(extracted.get("barcode"))
         product_barcode = cls.compact(product.barcode)
         if barcode and product_barcode and barcode == product_barcode:
-            return 1.0, "BARCODE"
+            # Generated inventory labels are not supplier identities.
+            if not ProductMatchingService._is_synthetic_barcode(barcode) and not ProductMatchingService._is_synthetic_barcode(product_barcode):
+                return 1.0, "BARCODE"
         supplier_sku = cls.compact(extracted.get("supplier_sku"))
         product_supplier_sku = cls.compact(product.supplier_sku)
         product_sku = cls.compact(product.sku)

@@ -98,6 +98,11 @@ class DocumentIntelligenceService:
         row = self._get(analysis_id)
         if row.status in {"ANALYZED", "PARTIALLY_APPLIED", "APPLIED"}:
             return row
+        # A previous request can disappear after the row was persisted,
+        # leaving the analysis permanently stuck in PROCESSING. An explicit
+        # analyze/retry call may restart it once it is stale.
+        if row.status == "PROCESSING" and not row.is_stale_processing():
+            return row
         if not row.storage_path or not os.path.isfile(row.storage_path):
             row.status = "FAILED"
             row.error_message = "Temporary document is no longer available. Please upload it again."
