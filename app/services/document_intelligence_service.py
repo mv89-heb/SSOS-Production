@@ -24,7 +24,7 @@ _SUPPLIER_SECTION_SCHEMA = {
         "items": {"type": "array", "items": {"type": "object", "properties": {
             "supplier_sku": {"type": "string"}, "barcode": {"type": "string"}, "description": {"type": "string"},
             "quantity": {"type": "number"}, "unit": {"type": "string"}, "package_quantity": {"type": "number"},
-            "unit_price": {"type": "number"}, "discount": {"type": "number"}, "tax": {"type": "number"},
+            "unit_price": {"type": "number"}, "discount": {"type": "number"}, "tax": {"type": "number"}, "page_number": {"type": "integer"},
         }}},
     },
 }
@@ -33,6 +33,7 @@ DOCUMENT_SCHEMA = {
     "type": "object",
     "properties": {
         "document_type": {"type": "string", "enum": ["INVOICE", "DELIVERY_NOTE", "PRICE_LIST", "OTHER"]},
+        "recipient": {"type": "object", "properties": {"name": {"type": "string"}, "address": {"type": "string"}, "tax_id": {"type": "string"}, "customer_number": {"type": "string"}}},
         "supplier": {"type": "object", "properties": {"name": {"type": "string"}, "customer_number": {"type": "string"}}},
         "supplier_sections": {"type": "array", "items": _SUPPLIER_SECTION_SCHEMA},
         "document_number": {"type": "string"}, "document_date": {"type": "string"}, "currency": {"type": "string"},
@@ -48,7 +49,7 @@ DOCUMENT_SCHEMA = {
 
 SYSTEM_INSTRUCTION = """You extract structured procurement data from supplier documents. Return only facts visible in the document. Never invent SKU, barcode, price, supplier or totals. If a value is absent, omit it or use the schema's natural empty value. Preserve decimal numbers exactly as shown. Identify whether the document is an invoice, delivery note, price list, or other document.
 
-MULTI-SUPPLIER RULES: A single uploaded document can contain multiple suppliers, including multiple suppliers on one page. You MUST identify every distinct supplier context visible in the document and return one supplier_sections entry for each. Assign every extracted line item to exactly one supplier section. Use explicit supplier names, supplier/customer numbers, table headers, section headers, and unambiguous layout/context. Never assume the whole document belongs to the first supplier you see. Never merge two suppliers just because they sell similar products. If a line's supplier cannot be established from visible evidence, keep that line in a supplier section with an empty supplier object rather than guessing. For a supplier that continues across pages, keep it as the same supplier when the identity is clear."""
+RECIPIENT RULES: Identify the document recipient/customer exactly when visible. For this organization, preserve the visible name and address rather than inferring or normalizing it away.\n\nMULTI-SUPPLIER RULES: A single uploaded document can contain multiple suppliers, including multiple suppliers on one page. You MUST identify every distinct supplier context visible in the document and return one supplier_sections entry for each. Assign every extracted line item to exactly one supplier section. Use explicit supplier names, supplier/customer numbers, table headers, section headers, and unambiguous layout/context. Never assume the whole document belongs to the first supplier you see. Never merge two suppliers just because they sell similar products. If a line's supplier cannot be established from visible evidence, keep that line in a supplier section with an empty supplier object rather than guessing. For a supplier that continues across pages, keep it as the same supplier when the identity is clear."""
 
 
 class DocumentIntelligenceService:
