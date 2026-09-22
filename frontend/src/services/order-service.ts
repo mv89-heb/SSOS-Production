@@ -3,6 +3,7 @@ import { CreateOrderInput, Order } from "@/types";
 
 export interface UpdateDraftOrderInput {
   notes?: string;
+  planned_order_date?: string | null;
   items?: { product_id: number; quantity: number }[];
 }
 

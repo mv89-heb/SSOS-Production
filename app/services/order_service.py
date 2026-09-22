@@ -1,3 +1,5 @@
+from datetime import date
+
 from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound
 
 from app.models.user import ROLE_ADMIN, ROLE_MANAGER
@@ -37,12 +39,13 @@ class OrderService:
         if not isinstance(supplier_id, int) or isinstance(supplier_id, bool) or supplier_id <= 0:
             raise BadRequest("A valid supplier_id is required")
         supplier = self.supplier_repo.get_by_id_or_404(supplier_id)
+        planned_order_date = self._parse_planned_order_date(payload.get("planned_order_date"))
         input_items = payload.get("items", [])
         if not isinstance(input_items, list) or not input_items:
             raise BadRequest("Order must have items")
         enriched_items = self._build_snapshot_items(input_items)
         totals = SnapshotService.compute_totals(enriched_items)
-        order = Order(tenant_id=self.tenant_id, user_id=user.id, order_number=self.repo.next_order_number(), supplier_name=supplier.name, supplier_contact=supplier.contact_name, supplier_email=supplier.email, status=STATUS_DRAFT, items=enriched_items, currency=payload.get("currency", "ILS"), notes=payload.get("notes"), **totals)
+        order = Order(tenant_id=self.tenant_id, user_id=user.id, order_number=self.repo.next_order_number(), supplier_name=supplier.name, supplier_contact=supplier.contact_name, supplier_email=supplier.email, status=STATUS_DRAFT, items=enriched_items, currency=payload.get("currency", "ILS"), notes=payload.get("notes"), planned_order_date=planned_order_date, **totals)
         self.repo.add(order)
         AuditService.log_event(self.tenant_id, user.id, "order.created", f"Order {order.order_number} created via catalog", {"order_id": order.id, "final_total": order.final_total})
         return order
@@ -66,6 +69,7 @@ class OrderService:
         if order.status != STATUS_DRAFT: raise Conflict(f"Order can only be edited while in '{STATUS_DRAFT}' status (current: '{order.status}')")
         if user.role not in (ROLE_MANAGER, ROLE_ADMIN) and order.user_id != user.id: raise Conflict("Only the order creator or a manager can edit this draft")
         if "notes" in payload: order.notes = payload.get("notes")
+        if "planned_order_date" in payload: order.planned_order_date = self._parse_planned_order_date(payload.get("planned_order_date"))
         if "items" in payload:
             input_items = payload.get("items")
             if not isinstance(input_items, list) or not input_items: raise BadRequest("Order must have items")
@@ -163,6 +167,16 @@ class OrderService:
         order.next_reminder_at = None
         AuditService.log_event(self.tenant_id, user.id, "order.completed", f"Order {order.order_number} completed", {"order_id": order.id})
         return order
+
+
+    @staticmethod
+    def _parse_planned_order_date(value):
+        if value in (None, ""):
+            return None
+        try:
+            return date.fromisoformat(str(value))
+        except (TypeError, ValueError):
+            raise BadRequest("planned_order_date must be a valid ISO date (YYYY-MM-DD)")
 
     def _build_snapshot_items(self, input_items: list) -> list:
         if not all(isinstance(item, dict) for item in input_items): raise BadRequest("Each order item must be an object")
