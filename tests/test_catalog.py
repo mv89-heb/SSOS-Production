@@ -535,3 +535,21 @@ def test_changing_or_deleting_offer_never_affects_existing_orders(logged_in_clie
     still_unchanged = logged_in_client_a.get(f"/api/orders/{order_id}").get_json()["order"]
     assert still_unchanged["final_total"] == 30.0
     assert still_unchanged["items"][0]["unit_price"] == 10.0
+
+
+def test_list_products_returns_entire_catalog_not_only_first_500(logged_in_client_a):
+    """The catalog endpoint must not silently truncate a tenant catalog."""
+    supplier = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "Large Catalog Supplier"}).get_json()["supplier"]
+    for index in range(501):
+        response = logged_in_client_a.post("/api/catalog/products", json={
+            "supplier_id": supplier["id"],
+            "name": f"Catalog Product {index:03d}",
+            "current_price": 1.0,
+        })
+        assert response.status_code == 201
+
+    response = logged_in_client_a.get("/api/catalog/products")
+    assert response.status_code == 200
+    products = response.get_json()["products"]
+    assert len(products) == 501
+    assert {product["name"] for product in products} == {f"Catalog Product {index:03d}" for index in range(501)}
