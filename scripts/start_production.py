@@ -23,7 +23,7 @@ def main() -> None:
             f"0.0.0.0:{port}",
             "wsgi:app",
             "--timeout",
-            "120",
+            "900",
             "--access-logfile",
             "-",
             "--error-logfile",
