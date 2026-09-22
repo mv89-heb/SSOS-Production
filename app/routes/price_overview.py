@@ -49,9 +49,27 @@ def overview():
                 "offers": [{"supplier_id": row["supplier_id"], "supplier_name": row["supplier_name"], "price": row["normalized_price"], "currency": row["currency"], "unit": row.get("comparison_unit"), "primary": row.get("primary", False)} for row in all_offers],
             })
         rows.sort(key=lambda row: (-row["savings_per_unit"], row["product_name"]))
-        summary = intelligence.get_portfolio_summary(opportunity_limit=10)
-        supplier_scores = intelligence.get_supplier_price_scores(limit=10)
-        return jsonify({"success": True, "summary": summary, "supplier_scores": supplier_scores, "products": rows, "returned": len(rows)})
+        current_total = sum(row["current_price"] or 0 for row in rows)
+        best_total = sum((row["best_price"] if row["best_price"] is not None else row["current_price"] or 0) for row in rows)
+        potential_savings = max(0.0, current_total - best_total)
+        comparable = sum(1 for row in rows if row["supplier_count"] >= 2)
+        opportunities_count = sum(1 for row in rows if row["savings_per_unit"] > 0)
+        supplier_stats = {}
+        for row in rows:
+            for offer in row["offers"]:
+                entry = supplier_stats.setdefault(offer["supplier_id"], {"supplier_id": offer["supplier_id"], "supplier_name": offer["supplier_name"], "participation": 0, "wins": 0})
+                entry["participation"] += 1
+                if row["best_supplier"] and offer["supplier_name"] == row["best_supplier"] and row["best_price"] is not None and offer["price"] == row["best_price"]:
+                    entry["wins"] += 1
+        supplier_scores = []
+        analyzed = comparable
+        for entry in supplier_stats.values():
+            coverage = entry["participation"] / analyzed if analyzed else 0
+            win_rate = entry["wins"] / entry["participation"] if entry["participation"] else 0
+            supplier_scores.append({**entry, "coverage_percent": round(coverage * 100, 1), "win_rate_percent": round(win_rate * 100, 1), "score": round((coverage * 50) + (win_rate * 50), 1)})
+        supplier_scores.sort(key=lambda row: (-row["score"], -row["wins"], row["supplier_name"] or ""))
+        summary = {"products_analyzed": len(rows), "products_with_comparable_alternatives": comparable, "opportunity_products": opportunities_count, "current_unit_total": round(current_total, 2), "best_unit_total": round(best_total, 2), "potential_savings": round(potential_savings, 2), "potential_savings_percent": round((potential_savings / current_total * 100), 2) if current_total else 0.0}
+        return jsonify({"success": True, "summary": summary, "supplier_scores": {"products_analyzed": analyzed, "suppliers": supplier_scores[:10]}, "products": rows, "returned": len(rows)})
     except (TypeError, ValueError) as exc:
         return _handle(BadRequest(str(exc)))
     except HTTPException as exc:
