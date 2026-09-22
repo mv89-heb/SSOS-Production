@@ -95,7 +95,7 @@ class DocumentIntelligenceService:
     def analyze(self, analysis_id: int):
         PermissionService.require_role_at_least("manager")
         row = self._get(analysis_id)
-        if row.status in {"ANALYZED", "APPLIED"}:
+        if row.status in {"ANALYZED", "PARTIALLY_APPLIED", "APPLIED"}:
             return row
         if not row.storage_path or not os.path.isfile(row.storage_path):
             row.status = "FAILED"
