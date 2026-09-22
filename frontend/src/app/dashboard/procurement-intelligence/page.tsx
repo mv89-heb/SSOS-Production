@@ -17,6 +17,8 @@ import {
   ShoppingCart,
   ClipboardCheck,
   ArrowLeft,
+  Search,
+  Package,
 } from "lucide-react";
 
 import { catalogService } from "@/services/catalog-service";
@@ -90,6 +92,7 @@ export default function ProcurementIntelligencePage() {
     retry: 1,
   });
 
+  const [productSearch, setProductSearch] = useState("");
   const [briefing, setBriefing] = useState<Awaited<ReturnType<typeof priceIntelligenceService.getAiBriefing>> | null>(null);
   const [aiError, setAiError] = useState<string>();
   const [aiLoading, setAiLoading] = useState(false);
@@ -121,6 +124,23 @@ export default function ProcurementIntelligencePage() {
   const inventoryRows = inventory.data?.recommendations ?? [];
   const urgentStock = inventoryRows.filter((row) => row.status === "urgent");
   const reorderStock = inventoryRows.filter((row) => row.status === "reorder");
+  const categoryRows = useMemo(() => {
+    const map = new Map<string, { count: number; priced: number; stock: number }>();
+    for (const product of productRows) {
+      const key = product.category || "ללא קטגוריה";
+      const item = map.get(key) || { count: 0, priced: 0, stock: 0 };
+      item.count += 1;
+      if (Number(product.current_price ?? 0) > 0) item.priced += 1;
+      item.stock += Number(product.current_stock ?? 0);
+      map.set(key, item);
+    }
+    return Array.from(map.entries()).map(([category, value]) => ({ category, ...value })).sort((a, b) => b.count - a.count);
+  }, [productRows]);
+  const filteredProducts = useMemo(() => {
+    const q = productSearch.trim().toLocaleLowerCase("he-IL");
+    if (!q) return productRows.slice(0, 40);
+    return productRows.filter((product) => [product.name, product.sku, product.barcode, product.category, product.supplier?.name].some((value) => String(value ?? "").toLocaleLowerCase("he-IL").includes(q))).slice(0, 40);
+  }, [productRows, productSearch]);
   const loading = summary.isLoading || suppliers.isLoading || products.isLoading || readiness.isLoading || inventory.isLoading;
 
   return (
@@ -173,7 +193,16 @@ export default function ProcurementIntelligencePage() {
         </section>
       )}
 
-      {readinessData && (\n        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">\n          <StatCard label="מוצרים פעילים" value={number(readinessData.products.active)} hint={`${number(readinessData.products.priced)} עם מחיר · ${number(readinessData.products.categorized)} מסווגים`} icon={<PackageSearch className="text-indigo-500" size={18} />} />\n          <StatCard label="ספקים פעילים" value={number(readinessData.suppliers.active)} hint={`${number(readinessData.supplier_offers.suppliers_covered)} ספקים עם הצעות`} icon={<Award className="text-amber-500" size={18} />} />\n          <StatCard label="הצעות ספקים" value={number(readinessData.supplier_offers.active)} hint={`${number(readinessData.supplier_offers.products_covered)} מוצרים מכוסים`} icon={<BarChart3 className="text-blue-500" size={18} />} />\n          <StatCard label="הזמנות עם ערך" value={number(readinessData.orders.with_realized_value)} hint={`${number(readinessData.orders.total)} הזמנות בסך הכול`} icon={<ShoppingCart className="text-violet-500" size={18} />} />\n        </section>\n      )}\n\n      {readinessData && (
+      {readinessData && (
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="מוצרים פעילים" value={number(readinessData.products.active)} hint={`${number(readinessData.products.priced)} עם מחיר · ${number(readinessData.products.categorized)} מסווגים`} icon={<PackageSearch className="text-indigo-500" size={18} />} />
+          <StatCard label="ספקים פעילים" value={number(readinessData.suppliers.active)} hint={`${number(readinessData.supplier_offers.suppliers_covered)} ספקים עם הצעות`} icon={<Award className="text-amber-500" size={18} />} />
+          <StatCard label="הצעות ספקים" value={number(readinessData.supplier_offers.active)} hint={`${number(readinessData.supplier_offers.products_covered)} מוצרים מכוסים`} icon={<BarChart3 className="text-blue-500" size={18} />} />
+          <StatCard label="הזמנות עם ערך" value={number(readinessData.orders.with_realized_value)} hint={`${number(readinessData.orders.total)} הזמנות בסך הכול`} icon={<ShoppingCart className="text-violet-500" size={18} />} />
+        </section>
+      )}
+
+      {readinessData && (
         <Section title="מוכנות נתוני הרכש" hint="זהו מדד איכות/כיסוי של הנתונים הקיימים — לא ציון עסקי ולא נתון מומצא.">
           <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-5">
             {[
@@ -198,6 +227,34 @@ export default function ProcurementIntelligencePage() {
           </div>
         </Section>
       )}
+
+      <Section title="תמונת קטלוג מלאה" hint="כל הקטלוג הפעיל זמין כאן לחיפוש ולסקירה.">
+        <div className="border-b border-slate-100 p-5 dark:border-slate-800">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+            <input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="חפש מוצר, מק״ט, ברקוד, קטגוריה או ספק..." className="w-full rounded-xl border border-slate-200 bg-white py-3 pr-10 pl-3 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900" />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-right text-sm">
+            <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-5 py-3">מוצר</th><th className="px-5 py-3">קטגוריה</th><th className="px-5 py-3">ספק</th><th className="px-5 py-3">מחיר</th><th className="px-5 py-3">מלאי</th></tr></thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {filteredProducts.map((product) => <tr key={product.id}><td className="px-5 py-4 font-semibold">{product.name}<div className="text-xs font-normal text-slate-400">{product.sku || product.barcode || "ללא מזהה"}</div></td><td className="px-5 py-4">{product.category || "ללא קטגוריה"}</td><td className="px-5 py-4">{product.supplier?.name || "—"}</td><td className="px-5 py-4 font-black">{Number(product.current_price ?? 0) > 0 ? money(product.current_price, product.currency || "ILS") : "ללא מחיר"}</td><td className="px-5 py-4">{product.current_stock == null ? "—" : number(product.current_stock)}</td></tr>)}
+            </tbody>
+          </table>
+        </div>
+        {!filteredProducts.length && <div className="p-8 text-center text-sm text-slate-500">לא נמצאו מוצרים.</div>}
+      </Section>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Section title="התפלגות קטגוריות" hint="היקף המוצרים והמלאי לפי קטגוריה.">
+          <div className="overflow-x-auto"><table className="w-full text-right text-sm"><thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-5 py-3">קטגוריה</th><th className="px-5 py-3">מוצרים</th><th className="px-5 py-3">מתומחרים</th><th className="px-5 py-3">מלאי</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{categoryRows.slice(0, 15).map((row) => <tr key={row.category}><td className="px-5 py-4 font-semibold">{row.category}</td><td className="px-5 py-4">{number(row.count)}</td><td className="px-5 py-4">{number(row.priced)} ({number(row.count ? row.priced / row.count * 100 : 0)}%)</td><td className="px-5 py-4">{number(row.stock)}</td></tr>)}</tbody></table></div>
+        </Section>
+        <Section title="מלאי — מה דורש פעולה" hint="המלצות על בסיס נתוני המלאי הקיימים.">
+          {urgentStock.length + reorderStock.length ? <div className="divide-y divide-slate-100 dark:divide-slate-800">{[...urgentStock, ...reorderStock].slice(0, 12).map((row) => <div key={row.product_id} className="flex items-center gap-3 p-4"><div className={row.status === "urgent" ? "h-2.5 w-2.5 rounded-full bg-red-500" : "h-2.5 w-2.5 rounded-full bg-amber-500"} /><div className="min-w-0 flex-1"><div className="truncate font-bold">{row.product_name}</div><div className="text-xs text-slate-400">מלאי {number(row.current_stock)} · נקודת הזמנה {number(row.reorder_point)}</div></div><span className="text-xs font-black">{row.status === "urgent" ? "דחוף" : "להזמין"}</span></div>)}</div> : <div className="p-8 text-center text-sm text-slate-500">אין כרגע פריטי מלאי דחופים או להשלמת הזמנה.</div>}
+          <div className="border-t border-slate-100 p-4 dark:border-slate-800"><a href="/dashboard/inventory" className="text-sm font-bold text-indigo-600">פתח תכנון מלאי ←</a></div>
+        </Section>
+      </div>
 
       <Section title="קטלוג רכש חי" hint={`${number(productRows.length)} מוצרים פעילים — כדי שהמסך לא יהיה ריק גם כשאין עדיין השוואות מחיר.`}>
         {productRows.length ? (
@@ -236,7 +293,22 @@ export default function ProcurementIntelligencePage() {
         </Section>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">\n        <Section title="מלאי — מוקד תשומת לב" hint="המלצות מבוססות על הספירות וכללי המלאי הקיימים.">\n          {urgentStock.length || reorderStock.length ? <div className="divide-y divide-slate-100 dark:divide-slate-800">{[...urgentStock, ...reorderStock].slice(0, 12).map((row) => <div key={row.product_id} className="flex items-center gap-3 p-4"><div className={`h-2.5 w-2.5 rounded-full ${row.status === "urgent" ? "bg-red-500" : "bg-amber-500"}`} /><div className="min-w-0 flex-1"><div className="truncate font-bold">{row.product_name}</div><div className="mt-1 text-xs text-slate-400">מלאי {number(row.current_stock)} · נקודת הזמנה {number(row.reorder_point)} · כיסוי {row.coverage_days == null ? "—" : `${number(row.coverage_days)} ימים`}</div></div><div className="font-black">{row.status === "urgent" ? "דחוף" : "להזמנה"}</div></div>)}</div> : <div className="p-8 text-center text-sm text-slate-500">אין כרגע פריטי מלאי דחופים או להשלמת הזמנה.</div>}\n          <div className="border-t border-slate-100 p-4 dark:border-slate-800"><a href="/dashboard/inventory" className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600">פתח תכנון מלאי <ArrowLeft size={15} /></a></div>\n        </Section>\n        <Section title="מוקד פעולות" hint="מעבר מהתמונה הניהולית לפעולה בפועל.">\n          <div className="grid gap-3 p-5 sm:grid-cols-2">\n            <a href="/dashboard/price-intelligence/overview" className="rounded-xl border border-slate-200 p-4 hover:bg-slate-50 dark:border-slate-800"><div className="font-bold"><BarChart3 size={17} className="inline ml-2 text-blue-500" />השוואת ספקים</div><div className="mt-2 text-xs text-slate-500">{number(data?.products_with_comparable_alternatives)} מוצרים עם חלופות</div></a>\n            <a href="/dashboard/inventory/count" className="rounded-xl border border-slate-200 p-4 hover:bg-slate-50 dark:border-slate-800"><div className="font-bold"><ClipboardCheck size={17} className="inline ml-2 text-emerald-500" />דיווח ספירת מלאי</div><div className="mt-2 text-xs text-slate-500">עדכון כמויות פיזיות</div></a>\n            <a href="/dashboard/orders" className="rounded-xl border border-slate-200 p-4 hover:bg-slate-50 dark:border-slate-800"><div className="font-bold"><ShoppingCart size={17} className="inline ml-2 text-violet-500" />הזמנות רכש</div><div className="mt-2 text-xs text-slate-500">{number(readinessData?.orders.total)} הזמנות במערכת</div></a>\n            <a href="/dashboard/catalog" className="rounded-xl border border-slate-200 p-4 hover:bg-slate-50 dark:border-slate-800"><div className="font-bold"><PackageSearch size={17} className="inline ml-2 text-indigo-500" />השלמת קטלוג</div><div className="mt-2 text-xs text-slate-500">{number((readinessData?.products.active ?? 0) - (readinessData?.products.priced ?? 0))} ללא מחיר · {number((readinessData?.products.active ?? 0) - (readinessData?.products.categorized ?? 0))} ללא קטגוריה</div></a>\n          </div>\n        </Section>\n      </div>\n\n      <Section title="שינויי מחיר אחרונים" hint="היסטוריית מחירים שנרשמה במערכת.">
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Section title="מלאי — מוקד תשומת לב" hint="המלצות מבוססות על הספירות וכללי המלאי הקיימים.">
+          {urgentStock.length || reorderStock.length ? <div className="divide-y divide-slate-100 dark:divide-slate-800">{[...urgentStock, ...reorderStock].slice(0, 12).map((row) => <div key={row.product_id} className="flex items-center gap-3 p-4"><div className={`h-2.5 w-2.5 rounded-full ${row.status === "urgent" ? "bg-red-500" : "bg-amber-500"}`} /><div className="min-w-0 flex-1"><div className="truncate font-bold">{row.product_name}</div><div className="mt-1 text-xs text-slate-400">מלאי {number(row.current_stock)} · נקודת הזמנה {number(row.reorder_point)} · כיסוי {row.coverage_days == null ? "—" : `${number(row.coverage_days)} ימים`}</div></div><div className="font-black">{row.status === "urgent" ? "דחוף" : "להזמנה"}</div></div>)}</div> : <div className="p-8 text-center text-sm text-slate-500">אין כרגע פריטי מלאי דחופים או להשלמת הזמנה.</div>}
+          <div className="border-t border-slate-100 p-4 dark:border-slate-800"><a href="/dashboard/inventory" className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600">פתח תכנון מלאי <ArrowLeft size={15} /></a></div>
+        </Section>
+        <Section title="מוקד פעולות" hint="מעבר מהתמונה הניהולית לפעולה בפועל.">
+          <div className="grid gap-3 p-5 sm:grid-cols-2">
+            <a href="/dashboard/price-intelligence/overview" className="rounded-xl border border-slate-200 p-4 hover:bg-slate-50 dark:border-slate-800"><div className="font-bold"><BarChart3 size={17} className="inline ml-2 text-blue-500" />השוואת ספקים</div><div className="mt-2 text-xs text-slate-500">{number(data?.products_with_comparable_alternatives)} מוצרים עם חלופות</div></a>
+            <a href="/dashboard/inventory/count" className="rounded-xl border border-slate-200 p-4 hover:bg-slate-50 dark:border-slate-800"><div className="font-bold"><ClipboardCheck size={17} className="inline ml-2 text-emerald-500" />דיווח ספירת מלאי</div><div className="mt-2 text-xs text-slate-500">עדכון כמויות פיזיות</div></a>
+            <a href="/dashboard/orders" className="rounded-xl border border-slate-200 p-4 hover:bg-slate-50 dark:border-slate-800"><div className="font-bold"><ShoppingCart size={17} className="inline ml-2 text-violet-500" />הזמנות רכש</div><div className="mt-2 text-xs text-slate-500">{number(readinessData?.orders.total)} הזמנות במערכת</div></a>
+            <a href="/dashboard/catalog" className="rounded-xl border border-slate-200 p-4 hover:bg-slate-50 dark:border-slate-800"><div className="font-bold"><PackageSearch size={17} className="inline ml-2 text-indigo-500" />השלמת קטלוג</div><div className="mt-2 text-xs text-slate-500">{number((readinessData?.products.active ?? 0) - (readinessData?.products.priced ?? 0))} ללא מחיר · {number((readinessData?.products.active ?? 0) - (readinessData?.products.categorized ?? 0))} ללא קטגוריה</div></a>
+          </div>
+        </Section>
+      </div>
+
+      <Section title="שינויי מחיר אחרונים" hint="היסטוריית מחירים שנרשמה במערכת.">
         {data?.recent_changes?.length ? <div className="overflow-x-auto"><table className="w-full text-right text-sm"><thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-5 py-3">מוצר</th><th className="px-5 py-3">ספק</th><th className="px-5 py-3">מחיר קודם</th><th className="px-5 py-3">מחיר חדש</th><th className="px-5 py-3">שינוי</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{data.recent_changes.map((row) => <tr key={row.id}><td className="px-5 py-4 font-semibold">#{row.product_id}</td><td className="px-5 py-4">{row.supplier_name || `ספק #${row.supplier_id}`}</td><td className="px-5 py-4">{row.old_price == null ? "—" : money(row.old_price, row.currency)}</td><td className="px-5 py-4 font-bold">{money(row.new_price, row.currency)}</td><td className={`px-5 py-4 font-black ${(row.change_percent ?? 0) > 0 ? "text-red-600" : "text-emerald-600"}`}>{row.change_percent == null ? "—" : `${number(row.change_percent)}%`}</td></tr>)}</tbody></table></div> : <div className="p-8 text-center text-sm text-slate-500">אין עדיין היסטוריית שינויי מחיר.</div>}
       </Section>
 
