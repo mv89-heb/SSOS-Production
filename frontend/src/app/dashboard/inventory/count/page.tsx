@@ -74,7 +74,7 @@ export default function InventoryCountPage() {
     </section>
 
     <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-      <div className="border-b border-slate-200 p-5 dark:border-slate-800"><h2 className="text-xl font-black">רשימת ספירה</h2><p className="mt-1 text-xs text-slate-500">מוצגים " + rows.length + " מוצרים. שדה ריק משאיר את המוצר ללא שינוי.</p></div>
+      <div className="border-b border-slate-200 p-5 dark:border-slate-800"><h2 className="text-xl font-black">רשימת ספירה</h2><p className="mt-1 text-xs text-slate-500">מוצגים {rows.length} מוצרים. שדה ריק משאיר את המוצר ללא שינוי.</p></div>
       {isLoading ? <div className="p-10 text-center text-sm text-slate-500">טוען קטלוג...</div> : <div className="overflow-x-auto">
         <table className="w-full text-right text-sm">
           <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-4 py-3">מוצר</th><th className="px-4 py-3">מק״ט</th><th className="px-4 py-3">מלאי במערכת</th><th className="w-48 px-4 py-3">כמות שנספרה</th><th className="px-4 py-3">שינוי</th></tr></thead>
