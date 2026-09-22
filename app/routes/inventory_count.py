@@ -1,15 +1,61 @@
 from datetime import datetime, timezone
+from uuid import uuid4
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
+from sqlalchemy import select
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.extensions import db
+from app.models.inventory_movement import InventoryMovement
+from app.models.product import Product
 from app.services.inventory_planning_service import InventoryPlanningService
 
 inventory_count_bp = Blueprint("inventory_count", __name__, url_prefix="/api/inventory/count")
 
 def _handle(exc: HTTPException):
     return jsonify({"success": False, "error": exc.name.lower().replace(" ", "_"), "message": exc.description}), exc.code
+
+def _latest_count_query(tenant_id):
+    return (
+        select(InventoryMovement)
+        .where(
+            InventoryMovement.tenant_id == tenant_id,
+            InventoryMovement.movement_type == "count",
+        )
+        .order_by(InventoryMovement.occurred_at.desc(), InventoryMovement.id.desc())
+    )
+
+@inventory_count_bp.route("/latest", methods=["GET"])
+@login_required
+def latest_count():
+    latest = db.session.scalars(_latest_count_query(current_user.tenant_id).limit(1)).first()
+    if latest is None:
+        return jsonify({"success": True, "has_count": False, "count_id": None, "counted_at": None, "counted": 0, "movements": []})
+
+    count_id = latest.reference_id if latest.reference_type == "bulk_inventory_count" and latest.reference_id else None
+    if count_id:
+        movements = db.session.scalars(
+            select(InventoryMovement)
+            .where(
+                InventoryMovement.tenant_id == current_user.tenant_id,
+                InventoryMovement.movement_type == "count",
+                InventoryMovement.reference_type == "bulk_inventory_count",
+                InventoryMovement.reference_id == count_id,
+            )
+            .order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
+        ).all()
+    else:
+        movements = [latest]
+
+    return jsonify({
+        "success": True,
+        "has_count": True,
+        "count_id": count_id,
+        "counted_at": latest.occurred_at.isoformat() if latest.occurred_at else None,
+        "counted": len(movements),
+        "note": latest.note,
+        "movements": [movement.to_dict() for movement in movements],
+    })
 
 @inventory_count_bp.route("/bulk", methods=["POST"])
 @login_required
@@ -53,6 +99,7 @@ def bulk_count():
 
     service = InventoryPlanningService(current_user.tenant_id)
     movements = []
+    count_id = str(payload.get("count_id") or "").strip() or uuid4().hex
     try:
         for product_id, quantity in normalized:
             movement = service.record_movement(
@@ -61,7 +108,7 @@ def bulk_count():
                 quantity=quantity,
                 user_id=current_user.id,
                 reference_type="bulk_inventory_count",
-                reference_id=str(payload.get("count_id") or "").strip() or None,
+                reference_id=count_id,
                 note=note,
                 occurred_at=occurred_at,
             )
@@ -75,4 +122,5 @@ def bulk_count():
     except Exception:
         db.session.rollback()
         raise
-    return jsonify({"success": True, "counted": len(movements), "movements": movements})
+    counted_at = movements[-1]["occurred_at"] if movements else None
+    return jsonify({"success": True, "count_id": count_id, "counted": len(movements), "counted_at": counted_at, "movements": movements})
