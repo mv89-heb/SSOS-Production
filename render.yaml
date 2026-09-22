@@ -47,6 +47,8 @@ services:
         value: gemini-3.6-flash
       - key: GEMINI_TIMEOUT
         value: "120"
+      - key: GEMINI_THINKING_LEVEL
+        value: low
       - key: CORS_ORIGINS
         fromService:
           name: ssos-frontend
