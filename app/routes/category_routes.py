@@ -97,7 +97,12 @@ def auto_classify_products():
             if product.category_source == "USER" or product.category_reviewed:
                 counts["skipped"] += 1
                 continue
-            result = classifier.classify(current_user.tenant_id, product.name)
+            result = classifier.classify(
+                current_user.tenant_id,
+                product.name,
+                product.description,
+                product.supplier.name if product.supplier else None,
+            )
             _apply_classification(product, result)
             counts["classified"] += 1
             if result["confidence"] < 0.70 or result["category"] == "אחר":
@@ -147,7 +152,12 @@ def category_feedback(product_id):
         product = Product.query.filter_by(id=product_id, tenant_id=current_user.tenant_id).first()
         if not product:
             raise NotFound("Product not found")
-        result = classifier.classify(current_user.tenant_id, product.name)
+        result = classifier.classify(
+            current_user.tenant_id,
+            product.name,
+            product.description,
+            product.supplier.name if product.supplier else None,
+        )
         classifier.record_feedback(
             current_user.tenant_id,
             current_user.id,
