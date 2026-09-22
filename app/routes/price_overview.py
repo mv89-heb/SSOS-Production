@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import or_, select
+from sqlalchemy.orm import aliased
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.extensions import db
@@ -20,6 +21,7 @@ def _handle(exc: HTTPException):
 @login_required
 def overview():
     try:
+        alternate_supplier = aliased(Supplier)
         limit = max(20, min(request.args.get("limit", default=150, type=int), 300))
         search = str(request.args.get("search") or "").strip().casefold()
         only_opportunities = str(request.args.get("opportunities") or "").lower() in {"1", "true", "yes"}
@@ -28,6 +30,7 @@ def overview():
             select(Product)
             .outerjoin(Supplier, Supplier.id == Product.supplier_id)
             .outerjoin(SupplierProductOffer, SupplierProductOffer.product_id == Product.id)
+            .outerjoin(alternate_supplier, alternate_supplier.id == SupplierProductOffer.supplier_id)
             .where(
                 Product.tenant_id == current_user.tenant_id,
                 Product.active.is_(True),
@@ -45,6 +48,7 @@ def overview():
                     Product.barcode.ilike(pattern),
                     Product.category.ilike(pattern),
                     Supplier.name.ilike(pattern),
+                    alternate_supplier.name.ilike(pattern),
                 )
             )
 
