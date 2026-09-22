@@ -33,7 +33,7 @@ function TableFilterInput({ value, onChange, placeholder, type = "text", classNa
   return <div className="relative"><Search className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" /><Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder} type={type} min={type === "number" ? 0 : undefined} step={type === "number" ? "0.01" : undefined} className={`h-8 min-w-[100px] pr-7 text-xs ${className}`} /></div>;
 }
 function TableFilterSelect<T extends string>({ value, onChange, children, className = "" }: { value: T; onChange: React.Dispatch<React.SetStateAction<T>>; children: React.ReactNode; className?: string }) {
-  return <Select value={value} onChange={(e) => onChange(e.target.value as T)} className={`h-8 min-w-[110px] text-xs ${className}`}>{children}</Select>;
+  return <Select value={value} onChange={(e) => onChange(e.target.value as T)} className={`h-8 min-w-[110px] text-xs ${className}`} sortOptions>{children}</Select>;
 }
 
 export default function CatalogPage() {
