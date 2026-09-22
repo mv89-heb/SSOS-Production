@@ -11,12 +11,12 @@ import { AlertCircle, ArrowLeft, Bell, CheckCircle2, Clock3, PackageCheck, Plus,
 
 const STATUS_FILTERS = [
   { value: "all", label: "הכול" },
+  { value: "approved", label: "אושרו" },
+  { value: "cancelled", label: "בוטלו" },
+  { value: "completed", label: "הושלמו" },
   { value: "draft", label: "טיוטות" },
   { value: "submitted", label: "ממתינות לאישור" },
-  { value: "approved", label: "אושרו" },
   { value: "sent", label: "אצל הספק" },
-  { value: "completed", label: "הושלמו" },
-  { value: "cancelled", label: "בוטלו" },
 ] as const;
 
 type StatusFilter = (typeof STATUS_FILTERS)[number]["value"];

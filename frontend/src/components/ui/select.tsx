@@ -1,8 +1,10 @@
-import { SelectHTMLAttributes, forwardRef } from "react";
+import { Children, SelectHTMLAttributes, ReactElement, forwardRef, isValidElement } from "react";
 import { cn } from "@/lib/utils";
 
-export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
-  ({ className, children, ...props }, ref) => {
+type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & { sortOptions?: boolean };
+
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(
+  ({ className, children, sortOptions = false, ...props }, ref) => {
     return (
       <select
         ref={ref}
@@ -12,7 +14,17 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
         )}
         {...props}
       >
-        {children}
+        {sortOptions
+          ? (() => {
+              const options = Children.toArray(children);
+              const pinned = options.filter((child) => isValidElement(child) && (child.props as { value?: string }).value === "all");
+              const rest = options.filter((child) => !isValidElement(child) || (child.props as { value?: string }).value !== "all");
+              return [...pinned, ...rest.sort((a, b) => {
+                const text = (child: ReactElement) => String(child.props.children ?? "");
+                return text(a as ReactElement).localeCompare(text(b as ReactElement), "he", { sensitivity: "base" });
+              })];
+            })()
+          : children}
       </select>
     );
   }
