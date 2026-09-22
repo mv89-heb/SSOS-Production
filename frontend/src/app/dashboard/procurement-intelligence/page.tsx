@@ -120,6 +120,7 @@ export default function ProcurementIntelligencePage() {
   const data = summary.data;
   const supplierData = suppliers.data;
   const productRows = products.data ?? [];
+  const supplierNames = useMemo(() => new Map((suppliers.data ?? []).map((supplier) => [supplier.id, supplier.name])), [suppliers.data]);
   const readinessData = readiness.data;
   const inventoryRows = inventory.data?.recommendations ?? [];
   const urgentStock = inventoryRows.filter((row) => row.status === "urgent");
@@ -139,7 +140,7 @@ export default function ProcurementIntelligencePage() {
   const filteredProducts = useMemo(() => {
     const q = productSearch.trim().toLocaleLowerCase("he-IL");
     if (!q) return productRows.slice(0, 40);
-    return productRows.filter((product) => [product.name, product.sku, product.barcode, product.category, product.supplier?.name].some((value) => String(value ?? "").toLocaleLowerCase("he-IL").includes(q))).slice(0, 40);
+    return productRows.filter((product) => [product.name, product.sku, product.barcode, product.category, supplierNames.get(product.supplier_id)].some((value) => String(value ?? "").toLocaleLowerCase("he-IL").includes(q))).slice(0, 40);
   }, [productRows, productSearch]);
   const loading = summary.isLoading || suppliers.isLoading || products.isLoading || readiness.isLoading || inventory.isLoading;
 
@@ -239,7 +240,7 @@ export default function ProcurementIntelligencePage() {
           <table className="w-full text-right text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-5 py-3">מוצר</th><th className="px-5 py-3">קטגוריה</th><th className="px-5 py-3">ספק</th><th className="px-5 py-3">מחיר</th><th className="px-5 py-3">מלאי</th></tr></thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredProducts.map((product) => <tr key={product.id}><td className="px-5 py-4 font-semibold">{product.name}<div className="text-xs font-normal text-slate-400">{product.sku || product.barcode || "ללא מזהה"}</div></td><td className="px-5 py-4">{product.category || "ללא קטגוריה"}</td><td className="px-5 py-4">{product.supplier?.name || "—"}</td><td className="px-5 py-4 font-black">{Number(product.current_price ?? 0) > 0 ? money(product.current_price, product.currency || "ILS") : "ללא מחיר"}</td><td className="px-5 py-4">{product.current_stock == null ? "—" : number(product.current_stock)}</td></tr>)}
+              {filteredProducts.map((product) => <tr key={product.id}><td className="px-5 py-4 font-semibold">{product.name}<div className="text-xs font-normal text-slate-400">{product.sku || product.barcode || "ללא מזהה"}</div></td><td className="px-5 py-4">{product.category || "ללא קטגוריה"}</td><td className="px-5 py-4">{supplierNames.get(product.supplier_id) || "—"}</td><td className="px-5 py-4 font-black">{Number(product.current_price ?? 0) > 0 ? money(product.current_price, product.currency || "ILS") : "ללא מחיר"}</td><td className="px-5 py-4">{product.current_stock == null ? "—" : number(product.current_stock)}</td></tr>)}
             </tbody>
           </table>
         </div>
