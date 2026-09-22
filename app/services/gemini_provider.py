@@ -183,8 +183,8 @@ class GeminiProvider:
         )
         instruction = f"{system_instruction}\n\n{page_instruction}" if system_instruction else page_instruction
         config_kwargs = {"response_mime_type": "application/json", "response_schema": schema, "system_instruction": instruction}
-        if self.thinking_level:
-            config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level=self.thinking_level)
+        if getattr(self, "thinking_level", "low"):
+            config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level=getattr(self, "thinking_level", "low"))
         config = types.GenerateContentConfig(**config_kwargs)
         contents = [
             types.Part.from_text(text=f"Extract all procurement data from page {page_number} of {page_count}, separating all supplier sections."),
