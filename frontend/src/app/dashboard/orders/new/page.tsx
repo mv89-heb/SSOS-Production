@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, AlertTriangle, CheckCircle2, PackageSearch, Plus, ShoppingCart, Trash2, X } from "lucide-react";
+import { ArrowLeft, AlertTriangle, CalendarDays, CheckCircle2, PackageSearch, Plus, ShoppingCart, Trash2, X } from "lucide-react";
 import { catalogService } from "@/services/catalog-service";
 import { orderService } from "@/services/order-service";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,11 +20,13 @@ export default function NewOrderPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedSupplierId = searchParams.get("supplier_id");
+  const preselectedDate = searchParams.get("planned_order_date");
 
   const [supplierId, setSupplierId] = useState<number | "">(
     preselectedSupplierId ? Number(preselectedSupplierId) : ""
   );
   const [notes, setNotes] = useState("");
+  const [plannedOrderDate, setPlannedOrderDate] = useState(preselectedDate || "");
   const [lines, setLines] = useState<DraftLine[]>([{ product_id: "", quantity: 1 }]);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -114,6 +116,7 @@ export default function NewOrderPage() {
     createMutation.mutate({
       supplier_id: supplierId,
       notes: notes || undefined,
+      planned_order_date: plannedOrderDate || undefined,
       items: items.map((line) => ({ product_id: line.product_id as number, quantity: line.quantity })),
     });
   };
@@ -170,6 +173,19 @@ export default function NewOrderPage() {
               הספק נבחר — המוצרים יוצגו לפי הספק הזה
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-3xl border-slate-200/80 shadow-sm dark:border-slate-800">
+        <CardHeader className="border-b border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/40">
+          <CardTitle className="flex items-center gap-2 text-base text-slate-900 dark:text-white"><CalendarDays size={17} className="text-indigo-600" /> מועד ביצוע ההזמנה</CardTitle>
+        </CardHeader>
+        <CardContent className="p-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input type="date" className={inputClass} value={plannedOrderDate} onChange={(e) => setPlannedOrderDate(e.target.value)} />
+            {plannedOrderDate && <button type="button" onClick={() => setPlannedOrderDate("")} className="rounded-xl px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">נקה תאריך</button>}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">התאריך נשמר כחלק מההזמנה ומאפשר לנהל אותה ישירות מלוח השנה.</p>
         </CardContent>
       </Card>
 
