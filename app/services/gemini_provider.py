@@ -30,7 +30,7 @@ def _safe_provider_error(exc: Exception) -> str:
 class GeminiProvider:
     name = "gemini"
 
-    def __init__(self, api_key: str, model: str = "gemini-3.6-flash", timeout_seconds: float = 30, fallback_model: str | None = "gemini-3.5-flash-lite"):
+    def __init__(self, api_key: str, model: str = "gemini-3.5-flash-lite", timeout_seconds: float = 30, fallback_model: str | None = "gemini-3.6-flash", thinking_level: str = "low"):
         if not api_key:
             raise ValueError("GEMINI_API_KEY is required when Gemini is enabled")
         from google import genai
@@ -38,6 +38,7 @@ class GeminiProvider:
 
         self.model = model
         self.fallback_model = (fallback_model or "").strip() or None
+        self.thinking_level = (thinking_level or "low").strip().lower()
         if self.fallback_model == self.model:
             self.fallback_model = None
         self.timeout_ms = max(1000, int(float(timeout_seconds) * 1000))
@@ -50,12 +51,13 @@ class GeminiProvider:
     def from_config(cls, config: Any) -> "GeminiProvider":
         enabled = bool(config.get("GEMINI_ENABLED", False))
         api_key = (config.get("GEMINI_API_KEY") or "").strip()
-        model = (config.get("GEMINI_MODEL") or "gemini-3.6-flash").strip()
+        model = (config.get("GEMINI_MODEL") or "gemini-3.5-flash-lite").strip()
         timeout_seconds = float(config.get("GEMINI_TIMEOUT", 30))
-        fallback_model = (config.get("GEMINI_FALLBACK_MODEL") or "gemini-3.5-flash-lite").strip()
+        fallback_model = (config.get("GEMINI_FALLBACK_MODEL") or "gemini-3.6-flash").strip()
+        thinking_level = (config.get("GEMINI_THINKING_LEVEL") or "low").strip()
         if not enabled or not api_key:
             raise ValueError("Gemini is not configured")
-        return cls(api_key=api_key, model=model, timeout_seconds=timeout_seconds, fallback_model=fallback_model)
+        return cls(api_key=api_key, model=model, timeout_seconds=timeout_seconds, fallback_model=fallback_model, thinking_level=thinking_level)
 
     def generate_text(self, prompt: str, *, system_instruction: str | None = None) -> AIResult:
         try:
@@ -237,6 +239,9 @@ class GeminiProvider:
         try:
             from google.genai import types
             config_kwargs = {"response_mime_type": "application/json", "response_schema": schema}
+            thinking_level = getattr(self, "thinking_level", "low")
+            if thinking_level:
+                config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level=thinking_level)
             if system_instruction:
                 config_kwargs["system_instruction"] = system_instruction
 
