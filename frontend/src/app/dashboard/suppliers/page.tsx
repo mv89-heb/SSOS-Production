@@ -97,7 +97,7 @@ function TableFilterInput({ value, onChange, placeholder }: { value: string; onC
 }
 
 function TableFilterSelect<T extends string>({ value, onChange, children }: { value: T; onChange: (value: T) => void; children: React.ReactNode }) {
-  return <Select value={value} onChange={(e) => onChange(e.target.value as T)} className="h-8 min-w-[105px] text-xs">{children}</Select>;
+  return <Select value={value} onChange={(e) => onChange(e.target.value as T)} className="h-8 min-w-[105px] text-xs" sortOptions>{children}</Select>;
 }
 
 export default function SuppliersPage() {
