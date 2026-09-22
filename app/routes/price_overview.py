@@ -43,7 +43,7 @@ def overview():
                 "current_supplier": current.get("supplier_name") if current else None,
                 "current_price": current_price, "currency": current.get("currency", "ILS") if current else (product.currency or "ILS"),
                 "comparison_unit": current.get("comparison_unit") if current else (best.get("comparison_unit") if best else None),
-                "best_supplier": best.get("supplier_name") if best else None, "best_price": best_price,
+                "best_supplier": best.get("supplier_name") if best else None, "best_supplier_id": best.get("supplier_id") if best else None, "best_price": best_price,
                 "savings_per_unit": round(savings, 6), "savings_percent": round((savings / current_price * 100), 2) if current_price else 0.0,
                 "supplier_count": len(all_offers),
                 "offers": [{"supplier_id": row["supplier_id"], "supplier_name": row["supplier_name"], "price": row["normalized_price"], "currency": row["currency"], "unit": row.get("comparison_unit"), "primary": row.get("primary", False)} for row in all_offers],
@@ -59,7 +59,7 @@ def overview():
             for offer in row["offers"]:
                 entry = supplier_stats.setdefault(offer["supplier_id"], {"supplier_id": offer["supplier_id"], "supplier_name": offer["supplier_name"], "participation": 0, "wins": 0})
                 entry["participation"] += 1
-                if row["best_supplier"] and offer["supplier_name"] == row["best_supplier"] and row["best_price"] is not None and offer["price"] == row["best_price"]:
+                if row.get("best_supplier_id") == offer["supplier_id"] and row["best_price"] is not None and offer["price"] == row["best_price"]:
                     entry["wins"] += 1
         supplier_scores = []
         analyzed = comparable
