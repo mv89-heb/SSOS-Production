@@ -95,7 +95,11 @@ class CatalogService:
         return supplier
 
     def list_products(self, supplier_id: int = None, active_only: bool = False):
-        products = self.product_repo.get_by_supplier(supplier_id) if supplier_id is not None else self.product_repo.list_all(limit=500)
+        # The catalog screen is the authoritative product list and must not
+        # silently truncate the tenant's catalog. `list_all()` defaults to 100
+        # rows, so request the complete tenant catalog explicitly here. The
+        # matching/validation path already uses an uncapped query as well.
+        products = self.product_repo.get_by_supplier(supplier_id) if supplier_id is not None else self.product_repo.list_all(limit=None)
         return [p for p in products if p.active] if active_only else products
 
     def get_product(self, product_id: int): return self.product_repo.get_by_id_or_404(product_id)
