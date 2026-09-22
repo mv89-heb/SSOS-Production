@@ -120,3 +120,14 @@ def test_low_confidence_candidate_is_suggestion_not_selected_match():
     assert result["best_match"] is None
     assert result["suggestions"]
     assert result["suggestions"][0]["product_id"] == 99
+
+
+def test_synthetic_barcode_never_becomes_authoritative_match():
+    service = ProductMatchingService(1)
+    extracted = {"description": "מוצר אחר", "barcode": "990000010000123"}
+    score, method = service._candidate_score(
+        extracted,
+        product(barcode="990000010000123", supplier_sku=None),
+    )
+    assert method == "NAME_SIMILARITY"
+    assert score < 1.0
