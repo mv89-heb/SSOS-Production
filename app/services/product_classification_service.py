@@ -16,6 +16,9 @@ CATEGORIES = (
     "מוצרי חלב", "ירקות", "פירות", "בשר", "עוף", "דגים", "קפואים",
     "שימורים", "מזון יבש", "מאפים ולחמים", "משקאות", "חטיפים", "ממתקים",
     "רטבים ותבלינים", "חד פעמי", "ניקיון", "ציוד מטבח", "אחר",
+    "בשר ובקר", "עופות והודו", "בצקים ומאפים", "ירקות קפואים ומוצרי תפו\"א",
+    "סלטים מזרחיים וממרחים", "גלידות וקינוחים", "ירקות ופירות טריים",
+    "תחליפי בשר (טבעוני/צמחי)", "מכולת (יבש / ביצים)",
 )
 
 # HARD_RULES are evaluated before the broader keyword engine. The order here
@@ -110,8 +113,9 @@ class ProductClassificationService:
                 best = feedback
         return best, best_score
 
-    def classify(self, tenant_id: int, product_name: str):
-        normalized = normalize_product_name(product_name)
+    def classify(self, tenant_id: int, product_name: str, description: str | None = None, supplier_name: str | None = None):
+        context_parts = [product_name, description, supplier_name]
+        normalized = normalize_product_name(" ".join(str(part or "") for part in context_parts))
         if not normalized:
             raise BadRequest("Product name is required for classification")
         feedback = self._latest_feedback(tenant_id, normalized)
