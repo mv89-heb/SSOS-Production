@@ -179,8 +179,8 @@ class DocumentIntelligenceService:
                 line_index = item.get("line_index")
                 if not isinstance(line_index, int) or isinstance(line_index, bool) or line_index < 0 or line_index >= len(extracted_items):
                     raise BadRequest("Each reviewed line requires a valid line_index")
-                if line_index in applied_indexes:
-                    raise BadRequest(f"Line {line_index + 1} was already applied")
+                if line_index in applied_indexes or line_index in requested_indexes:
+                    raise BadRequest(f"Line {line_index + 1} was already applied or duplicated")
                 requested_indexes.append(line_index)
                 product_id, supplier_id, price = item.get("product_id"), item.get("supplier_id"), item.get("price")
                 if not isinstance(product_id, int) or isinstance(product_id, bool) or product_id <= 0:
@@ -225,7 +225,9 @@ class DocumentIntelligenceService:
                         offer.active = True
                 db.session.flush()
             applied_indexes.update(requested_indexes)
-            row.extracted_data["applied_line_indexes"] = sorted(applied_indexes)
+            updated_data = dict(row.extracted_data)
+            updated_data["applied_line_indexes"] = sorted(applied_indexes)
+            row.extracted_data = updated_data
             row.status = "APPLIED" if len(applied_indexes) >= len(extracted_items) else "PARTIALLY_APPLIED"
             row.applied_at = datetime.now(timezone.utc)
             row.applied_by = self.user_id
