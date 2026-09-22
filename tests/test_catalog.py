@@ -553,3 +553,25 @@ def test_list_products_returns_entire_catalog_not_only_first_500(logged_in_clien
     products = response.get_json()["products"]
     assert len(products) == 501
     assert {product["name"] for product in products} == {f"Catalog Product {index:03d}" for index in range(501)}
+
+
+def test_catalog_exposes_non_destructive_data_quality_diagnostics(logged_in_client_a):
+    supplier = logged_in_client_a.post(
+        "/api/catalog/suppliers", json={"name": "Quality Supplier"}
+    ).get_json()["supplier"]["id"]
+    response = logged_in_client_a.post(
+        "/api/catalog/products",
+        json={
+            "supplier_id": supplier,
+            "name": "Needs Review",
+            "current_price": 0,
+            "barcode": "990000010000123",
+        },
+    )
+    assert response.status_code == 201
+    quality = response.get_json()["product"]["data_quality"]
+    assert quality["needs_review"] is True
+    assert "missing_price" in quality["warnings"]
+    assert quality["barcode_kind"] == "synthetic"
+    assert "category" in quality["missing_fields"]
+    assert "unit" in quality["missing_fields"]
