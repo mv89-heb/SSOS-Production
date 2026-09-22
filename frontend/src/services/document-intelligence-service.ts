@@ -23,7 +23,7 @@ export const documentIntelligenceService = {
       try {
         const current = await documentIntelligenceService.get(uploaded.id);
         onAnalysisStatus?.(current);
-        active = !["ANALYZED", "FAILED", "AI_UNAVAILABLE", "APPLIED"].includes(current.status);
+        active = !["ANALYZED", "PARTIALLY_APPLIED", "FAILED", "AI_UNAVAILABLE", "APPLIED"].includes(current.status);
       } catch { /* The analyze request remains authoritative. */ }
       if (!active) break;
     }
