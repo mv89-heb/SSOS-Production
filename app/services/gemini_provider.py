@@ -30,13 +30,16 @@ def _safe_provider_error(exc: Exception) -> str:
 class GeminiProvider:
     name = "gemini"
 
-    def __init__(self, api_key: str, model: str = "gemini-3.6-flash", timeout_seconds: float = 30):
+    def __init__(self, api_key: str, model: str = "gemini-3.6-flash", timeout_seconds: float = 30, fallback_model: str | None = "gemini-3.5-flash-lite"):
         if not api_key:
             raise ValueError("GEMINI_API_KEY is required when Gemini is enabled")
         from google import genai
         from google.genai import types
 
         self.model = model
+        self.fallback_model = (fallback_model or "").strip() or None
+        if self.fallback_model == self.model:
+            self.fallback_model = None
         self.timeout_ms = max(1000, int(float(timeout_seconds) * 1000))
         self._client = genai.Client(
             api_key=api_key,
@@ -49,9 +52,10 @@ class GeminiProvider:
         api_key = (config.get("GEMINI_API_KEY") or "").strip()
         model = (config.get("GEMINI_MODEL") or "gemini-3.6-flash").strip()
         timeout_seconds = float(config.get("GEMINI_TIMEOUT", 30))
+        fallback_model = (config.get("GEMINI_FALLBACK_MODEL") or "gemini-3.5-flash-lite").strip()
         if not enabled or not api_key:
             raise ValueError("Gemini is not configured")
-        return cls(api_key=api_key, model=model, timeout_seconds=timeout_seconds)
+        return cls(api_key=api_key, model=model, timeout_seconds=timeout_seconds, fallback_model=fallback_model)
 
     def generate_text(self, prompt: str, *, system_instruction: str | None = None) -> AIResult:
         try:
@@ -182,31 +186,49 @@ class GeminiProvider:
             types.Part.from_bytes(data=page_bytes, mime_type="application/pdf"),
         ]
 
-        max_attempts = 2
+        models_to_try = [self.model]
+        if self.fallback_model:
+            models_to_try.append(self.fallback_model)
         last_error: Exception | None = None
-        for attempt in range(1, max_attempts + 1):
-            try:
-                response = self._client.models.generate_content(
-                    model=self.model,
-                    contents=contents,
-                    config=config,
-                )
-                text = (response.text or "").strip()
-                if not text:
-                    raise ValueError(f"Gemini returned an empty response for page {page_number}")
-                return json.loads(text)
-            except json.JSONDecodeError:
-                raise
-            except Exception as exc:
-                last_error = exc
-                if attempt >= max_attempts or not self._is_retryable_error(exc):
+
+        for model_index, model_name in enumerate(models_to_try):
+            max_attempts = 2
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    response = self._client.models.generate_content(
+                        model=model_name,
+                        contents=contents,
+                        config=config,
+                    )
+                    text = (response.text or "").strip()
+                    if not text:
+                        raise ValueError(f"Gemini returned an empty response for page {page_number}")
+                    return json.loads(text)
+                except json.JSONDecodeError:
                     raise
-                delay = min(8, 2 ** (attempt - 1))
-                logger.warning(
-                    "Retrying Gemini page %s/%s after transient failure (attempt %s/%s): %s",
-                    page_number, page_count, attempt, max_attempts, _safe_provider_error(exc),
-                )
-                time.sleep(delay)
+                except Exception as exc:
+                    last_error = exc
+                    retryable = self._is_retryable_error(exc)
+                    if retryable and attempt < max_attempts:
+                        delay = min(8, 2 ** (attempt - 1))
+                        logger.warning(
+                            "Retrying Gemini page %s/%s on model %s after transient failure "
+                            "(attempt %s/%s): %s",
+                            page_number, page_count, model_name, attempt, max_attempts,
+                            _safe_provider_error(exc),
+                        )
+                        time.sleep(delay)
+                        continue
+
+                    if retryable and model_index < len(models_to_try) - 1:
+                        fallback = models_to_try[model_index + 1]
+                        logger.warning(
+                            "Gemini model %s unavailable for page %s/%s; falling back to %s: %s",
+                            model_name, page_number, page_count, fallback, _safe_provider_error(exc),
+                        )
+                        break
+
+                    raise
 
         raise last_error or RuntimeError(f"Gemini failed to analyze page {page_number}")
 
