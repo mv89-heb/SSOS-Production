@@ -1,7 +1,9 @@
 import { Children, SelectHTMLAttributes, ReactElement, forwardRef, isValidElement } from "react";
 import { cn } from "@/lib/utils";
 
-export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
+type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & { sortOptions?: boolean };
+
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, children, sortOptions = false, ...props }, ref) => {
     return (
       <select
