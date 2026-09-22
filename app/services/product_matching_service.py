@@ -56,7 +56,10 @@ class ProductMatchingService:
         sequence = SequenceMatcher(None, a, b).ratio()
         at, bt = cls.tokens(a), cls.tokens(b)
         if at and bt:
-            return max(sequence, len(at & bt) / max(len(at), len(bt)))
+            overlap = len(at & bt)
+            coverage = overlap / max(len(at), len(bt))
+            containment = overlap / min(len(at), len(bt))
+            return max(sequence, coverage, containment if containment >= 0.9 else 0.0)
         return sequence
 
     @classmethod
