@@ -31,10 +31,28 @@ export const documentIntelligenceService = {
   },
   uploadManyAndAnalyze: async (files: File[], onFileStatus?: (file: File, analysis: DocumentAnalysis | null, stage: "uploading" | "uploaded" | "processing" | "done", percent: number) => void) => {
     const results: DocumentAnalysis[] = [];
-    for (const file of files) {
-      const result = await documentIntelligenceService.uploadAndAnalyze(file, (percent) => onFileStatus?.(file, null, "uploading", percent), (analysis) => onFileStatus?.(file, analysis, analysis.status === "UPLOADED" ? "uploaded" : analysis.status === "PROCESSING" ? "processing" : "done", analysis.extracted_data?.processing?.percent ?? (analysis.status === "UPLOADED" ? 100 : 0)));
-      results.push(result); onFileStatus?.(file, result, "done", 100);
+    const concurrency = Math.min(2, Math.max(1, files.length));
+    let nextIndex = 0;
+    async function worker() {
+      while (true) {
+        const index = nextIndex++;
+        if (index >= files.length) return;
+        const file = files[index];
+        const result = await documentIntelligenceService.uploadAndAnalyze(
+          file,
+          (percent) => onFileStatus?.(file, null, "uploading", percent),
+          (analysis) => onFileStatus?.(
+            file,
+            analysis,
+            analysis.status === "UPLOADED" ? "uploaded" : analysis.status === "PROCESSING" ? "processing" : "done",
+            analysis.extracted_data?.processing?.percent ?? (analysis.status === "UPLOADED" ? 100 : 0),
+          ),
+        );
+        results[index] = result;
+        onFileStatus?.(file, result, "done", 100);
+      }
     }
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
     return results;
   },
   analyze: async (id: number) => { const { data } = await apiClient.post<{ success: boolean; analysis: DocumentAnalysis }>(`/api/document-intelligence/${id}/analyze`); return data.analysis; },
