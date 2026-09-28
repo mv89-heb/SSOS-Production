@@ -28,6 +28,10 @@ static/uploads/
 frontend/node_modules/
 frontend/.next/
 frontend/out/
+frontend/.open-next/
+
+# Cloudflare/OpenNext
+.open-next/
 
 # IDE / OS
 .vscode/
