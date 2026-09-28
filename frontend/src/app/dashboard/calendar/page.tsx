@@ -114,6 +114,9 @@ export default function CalendarPage() {
     onSuccess: async () => {
       setActionError(null);
       await qc.invalidateQueries({ queryKey: ["calendar-orders"] });
+      // The selected day contains a snapshot of its orders. Clear it after a
+      // lifecycle change so the modal can never show a stale status/action.
+      setSelectedDay(null);
     },
     onError: (error) => setActionError(error instanceof Error ? error.message : "הפעולה נכשלה."),
   });
@@ -145,7 +148,14 @@ export default function CalendarPage() {
     const key = orderCalendarDate(o);
     return key?.startsWith(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`);
   });
-  const dueCount = monthOrders.filter((o) => o.reminder_state !== "complete" && o.next_reminder_at && new Date(o.next_reminder_at).getTime() <= Date.now()).length;
+  const monthReminders = (orders.data ?? []).filter((order) => {
+    if (order.reminder_state === "complete" || !order.next_reminder_at) return false;
+    const reminderKey = isoDay(new Date(order.next_reminder_at));
+    return reminderKey.startsWith(
+      String(cursor.getFullYear()) + "-" + String(cursor.getMonth() + 1).padStart(2, "0"),
+    );
+  });
+  const dueCount = monthReminders.filter((order) => new Date(order.next_reminder_at!).getTime() <= Date.now()).length;
 
   return (
     <div className="space-y-6 pb-8" dir="rtl">
@@ -163,7 +173,7 @@ export default function CalendarPage() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard icon={ShoppingCart} label="הזמנות בחודש" value={monthOrders.length} />
-        <StatCard icon={Bell} label="תזכורות" value={monthOrders.filter((o) => o.next_reminder_at).length} />
+        <StatCard icon={Bell} label="תזכורות" value={monthReminders.length} />
         <StatCard icon={AlertTriangle} label="דורשות טיפול" value={dueCount} />
         <StatCard icon={CalendarDays} label="ימי חג" value={(holidays.data ?? []).length} />
       </div>
