@@ -15,12 +15,14 @@ class InventoryMovement(db.Model):
     __table_args__ = (
         db.Index("ix_inventory_movements_tenant_product_date", "tenant_id", "product_id", "occurred_at"),
         db.Index("ix_inventory_movements_tenant_type_date", "tenant_id", "movement_type", "occurred_at"),
+        db.Index("ix_inventory_movements_tenant_receipt", "tenant_id", "receipt_id"),
     )
 
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
     product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    receipt_id = db.Column(db.Integer, db.ForeignKey("receipts.id"), nullable=True, index=True)
     movement_type = db.Column(db.String(20), nullable=False, index=True)
     quantity = db.Column(db.Numeric(12, 3), nullable=False)
     balance_after = db.Column(db.Numeric(12, 3), nullable=True)
@@ -32,11 +34,13 @@ class InventoryMovement(db.Model):
 
     product = db.relationship("Product")
     user = db.relationship("User")
+    receipt = db.relationship("Receipt")
 
     def to_dict(self):
         return {
             "id": self.id,
             "product_id": self.product_id,
+            "receipt_id": self.receipt_id,
             "movement_type": self.movement_type,
             "quantity": float(self.quantity),
             "balance_after": float(self.balance_after) if self.balance_after is not None else None,
