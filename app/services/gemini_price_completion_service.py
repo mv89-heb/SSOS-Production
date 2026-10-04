@@ -176,10 +176,14 @@ class GeminiPriceCompletionService:
                 result = self.complete_product(product)
                 db.session.commit()
                 if result["status"] == "updated":
-                    AuditService.log_event(self.tenant_id, self.user_id, "catalog.gemini_price_completed",
-                                           f"Gemini completed price for {product.name}",
-                                           {"product_id": product.id, "result": result})
-                    db.session.commit()
+                    try:
+                        AuditService.log_event(self.tenant_id, self.user_id, "catalog.gemini_price_completed",
+                                               f"Gemini completed price for {product.name}",
+                                               {"product_id": product.id, "result": result})
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+                        logger.exception("Price saved but audit event failed for product %s", product.id)
                 results.append(result)
             except Exception as exc:
                 db.session.rollback()
