@@ -196,7 +196,8 @@ class OrderService:
             try: qty = int(raw_qty)
             except (TypeError, ValueError): raise BadRequest("Quantity must be a positive integer")
             if qty <= 0 or qty > self.MAX_LINE_QUANTITY: raise BadRequest(f"Quantity must be between 1 and {self.MAX_LINE_QUANTITY}")
+            if p.current_price is None or float(p.current_price) <= 0:
+                raise Conflict(f"Product {p_id} has no valid purchase price. Complete the catalog price before ordering.")
             unit_price = float(p.current_price)
-            if unit_price < 0: raise Conflict(f"Product {p_id} has an invalid negative price")
             enriched_items.append({"product_id": p.id, "sku": p.sku, "product_name": p.name, "quantity": qty, "unit_price": unit_price, "total_price": round(qty * unit_price, 2)})
         return enriched_items
