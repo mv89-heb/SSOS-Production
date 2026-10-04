@@ -1,0 +1,46 @@
+import { apiClient } from "@/lib/api-client";
+
+export type PriceCompletionResult = {
+  status: "updated" | "unresolved" | "error";
+  product_id: number;
+  product_name: string;
+  old_price?: number | null;
+  new_price?: number | null;
+  currency?: string;
+  confidence?: number;
+  match_type?: string;
+  package_description?: string;
+  evidence?: string;
+  sources?: string[];
+  reason?: string;
+  model?: string;
+};
+
+export type PriceCompletionStatus = {
+  total_active: number;
+  priced: number;
+  missing_price: number;
+};
+
+export type PriceCompletionBatch = PriceCompletionStatus & {
+  total_missing: number;
+  offset: number;
+  processed: number;
+  next_offset: number | null;
+  remaining: number;
+  updated: number;
+  unresolved: number;
+  errors: number;
+  results: PriceCompletionResult[];
+};
+
+export const geminiPriceCompletionService = {
+  status: async () =>
+    (await apiClient.get<{ success: boolean } & PriceCompletionStatus>("/api/price-intelligence/price-completion/status")).data,
+
+  run: async (offset: number, batchSize = 5) =>
+    (await apiClient.post<{ success: boolean } & PriceCompletionBatch>("/api/price-intelligence/price-completion/run", {
+      offset,
+      batch_size: batchSize,
+    })).data,
+};
