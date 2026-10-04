@@ -39,7 +39,7 @@ export const geminiPriceCompletionService = {
 
   run: async (productIds: number[], batchSize = 5) =>
     (await apiClient.post<{ success: boolean } & PriceCompletionBatch>("/api/price-intelligence/price-completion/run", {
-      offset,
+      product_ids: productIds,
       batch_size: batchSize,
     })).data,
 };
