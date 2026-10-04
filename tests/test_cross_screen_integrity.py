@@ -64,3 +64,17 @@ def test_supplier_offer_flows_from_catalog_to_comparison_and_does_not_change_pri
     catalog = logged_in_client_a.get("/api/catalog/products").get_json()["products"]
     row = next(item for item in catalog if item["id"] == product["id"])
     assert row["current_price"] == 20.0
+
+
+def test_order_rejects_missing_or_zero_catalog_price(logged_in_client_a):
+    supplier = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "Supplier"}).get_json()["supplier"]
+    product = logged_in_client_a.post(
+        "/api/catalog/products",
+        json={"supplier_id": supplier["id"], "name": "Unpriced Product", "sku": "INT-003", "current_price": 0},
+    ).get_json()["product"]
+    response = logged_in_client_a.post(
+        "/api/orders",
+        json={"supplier_id": supplier["id"], "items": [{"product_id": product["id"], "quantity": 1}]},
+    )
+    assert response.status_code == 409
+    assert "valid purchase price" in response.get_json()["message"]
