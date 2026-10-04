@@ -24,6 +24,10 @@ class PriceHistory(db.Model):
 
     source_type = db.Column(db.String(30), nullable=False, default="MANUAL")
     source_document_id = db.Column(db.Integer, nullable=True)
+    source_url = db.Column(db.String(1000), nullable=True)
+    source_title = db.Column(db.String(300), nullable=True)
+    match_method = db.Column(db.String(50), nullable=True)
+    match_confidence = db.Column(db.Numeric(5, 4), nullable=True)
     effective_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -44,6 +48,10 @@ class PriceHistory(db.Model):
             "unit": self.unit,
             "source_type": self.source_type,
             "source_document_id": self.source_document_id,
+            "source_url": self.source_url,
+            "source_title": self.source_title,
+            "match_method": self.match_method,
+            "match_confidence": float(self.match_confidence) if self.match_confidence is not None else None,
             "effective_at": self.effective_at.isoformat() if self.effective_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "change_percent": float(self.change_percent) if self.change_percent is not None else None,
