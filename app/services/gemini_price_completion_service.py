@@ -165,11 +165,15 @@ class GeminiPriceCompletionService:
                 "package_description": result.get("package_description"), "evidence": result.get("evidence"),
                 "sources": sources, "model": result.get("model")}
 
-    def run_batch(self, batch_size=5, offset=0):
+    def run_batch(self, batch_size=5, product_ids=None):
         batch_size = max(1, min(int(batch_size), 10))
         products = [p for p in self.product_repo.get_all_for_matching() if p.active and (p.current_price is None or Decimal(str(p.current_price or 0)) <= 0)]
+        if product_ids:
+            wanted = {int(pid) for pid in product_ids}
+            batch = [p for p in products if p.id in wanted][:batch_size]
+        else:
+            batch = products[:batch_size]
         total = len(products)
-        batch = products[offset:offset + batch_size]
         results = []
         for product in batch:
             try:
@@ -189,9 +193,8 @@ class GeminiPriceCompletionService:
                 db.session.rollback()
                 logger.exception("Price completion failed for product %s", product.id)
                 results.append({"status": "error", "product_id": product.id, "product_name": product.name, "reason": str(exc)[:500]})
-        next_offset = offset + len(batch)
-        return {"total_missing": total, "offset": offset, "processed": len(batch),
-                "next_offset": next_offset if next_offset < total else None, "remaining": max(0, total - next_offset),
+        remaining = len([p for p in self.product_repo.get_all_for_matching() if p.active and (p.current_price is None or Decimal(str(p.current_price or 0)) <= 0)])
+        return {"total_missing": total, "processed": len(batch), "remaining": remaining,
                 "updated": sum(r["status"] == "updated" for r in results),
                 "unresolved": sum(r["status"] == "unresolved" for r in results),
                 "errors": sum(r["status"] == "error" for r in results), "results": results}
