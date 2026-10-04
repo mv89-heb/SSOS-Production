@@ -14,7 +14,7 @@ const money = (value?: number | null, currency = "ILS") => {
 };
 
 export default function PriceCompletionPage() {
-  const [status, setStatus] = useState({ total_active: 0, priced: 0, missing_price: 0 });
+  const [status, setStatus] = useState({ total_active: 0, priced: 0, missing_price: 0, missing_product_ids: [] as number[] });
   const [running, setRunning] = useState(false);
   const [processed, setProcessed] = useState(0);
   const [updated, setUpdated] = useState(0);
@@ -39,15 +39,13 @@ export default function PriceCompletionPage() {
     setResults([]);
     setProcessed(0);
     setUpdated(0);
-    let offset = 0;
     try {
-      while (true) {
-        const batch = await geminiPriceCompletionService.run(offset, 5);
+      const ids = [...status.missing_product_ids];
+      for (let index = 0; index < ids.length; index += 5) {
+        const batch = await geminiPriceCompletionService.run(ids.slice(index, index + 5), 5);
         setProcessed((value) => value + batch.processed);
         setUpdated((value) => value + batch.updated);
         setResults((value) => [...batch.results, ...value].slice(0, 100));
-        if (batch.next_offset == null) break;
-        offset = batch.next_offset;
       }
       await refresh();
     } catch (e) {
