@@ -20,13 +20,12 @@ export type PriceCompletionStatus = {
   total_active: number;
   priced: number;
   missing_price: number;
+  missing_product_ids: number[];
 };
 
 export type PriceCompletionBatch = PriceCompletionStatus & {
   total_missing: number;
-  offset: number;
   processed: number;
-  next_offset: number | null;
   remaining: number;
   updated: number;
   unresolved: number;
@@ -38,7 +37,7 @@ export const geminiPriceCompletionService = {
   status: async () =>
     (await apiClient.get<{ success: boolean } & PriceCompletionStatus>("/api/price-intelligence/price-completion/status")).data,
 
-  run: async (offset: number, batchSize = 5) =>
+  run: async (productIds: number[], batchSize = 5) =>
     (await apiClient.post<{ success: boolean } & PriceCompletionBatch>("/api/price-intelligence/price-completion/run", {
       offset,
       batch_size: batchSize,
