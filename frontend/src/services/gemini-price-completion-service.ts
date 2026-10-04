@@ -1,4 +1,4 @@
-import { apiClient } from "@/lib/api-client";
+import { apiClient } from "./api-client";
 
 export type PriceCompletionResult = {
   status: "updated" | "unresolved" | "error";
