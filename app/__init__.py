@@ -28,7 +28,6 @@ def create_app(config_name=None):
             raise RuntimeError("CORS_ORIGINS must contain at least one allowed origin in production")
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
-
     _ensure_directories(app)
     _init_extensions(app)
     _install_import_analysis_patches()
@@ -119,6 +118,7 @@ def _register_blueprints(app):
     from app.routes.users import users_bp
     from app.routes.admin import admin_bp
     from app.routes.price_intelligence import price_intelligence_bp
+    from app.routes.gemini_price_completion import gemini_price_completion_bp
     from app.routes.document_intelligence import document_intelligence_bp
     from app.routes.order_reminders import order_reminders_bp
     from app.routes.google_calendar import google_calendar_bp
@@ -141,6 +141,7 @@ def _register_blueprints(app):
     app.register_blueprint(users_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(price_intelligence_bp)
+    app.register_blueprint(gemini_price_completion_bp)
     app.register_blueprint(document_intelligence_bp)
     app.register_blueprint(order_reminders_bp)
     app.register_blueprint(google_calendar_bp)
