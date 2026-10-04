@@ -11,7 +11,7 @@ interface PriceComparisonProps {
   productId: number;
   primarySupplierId: number;
   primarySupplierName: string;
-  primaryPrice: number;
+  primaryPrice: number | null;
   currency: string;
   suppliers: Supplier[] | undefined;
   canManage: boolean;
@@ -50,7 +50,7 @@ export function PriceComparison({
   const availableSuppliers = (suppliers ?? []).filter((s) => !alreadyOfferedSupplierIds.has(s.id));
 
   const rows = [
-    { key: "primary", supplierName: primarySupplierName, price: primaryPrice, unit: null as string | null, offerId: null as number | null },
+    ...(primaryPrice != null && primaryPrice > 0 ? [{ key: "primary", supplierName: primarySupplierName, price: primaryPrice, unit: null as string | null, offerId: null as number | null }] : []),
     ...((offers ?? []).map((o) => ({
       key: `offer-${o.id}`,
       supplierName: o.supplier_name ?? `#${o.supplier_id}`,
@@ -183,6 +183,7 @@ export function PriceComparison({
         </div>
       )}
 
+      {!isLoading && primaryPrice != null && primaryPrice <= 0 && <p className="text-xs font-semibold text-amber-700">למוצר אין עדיין מחיר ראשי תקין. הצעות חלופיות יוצגו בנפרד.</p>}
       {!isLoading && (offers?.length ?? 0) === 0 && !addingOffer && (
         <p className="text-xs text-slate-400">אין עדיין ספקים נוספים להשוואה עבור מוצר זה.</p>
       )}

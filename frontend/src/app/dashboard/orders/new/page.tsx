@@ -74,7 +74,7 @@ export default function NewOrderPage() {
     return lines.reduce((sum, line) => {
       if (line.product_id === "" || line.quantity <= 0) return sum;
       const product = products.find((p) => p.id === line.product_id);
-      return product ? sum + product.current_price * line.quantity : sum;
+      return product && product.current_price != null && product.current_price > 0 ? sum + product.current_price * line.quantity : sum;
     }, 0);
   }, [lines, products]);
 
@@ -111,6 +111,14 @@ export default function NewOrderPage() {
     const items = lines.filter((line) => line.product_id !== "" && line.quantity > 0);
     if (items.length === 0) {
       setFormError("הוסף לפחות שורת מוצר אחת.");
+      return;
+    }
+    const missingPrice = items.find((line) => {
+      const product = products?.find((candidate) => candidate.id === line.product_id);
+      return !product || product.current_price == null || product.current_price <= 0;
+    });
+    if (missingPrice) {
+      setFormError("אי אפשר ליצור הזמנה עם מוצר שאין לו מחיר רכישה תקין. השלם את המחיר בקטלוג לפני ההזמנה.");
       return;
     }
     createMutation.mutate({
@@ -243,7 +251,7 @@ export default function NewOrderPage() {
                     <option value="">בחר מוצר...</option>
                     {products?.map((product) => (
                       <option key={product.id} value={product.id}>
-                        {product.sku ? `${product.sku} — ` : ""}{product.name} ({product.currency} {product.current_price.toLocaleString()}{product.unit ? ` / ${product.unit}` : ""})
+                        {product.sku ? `${product.sku} — ` : ""}{product.name} ({product.current_price != null && product.current_price > 0 ? `${product.currency} ${product.current_price.toLocaleString()}` : "חסר מחיר"}{product.unit ? ` / ${product.unit}` : ""})
                       </option>
                     ))}
                   </select>

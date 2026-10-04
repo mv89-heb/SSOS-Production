@@ -74,7 +74,7 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   const activeProducts = allProducts.filter((product) => product.active);
-  const catalogValue = activeProducts.reduce((sum, product) => sum + product.current_price, 0);
+  const catalogValue = activeProducts.reduce((sum, product) => sum + (product.current_price ?? 0), 0);
 
   const stats: DashboardStat[] = [
     {
@@ -280,7 +280,7 @@ export default function DashboardPage() {
           ) : (
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
               {[...activeProducts]
-                .sort((a, b) => b.current_price - a.current_price)
+                .sort((a, b) => (b.current_price ?? 0) - (a.current_price ?? 0))
                 .slice(0, 5)
                 .map((product) => {
                   const hasStock = product.current_stock !== null && product.min_stock !== null;
@@ -297,7 +297,7 @@ export default function DashboardPage() {
                       </div>
                       <p className="mt-4 truncate text-sm font-bold text-slate-900 dark:text-white">{product.name}</p>
                       <p className="mt-1 text-xs text-slate-400">{product.category || "ללא קטגוריה"}</p>
-                      <p className="mt-3 text-sm font-black text-indigo-700 dark:text-indigo-300">{formatMoney(product.current_price, product.currency)}</p>
+                      <p className="mt-3 text-sm font-black text-indigo-700 dark:text-indigo-300">{product.current_price != null && product.current_price > 0 ? formatMoney(product.current_price, product.currency) : "חסר מחיר"}</p>
                     </Link>
                   );
                 })}

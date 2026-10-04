@@ -76,11 +76,13 @@ class GeminiPriceCompletionService:
                 "package_description": {"type": "STRING"},
                 "matched_product": {"type": "STRING"},
                 "match_type": {"type": "STRING"},
+                "matched_supplier": {"type": "STRING"},
+                "supplier_match": {"type": "BOOLEAN"},
                 "confidence": {"type": "INTEGER"},
                 "source_urls": {"type": "ARRAY", "items": {"type": "STRING"}},
                 "evidence": {"type": "STRING"},
             },
-            "required": ["found", "price_ils", "price_unit", "package_description", "matched_product", "match_type", "confidence", "source_urls", "evidence"],
+            "required": ["found", "price_ils", "price_unit", "package_description", "matched_product", "match_type", "matched_supplier", "supplier_match", "confidence", "source_urls", "evidence"],
         }
 
     def _prompt(self, product):
@@ -89,6 +91,9 @@ class GeminiPriceCompletionService:
             "המטרה היא להשלים מחיר חסר, לא להחזיר תשובה כללית.\n\n"
             "כללים: חפש קודם ברקוד אם קיים; אחרת יצרן+שם+משקל/נפח ואז וריאציות שם. העדף מקורות ישראליים ומחיר בשקלים. "
             "המחיר חייב להתאים לאותה יחידת מכירה/אריזה; אל תשווה מארז למחיר יחידה. אל תמציא מחיר או URL. "
+            "המחיר שיוזן ל-current_price חייב להיות מחיר של הספק הראשי של המוצר בלבד. חפש מחיר של הספק הראשי או מחירון/אתר רשמי שלו. "
+            "אל תשתמש במחיר של קמעונאי או ספק אחר כאילו הוא מחיר הספק הראשי. אם מצאת רק מחיר שוק שאינו של הספק הראשי, החזר found=false ו-supplier_match=false. "
+            "matched_supplier חייב להיות שם הספק שממנו מגיע המחיר, ו-supplier_match=true רק כאשר הוא הספק הראשי. "
             "אם אין התאמה מושלמת, מותר להשתמש בהתאמה הקרובה ביותר רק אם ברור שזה אותו מוצר/אריזה, ולציין זאת ולהוריד confidence. "
             "price_ils הוא המחיר עבור האריזה/יחידה שמופיעה במקור. החזר JSON בלבד. אם לא נמצא מחיר אמין, found=false ו-price_ils=0.\n\n"
             f"שם מוצר: {product.name}\n"
@@ -98,7 +103,8 @@ class GeminiPriceCompletionService:
             f'מק"ט ספק: {product.supplier_sku or "לא קיים"}\n'
             f"יחידה: {product.unit or 'לא ידוע'}\n"
             f"יחידות בקרטון: {product.units_per_carton or 'לא ידוע'}\n"
-            f"קטגוריה: {product.category or 'לא ידועה'}"
+            f"קטגוריה: {product.category or 'לא ידועה'}\n"
+            f"ספק ראשי: {getattr(getattr(product, 'supplier', None), 'name', None) or 'לא ידוע'}"
         )
 
     def find_price(self, product):
@@ -135,12 +141,22 @@ class GeminiPriceCompletionService:
                     continue
         raise GeminiPriceCompletionError(str(last_error)[:500] if last_error else "Gemini price lookup failed")
 
+    @staticmethod
+    def _supplier_match(result, product):
+        expected = str(getattr(getattr(product, "supplier", None), "name", "") or "").strip().casefold()
+        matched = str(result.get("matched_supplier") or "").strip().casefold()
+        if not expected or not matched:
+            return False
+        return bool(result.get("supplier_match")) and (expected in matched or matched in expected)
+
     def complete_product(self, product):
         result = self.find_price(product)
         confidence = max(0, min(100, int(result.get("confidence") or 0)))
         price = self._number(result.get("price_ils"))
         if not bool(result.get("found")) or price is None:
             return {"status": "unresolved", "product_id": product.id, "product_name": product.name, "confidence": confidence, "reason": str(result.get("evidence") or "לא נמצא מחיר אמין"), "sources": result.get("source_urls") or []}
+        if not self._supplier_match(result, product):
+            return {"status": "unresolved", "product_id": product.id, "product_name": product.name, "confidence": confidence, "reason": "נמצא מחיר אינטרנטי אך לא ניתן לאמת שהוא המחיר של הספק הראשי של המוצר; המחיר לא הוזן לקטלוג.", "sources": result.get("source_urls") or []}
         if confidence < self.MIN_CONFIDENCE:
             return {"status": "unresolved", "product_id": product.id, "product_name": product.name, "confidence": confidence, "reason": f"רמת הביטחון נמוכה מדי ({confidence}%)", "sources": result.get("source_urls") or []}
 
