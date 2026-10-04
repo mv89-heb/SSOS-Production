@@ -101,7 +101,7 @@ export default function ProcurementBasketPage() {
               const product = catalog.find((row) => row.id === item.product_id);
               return <div key={`${item.product_id}-${index}`} className="grid gap-3 p-5 md:grid-cols-[1fr_150px_auto] md:items-center">
                 <select value={item.product_id} onChange={(event) => updateItem(index, { product_id: Number(event.target.value) })} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
-                  {catalog.map((row) => <option key={row.id} value={row.id}>{row.name} — {money(row.current_price, row.currency || "ILS")}</option>)}
+                  {catalog.map((row) => <option key={row.id} value={row.id}>{row.name} — {row.current_price != null && row.current_price > 0 ? money(row.current_price, row.currency || "ILS") : "חסר מחיר"}</option>)}
                 </select>
                 <input type="number" min="0.01" step="0.01" value={item.quantity} onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900" aria-label={`כמות ${product?.name || "מוצר"}`} />
                 <button type="button" onClick={() => removeItem(index)} className="inline-flex items-center justify-center rounded-xl border border-red-200 p-2.5 text-red-600 hover:bg-red-50 dark:border-red-900"><Trash2 size={16} /></button>
