@@ -94,8 +94,8 @@ class GeminiPriceCompletionService:
             f"שם מוצר: {product.name}\n"
             f"תיאור: {product.description or 'לא ידוע'}\n"
             f"ברקוד: {product.barcode or 'לא קיים'}\n"
-            f"מק"ט פנימי: {product.sku or 'לא קיים'}\n"
-            f"מק"ט ספק: {product.supplier_sku or 'לא קיים'}\n"
+            f'מק"ט פנימי: {product.sku or "לא קיים"}\n'
+            f'מק"ט ספק: {product.supplier_sku or "לא קיים"}\n'
             f"יחידה: {product.unit or 'לא ידוע'}\n"
             f"יחידות בקרטון: {product.units_per_carton or 'לא ידוע'}\n"
             f"קטגוריה: {product.category or 'לא ידועה'}"
