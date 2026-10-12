@@ -69,6 +69,6 @@ def upgrade():
 
 
 def downgrade():
-    # Reconstructing previously separate master identities is ambiguous; the
-    # forward migration is deliberately data-preserving and non-destructive.
-    pass
+    # A downgrade would need to reconstruct prior product-to-master identity
+    # assignments. Refuse rather than report a rollback while leaving merged data.
+    raise RuntimeError("Master-product deduplication is intentionally irreversible; restore from a database snapshot to roll back.")
