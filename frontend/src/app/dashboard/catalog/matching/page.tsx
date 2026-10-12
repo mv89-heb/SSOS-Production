@@ -28,6 +28,8 @@ export default function ProductMatchingPage() {
   const [barcode, setBarcode] = useState("");
   const [price, setPrice] = useState("");
   const [unit, setUnit] = useState("");
+  const [unitsPerCarton, setUnitsPerCarton] = useState("");
+  const [currency, setCurrency] = useState("ILS");
   const [queryById, setQueryById] = useState<Record<number, string>>({});
   const [suggestionsById, setSuggestionsById] = useState<Record<number, MasterMatchSuggestion[]>>({});
   const [selectedById, setSelectedById] = useState<Record<number, string>>({});
@@ -47,7 +49,7 @@ export default function ProductMatchingPage() {
       setMessage(result.supplier_product.match_status === "APPROVED"
         ? "הפריט זוהה לפי ברקוד מדויק ושויך אוטומטית למוצר האב."
         : "הפריט נקלט וממתין לאישור שיוך. התאמה לפי שם בלבד אינה מאשרת שיוך אוטומטית.");
-      setSupplierName(""); setSupplierSku(""); setBarcode(""); setPrice(""); setUnit("");
+      setSupplierName(""); setSupplierSku(""); setBarcode(""); setPrice(""); setUnit(""); setUnitsPerCarton(""); setCurrency("ILS");
       await refresh();
     },
     onError: (error: any) => setMessage(error?.response?.data?.message || "לא ניתן לקלוט את פריט הספק."),
@@ -78,7 +80,8 @@ export default function ProductMatchingPage() {
     intake.mutate({
       supplier_id: Number(supplierId), supplier_name: supplierName.trim(),
       supplier_sku: supplierSku.trim() || undefined, barcode: barcode.trim() || undefined,
-      price: price.trim() ? Number(price) : undefined, currency: "ILS", unit: unit.trim() || undefined,
+      price: price.trim() ? Number(price) : undefined, currency, unit: unit.trim() || undefined,
+      units_per_carton: unitsPerCarton.trim() ? Number(unitsPerCarton) : undefined,
     });
   }
 
@@ -110,7 +113,9 @@ export default function ProductMatchingPage() {
         <label className="space-y-1 text-sm"><span className="font-medium">מק״ט ספק</span><Input value={supplierSku} onChange={(e) => setSupplierSku(e.target.value)} placeholder="מק״ט כפי שמופיע במחירון" /></label>
         <label className="space-y-1 text-sm"><span className="font-medium">ברקוד</span><Input value={barcode} onChange={(e) => setBarcode(e.target.value)} /></label>
         <label className="space-y-1 text-sm"><span className="font-medium">מחיר נוכחי</span><Input type="number" min="0.01" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="מחיר חיובי בלבד" /></label>
-        <label className="space-y-1 text-sm"><span className="font-medium">יחידת מכירה</span><Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="ליטר, ק״ג, יחידה..." /></label>
+        <label className="space-y-1 text-sm"><span className="font-medium">מטבע</span><Select value={currency} onChange={(e) => setCurrency(e.target.value)}><option value="ILS">שקל (ILS)</option><option value="USD">דולר (USD)</option><option value="EUR">אירו (EUR)</option></Select></label>
+        <label className="space-y-1 text-sm"><span className="font-medium">יחידת מכירה</span><Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="ליטר, ק״ג, יחידה, קרטון..." /></label>
+        <label className="space-y-1 text-sm"><span className="font-medium">יחידות בקרטון / ארגז</span><Input type="number" min="1" step="1" value={unitsPerCarton} onChange={(e) => setUnitsPerCarton(e.target.value)} placeholder="רק אם המחיר לקרטון" /></label>
         <div className="sm:col-span-2 lg:col-span-3"><Button type="submit" disabled={busy || !supplierId || !supplierName.trim()}><Plus size={16} />קליטת פריט והצעת התאמה</Button></div>
       </form>
       <p className="mt-3 text-xs text-slate-500">ברקוד זהה ותקין עשוי לאפשר שיוך אוטומטי. התאמה טקסטואלית מוצגת כהצעה בלבד; הבדלי נפח או אחוזים מונעים התאמה.</p>
