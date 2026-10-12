@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Award, BarChart3, Search, TrendingDown } from "lucide-react";
 import { apiClient } from "@/services/api-client";
@@ -47,6 +47,7 @@ type Overview = {
 
 export default function SupplierOverviewPage() {
   const [search, setSearch] = useState("");
+  const tableScrollRef = useRef<HTMLDivElement>(null);
   const [opportunities, setOpportunities] = useState(false);
   const deferredSearch = useDeferredValue(search);
 
@@ -156,8 +157,16 @@ export default function SupplierOverviewPage() {
               לא ניתן לבצע את החיפוש כרגע. נסה שוב בעוד רגע.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1120px] text-right text-sm">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                <span>ניתן לגלול אופקית כדי לראות את כל העמודות</span>
+                <div className="flex shrink-0 gap-2">
+                  <button type="button" onClick={() => tableScrollRef.current?.scrollBy({ left: -480, behavior: "smooth" })} className="rounded-lg border border-slate-300 px-3 py-1.5 font-bold hover:bg-white dark:border-slate-700 dark:hover:bg-slate-800" aria-label="גלילה שמאלה">← שמאלה</button>
+                  <button type="button" onClick={() => tableScrollRef.current?.scrollBy({ left: 480, behavior: "smooth" })} className="rounded-lg border border-slate-300 px-3 py-1.5 font-bold hover:bg-white dark:border-slate-700 dark:hover:bg-slate-800" aria-label="גלילה ימינה">ימינה →</button>
+                </div>
+              </div>
+              <div ref={tableScrollRef} dir="ltr" tabIndex={0} aria-label="טבלת השוואת מחירים, גלילה אופקית" className="overflow-x-auto overscroll-x-contain" style={{ scrollbarGutter: "stable", WebkitOverflowScrolling: "touch" }}>
+              <table dir="rtl" className="w-full min-w-[1120px] text-right text-sm">
                 <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900">
                   <tr>
                     <th className="px-4 py-3">מוצר</th>
@@ -215,6 +224,7 @@ export default function SupplierOverviewPage() {
                   לא נמצאו מחירים תואמים להשוואה. ודא שמוצרי הספקים משויכים לאותו מוצר בקטלוג האחיד.
                 </div>
               )}
+              </div>
             </div>
           )}
         </section>
