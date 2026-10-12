@@ -22,6 +22,7 @@ type Comparison = {
     currency: string; unit: string | null; incomparable_reason: string; supplier_product_name?: string }>;
   supplier_product_count: number;
 };
+type ReviewCandidate = { supplier_product: Pending; supplier_company_name: string; current_master_product?: { id: number; canonical_name: string } | null; suggested_master_product: { id: number; canonical_name: string }; confidence: number; match_method: string; };
 type Pending = {
   id: number; supplier_id: number; supplier_name: string; supplier_company_name?: string | null; price: number | null;
   currency: string; unit: string | null; match_confidence?: number | null; match_method?: string | null;
@@ -51,6 +52,10 @@ export default function MasterProductsPage() {
     queryKey: ["master-products-pending"],
     queryFn: async () => (await apiClient.get<{ items: Pending[] }>("/api/master-products/pending")).data.items,
   });
+  const reviewCandidatesQuery = useQuery({
+    queryKey: ["master-product-review-candidates"],
+    queryFn: async () => (await apiClient.get<{ candidates: ReviewCandidate[] }>("/api/master-products/review-candidates", { params: { limit: 100 } })).data.candidates,
+  });
   const products = productsQuery.data ?? [];
   const comparison = comparisonQuery.data;
   const sortedProducts = useMemo(() => [...products].sort((a, b) => a.canonical_name.localeCompare(b.canonical_name, "he")), [products]);
@@ -61,6 +66,16 @@ export default function MasterProductsPage() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["master-products-pending"] }),
       queryClient.invalidateQueries({ queryKey: ["master-products"] }),
+    ]);
+  };
+  const approveCandidate = async (candidate: ReviewCandidate) => {
+    await apiClient.post(`/api/master-products/supplier-products/${candidate.supplier_product.id}/approve`, {
+      master_product_id: candidate.suggested_master_product.id,
+    });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["master-product-review-candidates"] }),
+      queryClient.invalidateQueries({ queryKey: ["master-products"] }),
+      queryClient.invalidateQueries({ queryKey: ["master-product-comparison"] }),
     ]);
   };
 
@@ -110,6 +125,19 @@ export default function MasterProductsPage() {
         </div>}
       </section>
     </div>
+
+    <section className="rounded-2xl border border-violet-200 bg-white p-5 shadow-sm dark:border-violet-900 dark:bg-slate-950">
+      <div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="flex items-center gap-2 font-bold"><Scale size={18}/>מוצרים דומים שייתכן שצריך לאחד</h2><p className="mt-1 text-sm text-slate-500">הצעות התאמה שמבוססות על שם המוצר. יש לאשר רק אם מדובר באותו מוצר ובאותה אריזה.</p></div><span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-800">{reviewCandidatesQuery.data?.length ?? 0} הצעות לבדיקה</span></div>
+      {reviewCandidatesQuery.isError && <p className="text-sm text-red-700">לא ניתן לטעון הצעות התאמה.</p>}
+      {reviewCandidatesQuery.data?.length === 0 && <p className="text-sm text-slate-500">לא נמצאו כרגע התאמות דומות בביטחון גבוה.</p>}
+      <div className="grid gap-3 lg:grid-cols-2">{reviewCandidatesQuery.data?.map(candidate => <div key={candidate.supplier_product.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+        <div className="font-semibold">{candidate.supplier_company_name} · {candidate.supplier_product.supplier_name}</div>
+        <div className="mt-1 text-sm text-slate-500">{money(candidate.supplier_product.price, candidate.supplier_product.currency)} · {candidate.supplier_product.unit || "יחידה לא הוגדרה"}</div>
+        <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2"><div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">שיוך נוכחי</div><strong>{candidate.current_master_product?.canonical_name || "ללא מוצר אב"}</strong></div><div className="rounded-lg bg-violet-50 p-3 dark:bg-violet-950/30"><div className="text-xs text-violet-700 dark:text-violet-300">מועמד לאיחוד</div><strong>{candidate.suggested_master_product.canonical_name}</strong></div></div>
+        <div className="mt-2 text-xs text-slate-500">התאמה {Math.round(candidate.confidence * 100)}% · {candidate.match_method}</div>
+        <button onClick={() => approveCandidate(candidate).catch(() => alert("לא ניתן לעדכן את השיוך. בדוק הרשאות ונסה שוב."))} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700"><CheckCircle2 size={14}/>אשר שזה אותו מוצר</button>
+      </div>)}</div>
+    </section>
 
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
       <div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="flex items-center gap-2 font-bold"><Tags size={18}/>שיוכים שממתינים לאישור</h2><p className="mt-1 text-sm text-slate-500">המערכת לא מחברת אוטומטית התאמות לא ודאיות.</p></div><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">{pendingQuery.data?.length ?? 0} ממתינים</span></div>
