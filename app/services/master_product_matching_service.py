@@ -219,11 +219,11 @@ class MasterProductMatchingService:
                 # Refresh a pending supplier item instead of creating duplicate review tasks.
                 existing.supplier_name = name
                 existing.description = data.get("description") or name
-                existing.barcode = str(data.get("barcode") or "").strip() or None
-                existing.price = price
+                existing.barcode = str(data.get("barcode") or "").strip() or existing.barcode
+                existing.price = price if price is not None else existing.price
                 existing.currency = currency
-                existing.unit = data.get("unit")
-                existing.units_per_carton = carton_value
+                existing.unit = data.get("unit") or existing.unit
+                existing.units_per_carton = carton_value or existing.units_per_carton
                 existing.normalized_name = self.normalize(name)
                 existing.last_seen_at = db.func.now()
                 existing.match_status = "PENDING"
