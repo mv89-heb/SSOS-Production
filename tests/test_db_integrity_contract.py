@@ -56,3 +56,6 @@ def test_stage9_migration_fails_before_constraints_when_existing_data_is_invalid
     assert "_assert_clean_data(bind)" in text
     assert "Repair the data before rerunning the migration" in text
     assert "offer_duplicate_product_supplier" in text
+    assert "order_item_offer_product_mismatch" in text
+    assert "order_item_offer_supplier_mismatch" in text
+    assert "receipt_item_order_mismatch" in text
