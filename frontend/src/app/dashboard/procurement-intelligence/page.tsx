@@ -453,6 +453,7 @@ export default function ProcurementIntelligencePage() {
 
       <Section title="🚚 ספקים — איפה יש כיסוי ואיפה יש תלות" hint="הדירוג כאן מתייחס לתחרותיות מחיר וכיסוי בלבד, לא לאיכות שירות.">
         {supplierData?.suppliers?.length ? (
+          <>
           <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
             {supplierData.suppliers.slice(0, showAllSuppliers ? supplierData.suppliers.length : 12).map((supplier) => (
               <div key={supplier.supplier_id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
@@ -466,6 +467,7 @@ export default function ProcurementIntelligencePage() {
             ))}
           </div>
           {supplierData.suppliers.length > 12 && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllSuppliers((value) => !value)} className="text-sm font-bold text-indigo-600">{showAllSuppliers ? "הצג 12 ספקים מובילים" : `הצג את כל ${number(supplierData.suppliers.length)} הספקים`}</button></div>}
+          </>
         ) : <div className="p-10 text-center text-sm text-slate-500">אין מספיק הצעות ספקים להשוואה.</div>}
       </Section>
 
