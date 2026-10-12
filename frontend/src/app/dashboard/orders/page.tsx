@@ -122,7 +122,7 @@ export default function OrdersPage() {
         ) : filteredOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-14 text-center"><div className="mb-4 rounded-2xl bg-slate-100 p-4 text-slate-400 dark:bg-slate-800"><ShoppingCart size={28} /></div><h2 className="font-bold text-slate-800 dark:text-white">{hasFilters ? "לא נמצאו הזמנות תואמות" : "אין הזמנות עדיין"}</h2><p className="mt-1 text-sm text-slate-500">{hasFilters ? "נסה לשנות את החיפוש או הסינון." : "צור את ההזמנה הראשונה כדי להתחיל."}</p>{hasFilters ? <Button variant="secondary" className="mt-4" onClick={clearFilters}>נקה סינון</Button> : <Link href="/dashboard/orders/new" className="mt-4"><Button><Plus size={16} /> הזמנה חדשה</Button></Link>}</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
             <table className="w-full min-w-[940px] text-right">
               <thead className="border-b border-slate-100 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/40"><tr>{["מס' הזמנה", "ספק", "סטטוס", "תזכורת", "סה\"כ", "נוצר בתאריך", ""].map((heading, index) => <th key={heading || index} className="px-5 py-3 text-xs font-extrabold text-slate-500">{heading}</th>)}</tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
