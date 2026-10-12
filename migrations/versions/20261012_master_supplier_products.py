@@ -137,16 +137,38 @@ def upgrade():
 
     master_ids = {}
     if master_values:
-        # sort_by_parameter_order preserves correlation between legacy product IDs
-        # and the returned master IDs while allowing SQLAlchemy's bulk insert path.
         for product_batch, master_batch in zip(_chunks(valid_products), _chunks(master_values)):
-            returned_ids = bind.execute(
-                master.insert().returning(master.c.id, sort_by_parameter_order=True),
-                master_batch,
-            ).scalars().all()
-            if len(returned_ids) != len(product_batch):
-                raise RuntimeError("Master product backfill returned an unexpected number of IDs")
-            master_ids.update({row["id"]: master_id for row, master_id in zip(product_batch, returned_ids)})
+            if bind.dialect.name == "postgresql":
+                # Allocate IDs in one round trip, then insert explicit IDs in bulk.
+                # This keeps the legacy-ID mapping deterministic without requiring
+                # ordered RETURNING (which some dialects implement row by row).
+                allocated_ids = bind.execute(
+                    sa.text(
+                        "SELECT nextval(pg_get_serial_sequence('master_products', 'id')) "
+                        "FROM generate_series(1, :row_count)"
+                    ),
+                    {"row_count": len(master_batch)},
+                ).scalars().all()
+                if len(allocated_ids) != len(product_batch):
+                    raise RuntimeError("Master product backfill allocated an unexpected number of IDs")
+                rows_with_ids = [
+                    {**values, "id": master_id}
+                    for values, master_id in zip(master_batch, allocated_ids)
+                ]
+                bind.execute(master.insert(), rows_with_ids)
+                master_ids.update({
+                    row["id"]: master_id for row, master_id in zip(product_batch, allocated_ids)
+                })
+            else:
+                returned_ids = bind.execute(
+                    master.insert().returning(master.c.id, sort_by_parameter_order=True),
+                    master_batch,
+                ).scalars().all()
+                if len(returned_ids) != len(product_batch):
+                    raise RuntimeError("Master product backfill returned an unexpected number of IDs")
+                master_ids.update({
+                    row["id"]: master_id for row, master_id in zip(product_batch, returned_ids)
+                })
 
     supplier_values = []
     primary_supplier_ids = {}
