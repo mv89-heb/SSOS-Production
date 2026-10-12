@@ -22,7 +22,7 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { catalogService, type MasterProductRecord } from "@/services/catalog-service";
+import { catalogService } from "@/services/catalog-service";
 import { orderService } from "@/services/order-service";
 import { priceIntelligenceService } from "@/services/price-intelligence-service";
 import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
@@ -326,6 +326,8 @@ export default function ProcurementIntelligencePage() {
         <StatCard label="מוצרים פעילים" value={number(readinessData?.products.active)} hint={`${number(readinessData?.products.categorized)} עם קטגוריה`} icon={<PackageSearch className="text-blue-500" size={18} />} tone="blue" />
         <StatCard label="מוצרים עם מחיר" value={number(readinessData?.products.priced)} hint={`${number((readinessData?.products.active ?? 0) - (readinessData?.products.priced ?? 0))} ללא מחיר`} icon={<WalletCards className="text-emerald-500" size={18} />} tone="emerald" />
         <StatCard label="ספקים פעילים" value={number(readinessData?.suppliers.active)} hint={`${number(readinessData?.supplier_offers.suppliers_covered)} משתתפים בהשוואת מחירים`} icon={<Truck className="text-violet-500" size={18} />} tone="violet" />
+        <StatCard label="מוצרי אב מאוחדים" value={number(masterProductRows.length)} hint="קטלוג ללא שכפול לפי ספק" icon={<PackageSearch className="text-indigo-500" size={18} />} tone="blue" />
+        <StatCard label="מוצרים עם כמה ספקים" value={number(masterProductsWithMultipleSuppliers)} hint={`${number(masterProductsWithPrice)} מוצרי אב עם מחיר תקף`} icon={<BarChart3 className="text-emerald-500" size={18} />} tone="emerald" />
       </section>
 
       <Section title="📦 פעילות הזמנות והוצאה בפועל" hint="הנתונים מבוססים על הזמנות שנשמרו בפועל במערכת.">
@@ -337,6 +339,20 @@ export default function ProcurementIntelligencePage() {
         </div>
         {recentOrders.length ? <div className="overflow-x-auto border-t border-slate-100"><table className="w-full min-w-[760px] text-right text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-5 py-3">מס׳ הזמנה</th><th className="px-5 py-3">ספק</th><th className="px-5 py-3">תאריך</th><th className="px-5 py-3">סטטוס</th><th className="px-5 py-3">פריטים</th><th className="px-5 py-3">סכום</th></tr></thead><tbody className="divide-y">{recentOrders.map((order) => <tr key={order.id}><td className="px-5 py-3 font-bold">{order.order_number}</td><td className="px-5 py-3">{order.supplier_name || "—"}</td><td className="px-5 py-3">{order.planned_order_date || (order.created_at ? new Intl.DateTimeFormat("he-IL").format(new Date(order.created_at)) : "—")}</td><td className="px-5 py-3">{({ draft: "טיוטה", submitted: "ממתינה לאישור", approved: "אושרה", sent: "נשלחה לספק", completed: "הושלמה", cancelled: "בוטלה" } as Record<string, string>)[order.status] || order.status}</td><td className="px-5 py-3">{number(order.items?.length ?? 0)}</td><td className="px-5 py-3 font-bold">{Number(order.final_total ?? 0) > 0 ? money(order.final_total, order.currency || "ILS") : "ללא סכום"}</td></tr>)}</tbody></table></div> : <div className="p-8 text-center text-sm text-slate-500">אין הזמנות להצגה.</div>}
         <div className="border-t p-4"><a href="/dashboard/orders" className="text-sm font-bold text-indigo-600">לכל הזמנות הרכש ←</a></div>
+      </Section>
+
+      <Section title="🧩 קטלוג מאוחד — מוצרים והצעות מכל הספקים" hint="כל שורה מייצגת מוצר אחיד, עם מספר הספקים המקושרים והמחיר התקף הטוב ביותר כשקיימת הצעה שניתנת להשוואה.">
+        <div className="border-b border-slate-100 p-5 dark:border-slate-800">
+          <div className="mb-3 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">מוצרי אב</div><div className="text-xl font-black">{number(masterProductRows.length)}</div></div>
+            <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">עם מחיר תקף</div><div className="text-xl font-black">{number(masterProductsWithPrice)}</div></div>
+            <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">עם יותר מספק אחד</div><div className="text-xl font-black">{number(masterProductsWithMultipleSuppliers)}</div></div>
+          </div>
+          <div className="relative"><Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input value={masterProductSearch} onChange={(event) => { setMasterProductSearch(event.target.value); setShowAllMasterProducts(false); }} placeholder="חיפוש מוצר מאוחד, מותג, קטגוריה, ברקוד או ספק..." className="w-full rounded-xl border border-slate-200 bg-white py-3 pr-10 pl-3 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900" /></div>
+        </div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-right text-sm"><thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-5 py-3">מוצר אחיד</th><th className="px-5 py-3">קטגוריה / מותג</th><th className="px-5 py-3">ספקים מקושרים</th><th className="px-5 py-3">המחיר הטוב הידוע</th><th className="px-5 py-3">ספק עדיף</th><th className="px-5 py-3">סטטוס נתונים</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{visibleMasterProducts.map((product) => <tr key={product.id}><td className="px-5 py-3 font-bold">{product.canonical_name}<div className="text-xs font-normal text-slate-400">{product.barcode || "ללא ברקוד"}{product.base_unit ? " · " + product.base_unit : ""}</div></td><td className="px-5 py-3">{product.category || "ללא קטגוריה"}{product.brand ? <div className="text-xs text-slate-500">{product.brand}</div> : null}</td><td className="px-5 py-3">{number(product.supplier_count ?? 0)}<div className="text-xs text-slate-500">{number(product.listing_count ?? 0)} הצעות/רשומות</div></td><td className="px-5 py-3 font-black">{product.has_price && Number(product.current_price ?? 0) > 0 ? money(product.current_price, product.currency || "ILS") : "אין מחיר בר־השוואה"}</td><td className="px-5 py-3">{product.best_supplier_name || "—"}</td><td className="px-5 py-3">{Number(product.supplier_count ?? 0) > 1 ? <span className="font-bold text-emerald-600">ניתן להשוות ספקים</span> : product.has_price ? <span className="text-amber-600">ספק יחיד</span> : <span className="text-slate-500">נדרש מידע</span>}</td></tr>)}</tbody></table></div>
+        {masterProductMatches.length > visibleMasterProducts.length && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllMasterProducts(true)} className="text-sm font-bold text-indigo-600">הצג את כל {number(masterProductMatches.length)} מוצרי האב</button></div>}
+        {showAllMasterProducts && masterProductMatches.length > 25 && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllMasterProducts(false)} className="text-sm font-bold text-indigo-600">צמצם ל־25 מוצרים</button></div>}
       </Section>
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
