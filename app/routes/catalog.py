@@ -564,3 +564,142 @@ def delete_offer(product_id, offer_id):
         return _handle(exc)
     db.session.commit()
     return jsonify({"success": True}), 200
+
+
+# ------------------------------------------------------------------------
+# Canonical master products and supplier-product matching workflow
+# ------------------------------------------------------------------------
+
+@catalog_bp.route("/master-products/match-suggestions", methods=["POST"])
+@login_required
+def master_product_match_suggestions():
+    from app.services.master_product_matching_service import MasterProductMatchingService
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name") or data.get("supplier_name") or data.get("description") or "").strip()
+    if not name:
+        return jsonify({"success": False, "error": "invalid_product_name", "message": "יש להזין שם מוצר לחיפוש"}), 400
+    service = MasterProductMatchingService(current_user.tenant_id, current_user.id)
+    return jsonify({"success": True, "suggestions": service.suggest(name, data.get("barcode"), data.get("limit", 5))})
+
+
+@catalog_bp.route("/master-products", methods=["GET"])
+@login_required
+def list_master_products():
+    from sqlalchemy import select, or_
+    from app.models.master_product import MasterProduct
+    query = str(request.args.get("q") or "").strip()
+    limit = max(1, min(request.args.get("limit", 100, type=int) or 100, 250))
+    stmt = select(MasterProduct).where(
+        MasterProduct.tenant_id == current_user.tenant_id,
+        MasterProduct.active.is_(True),
+    )
+    if query:
+        pattern = "%" + query.replace("%", "\\%").replace("_", "\\_") + "%"
+        stmt = stmt.where(or_(
+            MasterProduct.canonical_name.ilike(pattern),
+            MasterProduct.normalized_name.ilike(pattern),
+            MasterProduct.barcode == query,
+        ))
+    masters = db.session.execute(stmt.order_by(MasterProduct.canonical_name.asc()).limit(limit)).scalars().all()
+    return jsonify({"success": True, "master_products": [m.to_dict() for m in masters]})
+
+
+@catalog_bp.route("/supplier-products/intake", methods=["POST"])
+@login_required
+def intake_supplier_product():
+    from app.services.master_product_matching_service import MasterProductMatchingService
+    try:
+        PermissionService.require_role_at_least("manager")
+        item, suggestions = MasterProductMatchingService(
+            current_user.tenant_id, current_user.id
+        ).intake(request.get_json(silent=True) or {})
+        db.session.commit()
+        return jsonify({
+            "success": True, "supplier_product": item.to_dict(),
+            "suggestions": suggestions,
+        }), 201
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+    except (TypeError, ValueError) as exc:
+        db.session.rollback()
+        return jsonify({"success": False, "error": "invalid_supplier_product", "message": str(exc)}), 400
+
+
+@catalog_bp.route("/supplier-products/pending", methods=["GET"])
+@login_required
+def list_pending_supplier_products():
+    from app.services.master_product_matching_service import MasterProductMatchingService
+    try:
+        PermissionService.require_role_at_least("manager")
+    except HTTPException as exc:
+        return _handle(exc)
+    service = MasterProductMatchingService(current_user.tenant_id, current_user.id)
+    items = service.pending(request.args.get("limit", 100, type=int) or 100)
+    return jsonify({"success": True, "supplier_products": [item.to_dict() for item in items]})
+
+
+@catalog_bp.route("/supplier-products/<int:supplier_product_id>/approve", methods=["POST"])
+@login_required
+def approve_supplier_product_match(supplier_product_id):
+    from app.services.master_product_matching_service import MasterProductMatchingService
+    data = request.get_json(silent=True) or {}
+    try:
+        PermissionService.require_role_at_least("manager")
+        service = MasterProductMatchingService(current_user.tenant_id, current_user.id)
+        if data.get("create_master_product"):
+            item, master = service.create_master_and_approve(supplier_product_id, data["create_master_product"])
+            db.session.commit()
+            return jsonify({"success": True, "supplier_product": item.to_dict(), "master_product": master.to_dict()})
+        try:
+            master_id = int(data.get("master_product_id"))
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "error": "master_product_required", "message": "יש לבחור מוצר אב קיים או ליצור מוצר אב חדש"}), 400
+        item = service.approve(supplier_product_id, master_id)
+        db.session.commit()
+        return jsonify({"success": True, "supplier_product": item.to_dict()})
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+    except (TypeError, ValueError) as exc:
+        db.session.rollback()
+        return jsonify({"success": False, "error": "invalid_match", "message": str(exc)}), 400
+
+
+@catalog_bp.route("/supplier-products/<int:supplier_product_id>/reject", methods=["POST"])
+@login_required
+def reject_supplier_product_match(supplier_product_id):
+    from sqlalchemy import select
+    from app.models.supplier_product import SupplierProduct
+    from app.services.audit_service import AuditService
+    try:
+        PermissionService.require_role_at_least("manager")
+        item = db.session.execute(select(SupplierProduct).where(
+            SupplierProduct.id == supplier_product_id,
+            SupplierProduct.tenant_id == current_user.tenant_id,
+        )).scalar_one_or_none()
+        if item is None:
+            from werkzeug.exceptions import NotFound
+            raise NotFound("פריט הספק לא נמצא")
+        item.match_status = "REJECTED"
+        item.master_product_id = None
+        db.session.flush()
+        AuditService.log_event(current_user.tenant_id, current_user.id, "supplier_product.match_rejected", "נדחתה הצעת שיוך מוצר ספק", {
+            "supplier_product_id": item.id,
+        })
+        db.session.commit()
+        return jsonify({"success": True, "supplier_product": item.to_dict()})
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+
+
+@catalog_bp.route("/master-products/<int:master_product_id>/comparison", methods=["GET"])
+@login_required
+def compare_master_product(master_product_id):
+    from app.services.master_product_matching_service import MasterProductMatchingService
+    try:
+        result = MasterProductMatchingService(current_user.tenant_id, current_user.id).compare_master_product(master_product_id)
+        return jsonify({"success": True, **result})
+    except HTTPException as exc:
+        return _handle(exc)

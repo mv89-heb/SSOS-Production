@@ -82,3 +82,76 @@ def test_incomparable_reason_for_unit_mismatch():
     right = {"currency": "ILS", "comparison_unit": "L"}
 
     assert "יחידת השוואה שונה" in PriceIntelligenceService._incomparable_reason(left, right)
+
+
+def test_missing_units_are_not_assumed_to_be_comparable():
+    product = SimpleNamespace(
+        id=10,
+        supplier_id=1,
+        current_price=100,
+        currency="ILS",
+        unit=None,
+        units_per_carton=None,
+        supplier=None,
+        supplier_offers=[],
+        to_dict=lambda: {"id": 10},
+    )
+    offer = SimpleNamespace(
+        active=True,
+        price=20,
+        supplier_id=2,
+        unit=None,
+        units_per_carton=None,
+        currency="ILS",
+    )
+    suppliers = {1: SimpleNamespace(name="ספק ראשי"), 2: SimpleNamespace(name="ספק חלופי")}
+
+    result = _service(product, [offer], suppliers).compare_product(10)
+
+    assert result["current"] is not None
+    assert result["best_offer"] is None
+    assert result["offers"] == []
+    assert len(result["incomparable_offers"]) == 2
+    assert all("חסרה יחידת השוואה" in row["incomparable_reason"] for row in result["incomparable_offers"])
+
+
+def test_offer_without_unit_is_not_assumed_to_match_product_unit():
+    product = SimpleNamespace(
+        id=10,
+        supplier_id=1,
+        current_price=100,
+        currency="ILS",
+        unit="יחידה",
+        units_per_carton=None,
+        supplier=None,
+        supplier_offers=[],
+        to_dict=lambda: {"id": 10},
+    )
+    offer = SimpleNamespace(
+        active=True,
+        price=20,
+        supplier_id=2,
+        unit=None,
+        units_per_carton=None,
+        currency="ILS",
+    )
+    suppliers = {1: SimpleNamespace(name="ספק ראשי"), 2: SimpleNamespace(name="ספק חלופי")}
+
+    result = _service(product, [offer], suppliers).compare_product(10)
+
+    assert result["current"] is not None
+    assert [row["supplier_id"] for row in result["offers"]] == [1]
+    assert [row["supplier_id"] for row in result["incomparable_offers"]] == [2]
+    assert "חסרה יחידת השוואה" in result["incomparable_offers"][0]["incomparable_reason"]
+
+
+def test_hebrew_crate_alias_normalizes_to_unit_price_when_quantity_is_known():
+    price, comparison_unit = PriceIntelligenceService.normalize_offer_price(120, "ארגז", 12)
+    assert price == 10
+    assert comparison_unit == "UNIT"
+
+
+def test_carton_price_without_package_quantity_is_not_comparable():
+    price, comparison_unit = PriceIntelligenceService.normalize_offer_price(120, "קרטון", None)
+    assert price == 120
+    assert comparison_unit is None

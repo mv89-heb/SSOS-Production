@@ -3,6 +3,8 @@ from app.models.user import User
 from app.models.supplier import Supplier
 from app.models.product import Product
 from app.models.supplier_offer import SupplierProductOffer
+from app.models.master_product import MasterProduct
+from app.models.supplier_product import SupplierProduct
 from app.models.price_history import PriceHistory
 from app.models.price_observation import PriceObservation
 from app.models.document_analysis import DocumentAnalysis
@@ -15,19 +17,9 @@ from app.models.inventory_movement import InventoryMovement
 from app.models.inventory_planning_period import InventoryPlanningPeriod
 
 __all__ = [
-    "Tenant",
-    "User",
-    "Supplier",
-    "Product",
-    "SupplierProductOffer",
-    "PriceHistory",
-    "PriceObservation",
-    "DocumentAnalysis",
-    "ProductClassificationFeedback",
-    "Order",
-    "AuditLog",
-    "Notification",
-    "GoogleCalendarConnection",
-    "InventoryMovement",
+    "Tenant", "User", "Supplier", "Product", "SupplierProductOffer",
+    "MasterProduct", "SupplierProduct", "PriceHistory", "PriceObservation",
+    "DocumentAnalysis", "ProductClassificationFeedback", "Order", "AuditLog",
+    "Notification", "GoogleCalendarConnection", "InventoryMovement",
     "InventoryPlanningPeriod",
 ]

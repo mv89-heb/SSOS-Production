@@ -12,6 +12,8 @@ const navigation = [
   { name: "לוח בקרה", href: "/dashboard", icon: LayoutDashboard },
   { name: "ניהול ספקים", href: "/dashboard/suppliers", icon: Users },
   { name: "קטלוג מוצרים", href: "/dashboard/catalog", icon: Package },
+  { name: "התאמת מוצרי ספקים", href: "/dashboard/catalog/matching", icon: Package },
+  { name: "קטלוג אחיד והשוואה", href: "/dashboard/catalog/master-products", icon: BarChart3 },
   { name: "מחסן ומלאי", href: "/dashboard/inventory", icon: Warehouse },
   { name: "דיווח ספירת מלאי", href: "/dashboard/inventory/count", icon: ClipboardCheck },
   { name: "הזמנות רכש", href: "/dashboard/orders", icon: ShoppingCart },
@@ -29,9 +31,12 @@ const navigation = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
+  const catalogItems = permissions.canManageCatalog(user)
+    ? navigation
+    : navigation.filter((item) => item.href !== "/dashboard/catalog/matching");
   const items = permissions.canManageUsers(user)
-    ? [...navigation, { name: "מרכז מנהל מערכת", href: "/dashboard/admin", icon: ShieldCheck }]
-    : navigation;
+    ? [...catalogItems, { name: "מרכז מנהל מערכת", href: "/dashboard/admin", icon: ShieldCheck }]
+    : catalogItems;
 
   return (
     <aside dir="rtl" className="fixed right-0 top-0 z-[100] hidden h-dvh w-64 flex-col border-l border-slate-800/80 bg-[#071d33] text-white shadow-2xl md:flex" aria-label="תפריט ניווט ראשי">

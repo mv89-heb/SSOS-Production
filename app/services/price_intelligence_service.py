@@ -22,7 +22,7 @@ class PriceIntelligenceService:
         "ml": "ML", "מיליליטר": "ML",
         "meter": "M", "מטר": "M",
         "pack": "PACK", "package": "PACK", "אריזה": "PACK", "מארז": "PACK",
-        "carton": "CARTON", "case": "CARTON", "קרטון": "CARTON",
+        "carton": "CARTON", "case": "CARTON", "קרטון": "CARTON", "קרטונים": "CARTON", "ארגז": "CARTON", "ארגזים": "CARTON",
     }
     UNIT_FACTORS = {
         "G": ("KG", Decimal("0.001")), "KG": ("KG", Decimal("1")),
@@ -61,8 +61,10 @@ class PriceIntelligenceService:
         normalized = cls.normalize_unit(unit)
         cartons = cls._decimal(units_per_carton) if units_per_carton is not None else Decimal("0")
         if normalized == "CARTON":
+            # A carton price is only comparable to a unit price when its
+            # contents are known. Two cartons can contain different quantities.
             if cartons <= 0:
-                return amount, "CARTON"
+                return amount, None
             amount = amount / cartons
             normalized = "UNIT"
         factor = cls.UNIT_FACTORS.get(normalized)
@@ -89,15 +91,15 @@ class PriceIntelligenceService:
     def _incomparable_reason(left, right) -> str | None:
         if left["currency"] != right["currency"]:
             return "מטבע שונה — נדרש שער המרה לפני השוואה"
+        if left["comparison_unit"] is None or right["comparison_unit"] is None:
+            return "חסרה יחידת השוואה — יש להשלים יחידת מכירה לפני דירוג"
         if left["comparison_unit"] != right["comparison_unit"]:
             return "יחידת השוואה שונה — לא ניתן להשוות מחיר ישירות"
-        if left["comparison_unit"] is None:
-            return "חסרה יחידת השוואה"
         return None
 
     def compare_product(self, product_id: int):
         product = self.product_repo.get_by_id_or_404(product_id)
-        default_unit = self.normalize_unit(product.unit) or "UNIT"
+        default_unit = self.normalize_unit(product.unit)
         by_supplier = {}
 
         if product.current_price is not None and self._decimal(product.current_price) > 0:
@@ -125,7 +127,7 @@ class PriceIntelligenceService:
                 offer.supplier_id,
                 supplier.name,
                 offer.price,
-                offer.unit or product.unit or default_unit,
+                offer.unit,
                 offer.units_per_carton,
                 offer.currency,
             )

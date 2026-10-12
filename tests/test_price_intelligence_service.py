@@ -18,7 +18,8 @@ def test_carton_price_is_normalized_to_unit_price():
 def test_carton_without_quantity_is_not_falsely_normalized():
     price, unit = PriceIntelligenceService.normalize_offer_price(120, "קרטון", None)
     assert price == 120
-    assert unit == "CARTON"
+    # Unknown pack quantity means there is no safe comparable unit.
+    assert unit is None
 
 
 def test_mass_and_volume_are_normalized_to_purchase_units():
