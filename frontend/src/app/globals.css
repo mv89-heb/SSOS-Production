@@ -33,3 +33,15 @@
 }
 @media (max-width: 767px) { .page-title { @apply text-2xl; } .dashboard-section, .table-shell { @apply rounded-xl; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
+
+/* Print the current report without application navigation or controls. */
+@media print {
+  @page { size: landscape; margin: 12mm; }
+  html, body { background: #fff !important; color: #111827 !important; overflow: visible !important; }
+  aside, nav, [role="navigation"], button, input, select, textarea, [aria-label="ייצוא דוחות"] { display: none !important; }
+  main, main > div, main section, main article { overflow: visible !important; max-width: none !important; box-shadow: none !important; }
+  main table { width: 100% !important; min-width: 0 !important; border-collapse: collapse !important; font-size: 9pt !important; }
+  main th, main td { border: 1px solid #cbd5e1 !important; padding: 4px 6px !important; color: #111827 !important; background: #fff !important; }
+  main tr { break-inside: avoid; }
+  a { color: #111827 !important; text-decoration: none !important; }
+}
