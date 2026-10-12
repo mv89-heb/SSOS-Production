@@ -1,3 +1,5 @@
+from sqlalchemy import func, select
+
 from app.extensions import db
 from app.models.price_observation import PriceObservation
 
@@ -14,6 +16,31 @@ class PriceObservationRepository:
         if supplier_id is not None:
             query = query.filter_by(supplier_id=supplier_id)
         return query.order_by(PriceObservation.observed_at.desc(), PriceObservation.id.desc()).limit(limit).all()
+    def get_latest_by_product(self, product_id: int):
+        """Return the newest observed price for each supplier for one tenant product."""
+        ranked = (
+            select(
+                PriceObservation.id.label("observation_id"),
+                func.row_number().over(
+                    partition_by=PriceObservation.supplier_id,
+                    order_by=(PriceObservation.observed_at.desc(), PriceObservation.id.desc()),
+                ).label("row_number"),
+            )
+            .where(
+                PriceObservation.tenant_id == self.tenant_id,
+                PriceObservation.product_id == product_id,
+                PriceObservation.observed_price > 0,
+            )
+            .subquery()
+        )
+        stmt = (
+            select(PriceObservation)
+            .join(ranked, PriceObservation.id == ranked.c.observation_id)
+            .where(ranked.c.row_number == 1)
+            .order_by(PriceObservation.observed_at.desc(), PriceObservation.id.desc())
+        )
+        return list(db.session.execute(stmt).scalars().all())
+
     def get_recent(self, product_id: int, supplier_id: int, limit: int = 5):
         return PriceObservation.query.filter_by(tenant_id=self.tenant_id, product_id=product_id, supplier_id=supplier_id).order_by(PriceObservation.observed_at.desc(), PriceObservation.id.desc()).limit(limit).all()
     def list_all(self, limit: int = 100):

@@ -132,6 +132,36 @@ class PriceIntelligenceService:
                 offer.currency,
             )
 
+        # Invoice/delivery-document observations are also real supplier price
+        # evidence. Use the latest observation per supplier to fill comparison
+        # gaps when no explicit active catalog offer exists. Explicit offers and
+        # the catalog's primary price always take precedence.
+        for observation in self.observation_repo.get_latest_by_product(product_id):
+            if observation.supplier_id in by_supplier:
+                continue
+            supplier = self.supplier_repo.get_by_id(observation.supplier_id)
+            if supplier is None:
+                continue
+            unit = observation.unit or observation.comparison_unit or product.unit or default_unit
+            units_per_carton = None
+            if self.normalize_unit(unit) == "CARTON" and observation.package_quantity is not None:
+                units_per_carton = observation.package_quantity
+            row = self._price_payload(
+                observation.supplier_id,
+                supplier.name,
+                observation.observed_price,
+                unit,
+                units_per_carton,
+                observation.currency,
+            )
+            row["source_type"] = observation.source_type
+            row["observed_at"] = observation.observed_at.isoformat() if observation.observed_at else None
+            row["source_document_id"] = observation.source_document_id
+            row["match_confidence"] = (
+                float(observation.match_confidence) if observation.match_confidence is not None else None
+            )
+            by_supplier[observation.supplier_id] = row
+
         offers = list(by_supplier.values())
         current = by_supplier.get(product.supplier_id)
         comparable = []
