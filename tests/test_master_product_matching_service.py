@@ -137,3 +137,25 @@ def test_master_product_comparison_cannot_cross_tenant(logged_in_client_a, logge
     master_id = response.get_json()["master_product"]["id"]
     cross_tenant = logged_in_client_b.get(f"/api/catalog/master-products/{master_id}/comparison")
     assert cross_tenant.status_code == 404
+
+
+def test_exact_barcode_does_not_override_explicit_package_size_conflict(logged_in_client_a):
+    supplier_a = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "ספק א"}).get_json()["supplier"]
+    first = logged_in_client_a.post("/api/catalog/supplier-products/intake", json={
+        "supplier_id": supplier_a["id"], "supplier_name": "חלב תנובה 3% 1 ליטר",
+        "supplier_sku": "A-MILK", "barcode": "7290000000099", "price": 7.5,
+    }).get_json()["supplier_product"]
+    master = logged_in_client_a.post(
+        f"/api/catalog/supplier-products/{first['id']}/approve",
+        json={"create_master_product": {"canonical_name": "חלב תנובה 3% 1 ליטר", "barcode": "7290000000099"}},
+    ).get_json()["master_product"]
+
+    supplier_b = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "ספק ב"}).get_json()["supplier"]
+    conflicting = logged_in_client_a.post("/api/catalog/supplier-products/intake", json={
+        "supplier_id": supplier_b["id"], "supplier_name": "חלב תנובה 3% 2 ליטר",
+        "supplier_sku": "B-MILK", "barcode": "7290000000099", "price": 12,
+    }).get_json()["supplier_product"]
+    assert conflicting["match_status"] == "PENDING"
+    assert conflicting["master_product_id"] is None
+    assert conflicting["suggested_master_product_id"] == master["id"]
+    assert conflicting["match_method"] == "PACKAGE_SIZE_MISMATCH"
