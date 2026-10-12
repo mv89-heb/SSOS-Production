@@ -15,34 +15,46 @@ export function Table({
     const table = tableRef.current;
     if (!viewport || !table) return;
 
-    // The scroll viewport is LTR, so its maximum scrollLeft exposes
-    // the physical right edge of the RTL table (SKU/name columns).
+    let frame = 0;
+
+    // Keep the scroll viewport LTR so scrollLeft has the same, predictable
+    // 0..max range in Chromium/Firefox/Safari. The table itself remains RTL.
     const scrollToRightEdge = () => {
-      viewport.scrollLeft = viewport.scrollWidth;
+      const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      viewport.scrollLeft = maxScrollLeft;
       pinnedToRightRef.current = true;
     };
 
     const updatePinnedState = () => {
-      const maxScrollLeft = viewport.scrollWidth - viewport.clientWidth;
-      pinnedToRightRef.current =
-        Math.abs(maxScrollLeft - viewport.scrollLeft) <= 2;
+      const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      // In this LTR viewport, the RTL table's first columns are visible at max.
+      pinnedToRightRef.current = Math.abs(maxScrollLeft - viewport.scrollLeft) <= 2;
     };
 
-    scrollToRightEdge();
+    const scheduleInitialRightEdge = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        scrollToRightEdge();
+        // A second frame handles late font/layout measurements in the first paint.
+        frame = requestAnimationFrame(() => {
+          if (pinnedToRightRef.current) scrollToRightEdge();
+        });
+      });
+    };
+
     viewport.addEventListener("scroll", updatePinnedState, { passive: true });
 
-    // Keep the initial RTL edge visible when fonts, rows, or responsive
-    // widths change, but do not override a user's deliberate scroll position.
     const resizeObserver = new ResizeObserver(() => {
-      if (pinnedToRightRef.current) {
-        scrollToRightEdge();
-      }
+      // Preserve the RTL starting edge on resize only while the user is there.
+      if (pinnedToRightRef.current) scrollToRightEdge();
     });
 
     resizeObserver.observe(viewport);
     resizeObserver.observe(table);
+    scheduleInitialRightEdge();
 
     return () => {
+      cancelAnimationFrame(frame);
       viewport.removeEventListener("scroll", updatePinnedState);
       resizeObserver.disconnect();
     };
@@ -52,8 +64,18 @@ export function Table({
     <div
       ref={viewportRef}
       dir="ltr"
-      className="block w-full min-w-0 max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/10"
-      style={{ direction: "ltr", WebkitOverflowScrolling: "touch" }}
+      role="region"
+      aria-label="טבלה רחבה — ניתן לגלול אופקית"
+      tabIndex={0}
+      className="block w-full min-w-0 max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/10"
+      style={{
+        direction: "ltr",
+        inlineSize: "100%",
+        maxInlineSize: "100%",
+        minInlineSize: 0,
+        boxSizing: "border-box",
+        WebkitOverflowScrolling: "touch",
+      }}
     >
       <table
         ref={tableRef}
