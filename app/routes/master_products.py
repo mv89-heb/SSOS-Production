@@ -6,6 +6,7 @@ from werkzeug.exceptions import HTTPException, BadRequest
 from app.extensions import db
 from app.models.master_product import MasterProduct
 from app.models.supplier_product import SupplierProduct
+from app.models.supplier import Supplier
 from app.services.master_product_matching_service import MasterProductMatchingService
 from app.services.price_intelligence_service import PriceIntelligenceService
 from app.services.permission_service import PermissionService
@@ -31,11 +32,14 @@ def list_master_products():
     masters = db.session.execute(stmt.order_by(MasterProduct.canonical_name.asc(), MasterProduct.id.asc()).limit(limit)).scalars().all()
     items = []
     for master in masters:
-        listings = db.session.execute(select(SupplierProduct).where(
+        listings = db.session.execute(select(SupplierProduct).join(
+            Supplier, (Supplier.id == SupplierProduct.supplier_id) & (Supplier.tenant_id == current_user.tenant_id)
+        ).where(
             SupplierProduct.tenant_id == current_user.tenant_id,
             SupplierProduct.master_product_id == master.id,
             SupplierProduct.match_status == "APPROVED",
             SupplierProduct.active.is_(True),
+            Supplier.active.is_(True),
         )).scalars().all()
         priced = [item for item in listings if item.price is not None and float(item.price) > 0]
         normalized = []
@@ -71,6 +75,10 @@ def list_master_products():
 @master_products_bp.get("/pending")
 @login_required
 def list_pending_supplier_products():
+    try:
+        PermissionService.require_role_at_least("manager")
+    except HTTPException as exc:
+        return _error(exc)
     service = MasterProductMatchingService(current_user.tenant_id, current_user.id)
     return jsonify({"success": True, "items": [item.to_dict() for item in service.pending()]})
 
