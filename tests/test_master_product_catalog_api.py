@@ -1,0 +1,64 @@
+def test_master_catalog_lists_one_canonical_product_and_compares_all_suppliers(logged_in_client_a):
+    from app.extensions import db
+    from app.models.master_product import MasterProduct
+
+    supplier_a = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "ספק א"}).get_json()["supplier"]
+    supplier_b = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "ספק ב"}).get_json()["supplier"]
+
+    first = logged_in_client_a.post("/api/catalog/supplier-products/intake", json={
+        "supplier_id": supplier_a["id"], "supplier_name": "בורקס גבינה 1 ק״ג",
+        "supplier_sku": "BOREK-A", "price": 42, "unit": "יחידה",
+    })
+    assert first.status_code == 201, first.get_json()
+    item_a = first.get_json()["supplier_product"]
+    created = logged_in_client_a.post(
+        f"/api/catalog/supplier-products/{item_a['id']}/approve",
+        json={"create_master_product": {"canonical_name": "בורקס גבינה 1 ק״ג", "base_unit": "יחידה"}},
+    )
+    assert created.status_code == 200, created.get_json()
+    master_id = created.get_json()["master_product"]["id"]
+
+    second = logged_in_client_a.post("/api/catalog/supplier-products/intake", json={
+        "supplier_id": supplier_b["id"], "supplier_name": "בורקס גבינה 1 ק״ג",
+        "supplier_sku": "BOREK-B", "price": 37, "unit": "יחידה",
+    })
+    assert second.status_code == 201, second.get_json()
+    item_b = second.get_json()["supplier_product"]
+    approved = logged_in_client_a.post(
+        f"/api/catalog/supplier-products/{item_b['id']}/approve",
+        json={"master_product_id": master_id},
+    )
+    assert approved.status_code == 200, approved.get_json()
+
+    catalog = logged_in_client_a.get("/api/master-products")
+    assert catalog.status_code == 200, catalog.get_json()
+    matching = [p for p in catalog.get_json()["products"] if p["id"] == master_id]
+    assert len(matching) == 1
+    assert matching[0]["supplier_count"] == 2
+    assert matching[0]["current_price"] == 37.0
+
+    comparison = logged_in_client_a.get(f"/api/master-products/{master_id}/comparison")
+    assert comparison.status_code == 200, comparison.get_json()
+    group = comparison.get_json()["groups"][0]
+    assert len(group["offers"]) == 2
+    assert group["best_offer"]["supplier_id"] == supplier_b["id"]
+
+
+def test_master_catalog_and_comparison_are_tenant_scoped(logged_in_client_a, logged_in_client_b):
+    supplier = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "ספק פרטי"}).get_json()["supplier"]
+    intake = logged_in_client_a.post("/api/catalog/supplier-products/intake", json={
+        "supplier_id": supplier["id"], "supplier_name": "מוצר סודי", "supplier_sku": "SECRET-1",
+        "price": 5, "unit": "יחידה",
+    })
+    item = intake.get_json()["supplier_product"]
+    created = logged_in_client_a.post(
+        f"/api/catalog/supplier-products/{item['id']}/approve",
+        json={"create_master_product": {"canonical_name": "מוצר סודי", "base_unit": "יחידה"}},
+    )
+    master_id = created.get_json()["master_product"]["id"]
+
+    catalog_b = logged_in_client_b.get("/api/master-products")
+    assert catalog_b.status_code == 200
+    assert all(item["id"] != master_id for item in catalog_b.get_json()["products"])
+    comparison_b = logged_in_client_b.get(f"/api/master-products/{master_id}/comparison")
+    assert comparison_b.status_code == 404
