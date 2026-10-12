@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Check, CircleHelp, Loader2, Plus, RefreshCw, Search, X } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
@@ -8,7 +9,8 @@ import { permissions } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { catalogService, MasterMatchSuggestion, SupplierProductListing } from "@/services/catalog-service";
+import { catalogService } from "@/services/catalog-service";
+import type { MasterMatchSuggestion, SupplierProductListing } from "@/services/catalog-service";
 
 const money = (value?: number | null, currency = "ILS") => {
   if (value == null) return "מחיר חסר";
