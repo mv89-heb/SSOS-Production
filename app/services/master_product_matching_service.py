@@ -285,13 +285,24 @@ class MasterProductMatchingService:
         if not name:
             raise BadRequest("שם מוצר האב הוא שדה חובה")
         normalized = self.normalize(name)
+        raw_package_size = (data or {}).get("package_size")
+        package_size = None
+        if raw_package_size not in (None, ""):
+            try:
+                package_size = float(raw_package_size)
+            except (TypeError, ValueError):
+                raise BadRequest("גודל האריזה חייב להיות מספר חיובי")
+            if not math.isfinite(package_size) or package_size <= 0:
+                raise BadRequest("גודל האריזה חייב להיות מספר חיובי")
+            if not str((data or {}).get("package_unit") or "").strip():
+                raise BadRequest("יש לציין יחידת מידה לגודל האריזה")
         master = MasterProduct(
             tenant_id=self.tenant_id, canonical_name=name, normalized_name=normalized,
             brand=str((data or {}).get("brand") or "").strip() or None,
             category=str((data or {}).get("category") or "").strip() or None,
             barcode=str((data or {}).get("barcode") or item.barcode or "").strip() or None,
             base_unit=str((data or {}).get("base_unit") or item.unit or "").strip() or None,
-            package_size=(data or {}).get("package_size"),
+            package_size=package_size,
             package_unit=str((data or {}).get("package_unit") or "").strip() or None,
         )
         db.session.add(master)
