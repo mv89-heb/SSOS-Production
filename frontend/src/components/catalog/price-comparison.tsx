@@ -74,6 +74,7 @@ export function PriceComparison({
     if (!newSupplierId) return setError("בחר ספק.");
     const price = Number(newPrice);
     if (!Number.isFinite(price) || price <= 0) return setError("הזן מחיר גדול מאפס; מחיר חסר יש להשאיר לא מוגדר.");
+    if (!newUnit.trim()) return setError("יש להזין יחידת מכירה כדי למנוע השוואה שגויה בין אריזות שונות.");
     const cartonSize = newCartonSize.trim() ? Number(newCartonSize) : undefined;
     if (newUnit.trim().includes("קרטון") && (!cartonSize || !Number.isInteger(cartonSize) || cartonSize <= 0)) {
       return setError("כשהמחיר הוא לקרטון, יש להזין כמה יחידות יש בקרטון.");
@@ -105,6 +106,7 @@ export function PriceComparison({
     const offer = offerBySupplier.get(row.supplier_id);
     const isPrimary = row.primary || row.supplier_id === primarySupplierId;
     const isBest = isComparable && cheapest?.supplier_id === row.supplier_id;
+    const supplierLabel = isPrimary ? (primarySupplierName || row.supplier_name || `ספק #${row.supplier_id}`) : (row.supplier_name || `ספק #${row.supplier_id}`);
     const saving = comparison.data?.current && isComparable
       ? comparison.data.current.normalized_price - row.normalized_price
       : null;
@@ -112,7 +114,7 @@ export function PriceComparison({
       <div key={`${row.supplier_id}-${index}-${isComparable}`} className="grid grid-cols-[minmax(0,1.2fr)_minmax(100px,0.8fr)] gap-3 px-3 py-3 text-sm sm:grid-cols-[minmax(0,1.2fr)_minmax(110px,0.8fr)_minmax(100px,0.8fr)_auto]">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 font-medium text-slate-900">
-            <span className="truncate">{row.supplier_name || `ספק #${row.supplier_id}`}</span>
+            <span className="truncate">{supplierLabel}</span>
             {isPrimary && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">ספק ראשי</span>}
             {isBest && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">הזול ביותר</span>}
           </div>
@@ -172,7 +174,7 @@ export function PriceComparison({
           <label className="text-xs text-slate-600">ספק<select value={newSupplierId} onChange={(e) => setNewSupplierId(e.target.value)} className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm"><option value="">בחר ספק...</option>{availableSuppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
           <label className="text-xs text-slate-600">מחיר חיובי<input type="number" min="0.01" step="0.01" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} placeholder="למשל 12.50" className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" /></label>
           <label className="text-xs text-slate-600">מטבע<select value={newCurrency} onChange={(e) => setNewCurrency(e.target.value)} className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm"><option value="ILS">שקל (ILS)</option><option value="USD">דולר (USD)</option><option value="EUR">אירו (EUR)</option></select></label>
-          <label className="text-xs text-slate-600">יחידת מכירה<input value={newUnit} onChange={(e) => setNewUnit(e.target.value)} placeholder="יחידה, ק״ג, ליטר, קרטון..." className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" /></label>
+          <label className="text-xs text-slate-600">יחידת מכירה<input value={newUnit} onChange={(e) => setNewUnit(e.target.value)} placeholder="יחידה, ק״ג, ליטר, קרטון..." required className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" /></label>
           <label className="text-xs text-slate-600 sm:col-span-2">יחידות בקרטון (רק למחיר קרטון)<input type="number" min="1" step="1" value={newCartonSize} onChange={(e) => setNewCartonSize(e.target.value)} placeholder="למשל 12" className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" /></label>
         </div>
         {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
