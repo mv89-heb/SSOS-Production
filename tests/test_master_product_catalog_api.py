@@ -30,14 +30,14 @@ def test_master_catalog_lists_one_canonical_product_and_compares_all_suppliers(l
     )
     assert approved.status_code == 200, approved.get_json()
 
-    catalog = logged_in_client_a.get("/api/master-products")
+    catalog = logged_in_client_a.get("/api/catalog/master-products")
     assert catalog.status_code == 200, catalog.get_json()
-    matching = [p for p in catalog.get_json()["products"] if p["id"] == master_id]
+    matching = [p for p in catalog.get_json()["master_products"] if p["id"] == master_id]
     assert len(matching) == 1
     assert matching[0]["supplier_count"] == 2
     assert matching[0]["current_price"] == 37.0
 
-    comparison = logged_in_client_a.get(f"/api/master-products/{master_id}/comparison")
+    comparison = logged_in_client_a.get(f"/api/catalog/master-products/{master_id}/comparison")
     assert comparison.status_code == 200, comparison.get_json()
     group = comparison.get_json()["groups"][0]
     assert len(group["offers"]) == 2
@@ -59,7 +59,7 @@ def test_master_catalog_and_comparison_are_tenant_scoped(logged_in_client_a, log
 
     catalog_b = logged_in_client_b.get("/api/master-products")
     assert catalog_b.status_code == 200
-    assert all(item["id"] != master_id for item in catalog_b.get_json()["products"])
+    assert all(item["id"] != master_id for item in catalog_b.get_json()["master_products"])
     comparison_b = logged_in_client_b.get(f"/api/master-products/{master_id}/comparison")
     assert comparison_b.status_code == 404
 
