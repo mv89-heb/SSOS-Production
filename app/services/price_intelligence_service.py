@@ -22,7 +22,7 @@ class PriceIntelligenceService:
         "ml": "ML", "מיליליטר": "ML",
         "meter": "M", "מטר": "M",
         "pack": "PACK", "package": "PACK", "אריזה": "PACK", "מארז": "PACK",
-        "carton": "CARTON", "case": "CARTON", "קרטון": "CARTON",
+        "carton": "CARTON", "case": "CARTON", "קרטון": "CARTON", "קרטונים": "CARTON", "ארגז": "CARTON", "ארגזים": "CARTON",
     }
     UNIT_FACTORS = {
         "G": ("KG", Decimal("0.001")), "KG": ("KG", Decimal("1")),
