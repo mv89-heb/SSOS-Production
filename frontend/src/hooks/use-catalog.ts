@@ -70,7 +70,7 @@ function filterProducts(items: Product[], supplierId?: number, activeOnly = fals
     if (stock === "low" && !isLow) return false;
     if (stock === "healthy" && (!hasStockData || isLow)) return false;
     if (stock === "missing" && hasStockData) return false;
-    if (missing === "price" && product.current_price != null) return false;
+    if (missing === "price" && product.current_price != null && Number(product.current_price) > 0) return false;
     if (missing === "category" && String(product.category ?? "").trim()) return false;
     if (missing === "unit" && String(product.unit ?? "").trim()) return false;
     if (missing === "sku" && String(product.sku ?? "").trim()) return false;
