@@ -7,6 +7,7 @@ from app.extensions import db
 from app.models.master_product import MasterProduct
 from app.models.supplier_product import SupplierProduct
 from app.services.master_product_matching_service import MasterProductMatchingService
+from app.services.price_intelligence_service import PriceIntelligenceService
 from app.services.permission_service import PermissionService
 
 master_products_bp = Blueprint("master_products", __name__, url_prefix="/api/master-products")
@@ -37,12 +38,21 @@ def list_master_products():
             SupplierProduct.active.is_(True),
         )).scalars().all()
         priced = [item for item in listings if item.price is not None and float(item.price) > 0]
-        comparable_prices = sorted(priced, key=lambda item: (item.currency, float(item.price)))
-        best = comparable_prices[0] if comparable_prices else None
-        currencies = {item.currency for item in priced}
-        # Only advertise a best price when the currency is unambiguous.
-        best_price = float(best.price) if best and len(currencies) == 1 else None
-        best_currency = best.currency if best_price is not None else None
+        normalized = []
+        for item in priced:
+            row = PriceIntelligenceService._price_payload(
+                item.supplier_id, item.supplier.name if item.supplier else None,
+                item.price, item.unit, item.units_per_carton, item.currency,
+            )
+            if row["comparison_unit"] is not None:
+                normalized.append((item, row))
+        comparison_keys = {(row["currency"], row["comparison_unit"]) for _, row in normalized}
+        # A single best price is meaningful only when all priced listings can
+        # be normalized to the same currency and comparison unit.
+        best_pair = min(normalized, key=lambda pair: pair[1]["normalized_price"]) if normalized and len(comparison_keys) == 1 else None
+        best = best_pair[0] if best_pair else None
+        best_price = best_pair[1]["normalized_price"] if best_pair else None
+        best_currency = best_pair[1]["currency"] if best_pair else None
         data = master.to_dict()
         data.update({
             "masterProductId": master.id,
