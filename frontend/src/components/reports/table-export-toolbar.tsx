@@ -8,7 +8,10 @@ function cleanCell(value: string) {
 }
 
 function csvEscape(value: string) {
-  const safe = /^[=+@\-\t\r]/.test(value) ? "'" + value : value;
+  // Keep real negative numbers numeric in Excel, while guarding text cells
+  // that could be interpreted as spreadsheet formulas.
+  const isNumeric = value.trim() !== "" && Number.isFinite(Number(value));
+  const safe = !isNumeric && /^[\s]*[=+@\-]/.test(value) ? "'" + value : value;
   return '"' + safe.replace(/"/g, '""') + '"';
 }
 
