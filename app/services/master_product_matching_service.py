@@ -226,9 +226,18 @@ class MasterProductMatchingService:
             )
             db.session.add(item)
         elif item.match_status != "APPROVED":
-            item.suggested_master_product_id = best["master_product"]["id"] if best else None
-            item.match_confidence = best["confidence"] if best else None
-            item.match_method = best["method"] if best else "NO_CANDIDATE"
+            if safe:
+                item.master_product_id = safe["master_product"]["id"]
+                item.suggested_master_product_id = safe["master_product"]["id"]
+                item.match_status = "APPROVED"
+                item.match_confidence = safe["confidence"]
+                item.match_method = safe["method"]
+            else:
+                item.master_product_id = None
+                item.match_status = "PENDING"
+                item.suggested_master_product_id = best["master_product"]["id"] if best else None
+                item.match_confidence = best["confidence"] if best else None
+                item.match_method = best["method"] if best else "NO_CANDIDATE"
         db.session.flush()
         AuditService.log_event(self.tenant_id, self.user_id, "supplier_product.intake", "נוסף פריט מחירון ספק", {
             "supplier_product_id": item.id, "supplier_id": supplier_id,
