@@ -54,6 +54,7 @@ export function PriceComparison({
   const updateOffer = useUpdateOffer(productId);
   const deleteOffer = useDeleteOffer(productId);
   const [addingOffer, setAddingOffer] = useState(false);
+  const [editingOfferId, setEditingOfferId] = useState<number | null>(null);
   const [newSupplierId, setNewSupplierId] = useState("");
   const [newPrice, setNewPrice] = useState("");
   const [newUnit, setNewUnit] = useState("");
