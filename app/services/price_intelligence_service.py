@@ -136,7 +136,9 @@ class PriceIntelligenceService:
         # evidence. Use the latest observation per supplier to fill comparison
         # gaps when no explicit active catalog offer exists. Explicit offers and
         # the catalog's primary price always take precedence.
-        for observation in self.observation_repo.get_latest_by_product(product_id):
+        observation_repo = getattr(self, "observation_repo", None)
+        observations = observation_repo.get_latest_by_product(product_id) if observation_repo is not None else []
+        for observation in observations:
             if observation.supplier_id in by_supplier:
                 continue
             supplier = self.supplier_repo.get_by_id(observation.supplier_id)
