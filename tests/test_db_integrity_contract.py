@@ -59,3 +59,9 @@ def test_stage9_migration_fails_before_constraints_when_existing_data_is_invalid
     assert "order_item_offer_product_mismatch" in text
     assert "order_item_offer_supplier_mismatch" in text
     assert "receipt_item_order_mismatch" in text
+
+
+
+def test_idempotency_migration_follows_procurement_foundation():
+    text = Path("migrations/versions/20260917_idempotency_keys.py").read_text(encoding="utf-8")
+    assert 'down_revision = "20260917_procurement_foundation"' in text
