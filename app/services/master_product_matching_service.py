@@ -306,3 +306,67 @@ class MasterProductMatchingService:
             "supplier_product_id": item.id, "master_product_id": master.id,
         })
         return item, master
+
+
+    def compare_master_product(self, master_product_id: int):
+        from decimal import Decimal
+        from app.services.price_intelligence_service import PriceIntelligenceService
+
+        master = db.session.execute(select(MasterProduct).where(
+            MasterProduct.id == master_product_id,
+            MasterProduct.tenant_id == self.tenant_id,
+            MasterProduct.active.is_(True),
+        )).scalar_one_or_none()
+        if master is None:
+            raise NotFound("מוצר האב לא נמצא")
+
+        listings = db.session.execute(
+            select(SupplierProduct).join(
+                Supplier,
+                (Supplier.id == SupplierProduct.supplier_id) & (Supplier.tenant_id == self.tenant_id),
+            ).where(
+                SupplierProduct.tenant_id == self.tenant_id,
+                SupplierProduct.master_product_id == master.id,
+                SupplierProduct.match_status == "APPROVED",
+                SupplierProduct.active.is_(True),
+            ).order_by(SupplierProduct.price.asc().nullslast(), SupplierProduct.id.asc())
+        ).scalars().all()
+
+        groups = {}
+        incomplete = []
+        for listing in listings:
+            if listing.price is None or Decimal(str(listing.price)) <= 0:
+                incomplete.append({**listing.to_dict(), "incomparable_reason": "חסר מחיר חיובי"})
+                continue
+            row = PriceIntelligenceService._price_payload(
+                listing.supplier_id,
+                listing.supplier.name if listing.supplier else None,
+                listing.price, listing.unit, listing.units_per_carton,
+                listing.currency, primary=False,
+            )
+            row.update({
+                "supplier_product_id": listing.id,
+                "supplier_sku": listing.supplier_sku,
+                "supplier_product_name": listing.supplier_name,
+            })
+            if row["comparison_unit"] is None:
+                incomplete.append({**row, "incomparable_reason": "חסרה יחידת השוואה או כמות באריזה"})
+                continue
+            key = (row["currency"], row["comparison_unit"])
+            groups.setdefault(key, []).append(row)
+
+        formatted_groups = []
+        for (currency, unit), offers in sorted(groups.items(), key=lambda item: (item[0][0], item[0][1])):
+            offers.sort(key=lambda row: (row["normalized_price"], row["supplier_name"] or ""))
+            formatted_groups.append({
+                "currency": currency,
+                "comparison_unit": unit,
+                "offers": offers,
+                "best_offer": offers[0] if offers else None,
+            })
+        return {
+            "master_product": master.to_dict(),
+            "groups": formatted_groups,
+            "incomplete_offers": incomplete,
+            "supplier_product_count": len(listings),
+        }
