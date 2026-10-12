@@ -114,7 +114,7 @@ def test_recent_invoice_observation_updates_master_product_supplier_comparison(l
     ))
     db.session.commit()
 
-    response = logged_in_client_a.get(f"/api/master-products/{master_id}/comparison")
+    response = logged_in_client_a.get(f"/api/catalog/master-products/{master_id}/comparison")
     assert response.status_code == 200, response.get_json()
     group = response.get_json()["groups"][0]
     best = group["best_offer"]
