@@ -77,7 +77,7 @@ export function PriceComparison({
     if (!Number.isFinite(price) || price <= 0) return setError("הזן מחיר גדול מאפס; מחיר חסר יש להשאיר לא מוגדר.");
     if (!newUnit.trim()) return setError("יש להזין יחידת מכירה כדי למנוע השוואה שגויה בין אריזות שונות.");
     const cartonSize = newCartonSize.trim() ? Number(newCartonSize) : undefined;
-    if (newUnit.trim().includes("קרטון") && (!cartonSize || !Number.isInteger(cartonSize) || cartonSize <= 0)) {
+    if (/(קרטון|ארגז|carton|case)/i.test(newUnit.trim()) && (!cartonSize || !Number.isInteger(cartonSize) || cartonSize <= 0)) {
       return setError("כשהמחיר הוא לקרטון, יש להזין כמה יחידות יש בקרטון.");
     }
     if (newCartonSize.trim() && (!cartonSize || !Number.isInteger(cartonSize) || cartonSize <= 0)) {
