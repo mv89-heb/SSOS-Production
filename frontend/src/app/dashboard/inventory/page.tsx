@@ -12,6 +12,8 @@ import { inventoryService, type InventoryMovement, type InventoryMovementType } 
 import InventoryBarcodeManager from "@/components/inventory/inventory-barcode-manager";
 import InventoryScannerModal from "@/components/inventory/inventory-scanner-modal";
 import InventoryPlanningPanel from "@/components/inventory/inventory-planning-panel";
+import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
+import { sortByHebrewName, type ProductSortDirection } from "@/lib/product-sorting";
 import type { Product } from "@/types";
 
 const number = (value: number | null | undefined) => new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 }).format(Number(value ?? 0));
