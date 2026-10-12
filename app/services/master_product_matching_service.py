@@ -183,6 +183,16 @@ class MasterProductMatchingService:
             )).scalars().first()
             if existing:
                 if existing.match_status == "APPROVED":
+                    linked_master = existing.master_product
+                    incoming_barcode = re.sub(r"\\D", "", str(data.get("barcode") or ""))
+                    master_barcode = re.sub(r"\\D", "", str(linked_master.barcode or "")) if linked_master else ""
+                    conflict = None
+                    if linked_master:
+                        _, name_reason = self._score(name, linked_master.canonical_name)
+                        if name_reason in {"PACKAGE_SIZE_MISMATCH", "PRODUCT_VARIANT_MISMATCH"}:
+                            conflict = name_reason
+                        elif incoming_barcode and master_barcode and incoming_barcode != master_barcode and not self._is_synthetic_barcode(incoming_barcode) and not self._is_synthetic_barcode(master_barcode):
+                            conflict = "BARCODE_MISMATCH"
                     existing.supplier_name = name
                     existing.description = data.get("description") or name
                     existing.barcode = str(data.get("barcode") or "").strip() or existing.barcode
@@ -192,6 +202,18 @@ class MasterProductMatchingService:
                     existing.units_per_carton = carton_value or existing.units_per_carton
                     existing.normalized_name = self.normalize(name)
                     existing.last_seen_at = db.func.now()
+                    if conflict and linked_master:
+                        existing.match_status = "PENDING"
+                        existing.master_product_id = None
+                        existing.suggested_master_product_id = linked_master.id
+                        existing.match_confidence = 0
+                        existing.match_method = conflict
+                        db.session.flush()
+                        AuditService.log_event(self.tenant_id, self.user_id, "supplier_product.identity_conflict", "נדרשת בדיקה מחדש לפריט ספק שהשתנה", {
+                            "supplier_product_id": existing.id, "previous_master_product_id": linked_master.id,
+                            "conflict": conflict,
+                        })
+                        return existing, [{"master_product": linked_master.to_dict(), "confidence": 0.0, "method": conflict, "decision": "REVIEW_CONFLICT"}]
                     db.session.flush()
                     return existing, []
                 # Refresh a pending supplier item instead of creating duplicate review tasks.
