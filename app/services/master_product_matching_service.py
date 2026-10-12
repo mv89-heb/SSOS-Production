@@ -393,7 +393,16 @@ class MasterProductMatchingService:
 
         formatted_groups = []
         for (currency, unit), offers in sorted(groups.items(), key=lambda item: (item[0][0], item[0][1])):
-            offers.sort(key=lambda row: (row["normalized_price"], row["supplier_name"] or ""))
+            # One comparable row per supplier in each unit/currency group.
+            # If a supplier has multiple packs/SKUs for the same master product,
+            # expose its cheapest normalized offer rather than duplicating the supplier.
+            best_by_supplier = {}
+            for offer in offers:
+                supplier_key = offer["supplier_id"]
+                current = best_by_supplier.get(supplier_key)
+                if current is None or offer["normalized_price"] < current["normalized_price"]:
+                    best_by_supplier[supplier_key] = offer
+            offers = sorted(best_by_supplier.values(), key=lambda row: (row["normalized_price"], row["supplier_name"] or ""))
             formatted_groups.append({
                 "currency": currency,
                 "comparison_unit": unit,
