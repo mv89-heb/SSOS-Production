@@ -143,3 +143,9 @@ def test_offer_without_unit_is_not_assumed_to_match_product_unit():
     assert [row["supplier_id"] for row in result["offers"]] == [1]
     assert [row["supplier_id"] for row in result["incomparable_offers"]] == [2]
     assert "חסרה יחידת השוואה" in result["incomparable_offers"][0]["incomparable_reason"]
+
+
+def test_hebrew_crate_alias_normalizes_to_unit_price_when_quantity_is_known():
+    price, comparison_unit = PriceIntelligenceService.normalize_offer_price(120, "ארגז", 12)
+    assert price == 10
+    assert comparison_unit == "UNIT"
