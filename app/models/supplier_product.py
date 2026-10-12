@@ -43,13 +43,14 @@ class SupplierProduct(db.Model):
     def to_dict(self):
         return {
             "id": self.id, "tenant_id": self.tenant_id, "supplier_id": self.supplier_id,
-            "supplier_name": self.supplier_name, "description": self.description,
+            "supplier_name": self.supplier_name, "supplier_company_name": self.supplier.name if self.supplier else None, "description": self.description,
             "supplier_sku": self.supplier_sku, "barcode": self.barcode,
             "price": float(self.price) if self.price is not None else None,
             "currency": self.currency, "unit": self.unit, "units_per_carton": self.units_per_carton,
             "normalized_name": self.normalized_name, "master_product_id": self.master_product_id,
             "master_product": self.master_product.to_dict() if self.master_product else None,
             "suggested_master_product_id": self.suggested_master_product_id,
+            "suggested_master_product": self.suggested_master_product.to_dict() if self.suggested_master_product else None,
             "match_status": self.match_status,
             "match_confidence": float(self.match_confidence) if self.match_confidence is not None else None,
             "match_method": self.match_method, "active": self.active,
