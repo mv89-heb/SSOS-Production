@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { catalogService, CreateSupplierInput, UpdateSupplierInput, CreateProductInput, UpdateProductInput, CreateOfferInput, UpdateOfferInput } from "@/services/catalog-service";
 import type { Product, Supplier } from "@/types";
+import { sortByHebrewName } from "@/lib/product-sorting";
 
 const SUPPLIERS_KEY = ["suppliers"] as const;
 const PRODUCTS_KEY = ["products"] as const;
@@ -76,7 +77,7 @@ function filterProducts(items: Product[], supplierId?: number, activeOnly = fals
     if (missing === "sku" && String(product.sku ?? "").trim()) return false;
     if (missing === "barcode" && String(product.barcode ?? "").trim()) return false;
     return true;
-  });
+  }).sort((a, b) => a.name.localeCompare(b.name, "he", { sensitivity: "base", numeric: true }));
 }
 
 function globalFilterKey() {
