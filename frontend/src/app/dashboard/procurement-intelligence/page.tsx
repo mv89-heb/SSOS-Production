@@ -458,20 +458,25 @@ export default function ProcurementIntelligencePage() {
 
       <Section title="🔎 חיפוש מוצר לצלילה מהירה" hint="רק כשצריך לעבור מהחלטה לפריט ספציפי.">
         <div className="border-b border-slate-100 p-5 dark:border-slate-800">
-          <div className="mb-3 flex justify-end"><ProductSortToggle direction={sortDirection} onToggle={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} /></div>
-          <div className="relative"><Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="מוצר, מק״ט, ברקוד, קטגוריה או ספק..." className="w-full rounded-xl border border-slate-200 bg-white py-3 pr-10 pl-3 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900" /></div>
+          <div className="mb-3 flex items-center justify-between gap-3"><span className="text-xs text-slate-500">נמצאו {number(filteredProducts.length)} מוצרים · מוצגים {number(visibleProducts.length)}</span><ProductSortToggle direction={sortDirection} onToggle={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} /></div>
+          <div className="relative"><Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input value={productSearch} onChange={(event) => { setProductSearch(event.target.value); setShowAllProducts(false); }} placeholder="מוצר, מק״ט, ברקוד, קטגוריה או ספק..." className="w-full rounded-xl border border-slate-200 bg-white py-3 pr-10 pl-3 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900" /></div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {([{id:"all",label:"כל המוצרים"},{id:"missing-price",label:"ללא מחיר"},{id:"missing-category",label:"ללא קטגוריה"},{id:"missing-unit",label:"ללא יחידה"},{id:"stock-rules",label:"עם כללי מלאי"}] as const).map((filter) => <button key={filter.id} type="button" onClick={() => { setProductDataFilter(filter.id); setShowAllProducts(false); }} className={`rounded-full border px-3 py-1.5 text-xs font-bold ${productDataFilter === filter.id ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"}`}>{filter.label}</button>)}
+          </div>
         </div>
         <div dir="rtl" className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
           <table dir="rtl" className="w-max min-w-[950px] text-right text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-5 py-3">מוצר</th><th className="px-5 py-3">ספק</th><th className="px-5 py-3">מחיר</th><th className="px-5 py-3">מלאי</th><th className="px-5 py-3">סטטוס</th></tr></thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredProducts.map((product) => {
+              {visibleProducts.map((product) => {
                 const recommendation = inventoryRows.find((row) => row.product_id === product.id);
                 return <tr key={product.id}><td className="px-5 py-4 font-semibold">{product.name}<div className="text-xs font-normal text-slate-400">{product.sku || product.barcode || "ללא מזהה"}</div></td><td className="px-5 py-4">{supplierNames.get(product.supplier_id) || "—"}</td><td className="px-5 py-4 font-black">{Number(product.current_price ?? 0) > 0 ? money(product.current_price, product.currency || "ILS") : "ללא מחיר"}</td><td className="px-5 py-4">{product.current_stock == null ? "—" : number(product.current_stock)}</td><td className="px-5 py-4">{recommendation?.status === "urgent" ? <span className="font-bold text-red-600">דחוף</span> : recommendation?.status === "reorder" ? <span className="font-bold text-amber-600">להזמין</span> : recommendation?.status === "healthy" ? <span className="font-bold text-emerald-600">תקין</span> : <span className="text-slate-400">אין מספיק נתונים</span>}</td></tr>;
               })}
             </tbody>
           </table>
         </div>
+        {filteredProducts.length > visibleProducts.length && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllProducts(true)} className="text-sm font-bold text-indigo-600">הצג את כל {number(filteredProducts.length)} המוצרים</button></div>}
+        {showAllProducts && filteredProducts.length > 50 && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllProducts(false)} className="text-sm font-bold text-indigo-600">צמצם ל־50 מוצרים</button></div>}
       </Section>
 
       <section className="overflow-hidden rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-indigo-50 shadow-sm dark:border-violet-900 dark:from-violet-950/30 dark:via-slate-950 dark:to-indigo-950/20">
