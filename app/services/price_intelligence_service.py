@@ -355,12 +355,17 @@ class PriceIntelligenceService:
             best = comparison.get("best_offer")
             if not current:
                 continue
+            alternatives = [
+                offer for offer in (comparison.get("offers") or [])
+                if offer.get("supplier_id") != current.get("supplier_id")
+            ]
             current_price = self._decimal(current["normalized_price"])
             total_current += current_price
             best_price = current_price
-            if best and comparison.get("offers"):
+            if alternatives:
                 comparable_products += 1
-                best_price = min(current_price, self._decimal(best["normalized_price"]))
+                if best:
+                    best_price = min(current_price, self._decimal(best["normalized_price"]))
             total_best += best_price
             savings = max(Decimal("0"), current_price - best_price)
             if savings > 0:
@@ -403,8 +408,12 @@ class PriceIntelligenceService:
             current = comparison.get("current")
             if not current:
                 continue
-            candidates = [current] + list(comparison.get("offers") or [])
-            if len(candidates) < 2:
+            alternatives = [
+                offer for offer in (comparison.get("offers") or [])
+                if offer.get("supplier_id") != current.get("supplier_id")
+            ]
+            candidates = [current] + alternatives
+            if not alternatives:
                 continue
             analyzed += 1
             cheapest = min(candidates, key=lambda row: row["normalized_price"])
