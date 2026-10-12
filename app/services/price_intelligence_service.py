@@ -390,7 +390,7 @@ class PriceIntelligenceService:
             "potential_savings": round(float(potential_savings), 2),
             "potential_savings_percent": round(float(savings_percent), 4),
             "top_opportunities": opportunities[:max(1, int(opportunity_limit))],
-            "recent_changes": [row.to_dict() for row in self.history_repo.list_all(limit=10)],
+            "recent_changes": [row.to_dict() for row in self.history_repo.list_all(limit=50)],
         }
 
     def get_supplier_price_scores(self, product_limit: int = 2000, limit: int = 10):

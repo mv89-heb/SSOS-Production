@@ -636,14 +636,27 @@ def list_master_products():
             )
             if offer["comparison_unit"] is not None:
                 normalized.append((listing, supplier, offer))
-        keys = {(offer["currency"], offer["comparison_unit"]) for _, _, offer in normalized}
-        best_pair = min(normalized, key=lambda row: row[2]["normalized_price"]) if normalized and len(keys) == 1 else None
+        # Prices can only be compared within the same currency and normalized
+        # unit. When listings contain mixed packaging, show the best price in
+        # the largest comparable group instead of blanking the entire product.
+        comparison_groups = {}
+        for row in normalized:
+            group_key = (row[2]["currency"], row[2]["comparison_unit"])
+            comparison_groups.setdefault(group_key, []).append(row)
+        selected_group_key = min(
+            comparison_groups,
+            key=lambda key: (-len(comparison_groups[key]), key[0], key[1]),
+        ) if comparison_groups else None
+        selected_group = comparison_groups.get(selected_group_key, [])
+        best_pair = min(selected_group, key=lambda row: row[2]["normalized_price"]) if selected_group else None
         data = master.to_dict()
         data.update({
             "supplier_count": len({listing.supplier_id for listing, _ in listings if listing.price is not None and float(listing.price) > 0}),
             "listing_count": len(listings),
             "current_price": best_pair[2]["normalized_price"] if best_pair else None,
             "currency": best_pair[2]["currency"] if best_pair else "ILS",
+            "comparison_unit": best_pair[2]["comparison_unit"] if best_pair else None,
+            "comparable_supplier_count": len(selected_group),
             "best_supplier_name": best_pair[1].name if best_pair else None,
             "has_price": best_pair is not None,
         })
