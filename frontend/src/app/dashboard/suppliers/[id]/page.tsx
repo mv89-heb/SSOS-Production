@@ -173,10 +173,10 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
-    if (!search) return products;
     const q = search.toLowerCase();
-    return products.filter((p) => p.name.toLowerCase().includes(q) || (p.sku ?? "").toLowerCase().includes(q));
-  }, [products, search]);
+    const matches = !search ? products : products.filter((p) => p.name.toLowerCase().includes(q) || (p.sku ?? "").toLowerCase().includes(q));
+    return sortByHebrewName(matches, (product) => product.name, sortDirection);
+  }, [products, search, sortDirection]);
 
   useEffect(() => {
     if (supplier) {
