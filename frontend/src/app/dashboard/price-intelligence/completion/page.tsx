@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ExternalLink, Loader2, Sparkles, TriangleAlert } from "lucide-react";
 import { geminiPriceCompletionService, type PriceCompletionResult } from "@/services/gemini-price-completion-service";
+import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
+import { sortByHebrewName, type ProductSortDirection } from "@/lib/product-sorting";
 
 const money = (value?: number | null, currency = "ILS") => {
   if (value == null) return "—";
