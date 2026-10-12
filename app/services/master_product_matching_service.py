@@ -186,6 +186,8 @@ class MasterProductMatchingService:
                 existing.units_per_carton = data.get("units_per_carton")
                 existing.normalized_name = self.normalize(name)
                 existing.last_seen_at = db.func.now()
+                existing.match_status = "PENDING"
+                existing.master_product_id = None
                 item = existing
             else:
                 item = None
