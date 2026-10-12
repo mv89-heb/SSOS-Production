@@ -30,42 +30,54 @@ def list_master_products():
     if query:
         stmt = stmt.where(MasterProduct.canonical_name.ilike(f"%{query}%"))
     masters = db.session.execute(stmt.order_by(MasterProduct.canonical_name.asc(), MasterProduct.id.asc()).limit(limit)).scalars().all()
+    master_ids = [master.id for master in masters]
+    grouped = {master_id: [] for master_id in master_ids}
+    if master_ids:
+        rows = db.session.execute(
+            select(SupplierProduct, Supplier)
+            .join(Supplier, (Supplier.id == SupplierProduct.supplier_id) & (Supplier.tenant_id == current_user.tenant_id))
+            .where(
+                SupplierProduct.tenant_id == current_user.tenant_id,
+                SupplierProduct.master_product_id.in_(master_ids),
+                SupplierProduct.match_status == "APPROVED",
+                SupplierProduct.active.is_(True),
+                Supplier.active.is_(True),
+            )
+            .order_by(SupplierProduct.master_product_id.asc(), SupplierProduct.id.asc())
+        ).all()
+        for listing, supplier in rows:
+            grouped[listing.master_product_id].append((listing, supplier))
+
     items = []
     for master in masters:
-        listings = db.session.execute(select(SupplierProduct).join(
-            Supplier, (Supplier.id == SupplierProduct.supplier_id) & (Supplier.tenant_id == current_user.tenant_id)
-        ).where(
-            SupplierProduct.tenant_id == current_user.tenant_id,
-            SupplierProduct.master_product_id == master.id,
-            SupplierProduct.match_status == "APPROVED",
-            SupplierProduct.active.is_(True),
-            Supplier.active.is_(True),
-        )).scalars().all()
-        priced = [item for item in listings if item.price is not None and float(item.price) > 0]
+        listings = grouped.get(master.id, [])
         normalized = []
-        for item in priced:
+        for item, supplier in listings:
+            if item.price is None or float(item.price) <= 0:
+                continue
             row = PriceIntelligenceService._price_payload(
-                item.supplier_id, item.supplier.name if item.supplier else None,
-                item.price, item.unit, item.units_per_carton, item.currency,
+                item.supplier_id, supplier.name, item.price, item.unit,
+                item.units_per_carton, item.currency,
             )
             if row["comparison_unit"] is not None:
-                normalized.append((item, row))
-        comparison_keys = {(row["currency"], row["comparison_unit"]) for _, row in normalized}
+                normalized.append((item, supplier, row))
+        comparison_keys = {(row["currency"], row["comparison_unit"]) for _, _, row in normalized}
         # A single best price is meaningful only when all priced listings can
         # be normalized to the same currency and comparison unit.
-        best_pair = min(normalized, key=lambda pair: pair[1]["normalized_price"]) if normalized and len(comparison_keys) == 1 else None
+        best_pair = min(normalized, key=lambda pair: pair[2]["normalized_price"]) if normalized and len(comparison_keys) == 1 else None
         best = best_pair[0] if best_pair else None
-        best_price = best_pair[1]["normalized_price"] if best_pair else None
-        best_currency = best_pair[1]["currency"] if best_pair else None
+        best_supplier = best_pair[1] if best_pair else None
+        best_price = best_pair[2]["normalized_price"] if best_pair else None
+        best_currency = best_pair[2]["currency"] if best_pair else None
         data = master.to_dict()
         data.update({
             "masterProductId": master.id,
             "name": master.canonical_name,
             "current_price": best_price,
             "currency": best_currency or "ILS",
-            "supplier_count": len({item.supplier_id for item in priced}),
+            "supplier_count": len({item.supplier_id for item, _ in listings if item.price is not None and float(item.price) > 0}),
             "listing_count": len(listings),
-            "best_supplier_name": best.supplier.name if best and best.supplier and best_price is not None else None,
+            "best_supplier_name": best_supplier.name if best_supplier else None,
             "has_price": best_price is not None,
         })
         items.append(data)
