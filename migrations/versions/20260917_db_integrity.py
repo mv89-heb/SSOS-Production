@@ -1,7 +1,7 @@
 """Strengthen procurement and inventory database integrity.
 
 Revision ID: 20260917_db_integrity
-Revises: 20260917_procurement_foundation
+Revises: 20260917_idempotency_keys
 """
 from alembic import op
 import sqlalchemy as sa
