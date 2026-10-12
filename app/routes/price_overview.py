@@ -82,6 +82,7 @@ def overview():
             })
 
         product_ids = [product.id for product in products]
+        products_by_id = {product.id: product for product in products}
         supplier_ids = {product.supplier_id for product in products}
         suppliers_by_id = {
             supplier.id: supplier
@@ -142,7 +143,8 @@ def overview():
             if key in seen_observations:
                 continue
             seen_observations.add(key)
-            unit = observation.unit or observation.comparison_unit
+            source_product = products_by_id.get(observation.product_id)
+            unit = observation.unit or observation.comparison_unit or (source_product.unit if source_product else None)
             cartons = observation.package_quantity if PriceIntelligenceService.normalize_unit(unit) == "CARTON" else None
             payload = PriceIntelligenceService._price_payload(
                 observation.supplier_id, supplier.name, observation.observed_price,
