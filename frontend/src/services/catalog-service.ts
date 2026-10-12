@@ -64,6 +64,26 @@ export interface UpdateProductInput {
 export interface CreateOfferInput { supplier_id: number; price: number; currency?: string; supplier_sku?: string; unit?: string; units_per_carton?: number; }
 export interface UpdateOfferInput { price?: number; currency?: string; supplier_sku?: string; unit?: string; units_per_carton?: number; active?: boolean; }
 
+export interface MasterProductRecord {
+  id: number; canonical_name: string; brand?: string | null; category?: string | null;
+  barcode?: string | null; base_unit?: string | null; package_size?: number | null; package_unit?: string | null;
+}
+export interface SupplierProductListing {
+  id: number; supplier_id: number; supplier_name: string; supplier_company_name?: string | null;
+  supplier_sku?: string | null; barcode?: string | null; description?: string | null;
+  price?: number | null; currency: string; unit?: string | null; units_per_carton?: number | null;
+  match_status: "PENDING" | "APPROVED" | "REJECTED"; master_product_id?: number | null;
+  suggested_master_product_id?: number | null; suggested_master_product?: MasterProductRecord | null;
+  match_confidence?: number | null; match_method?: string | null;
+}
+export interface MasterMatchSuggestion {
+  master_product: MasterProductRecord; confidence: number; method: string; decision: string;
+}
+export interface SupplierProductIntakeInput {
+  supplier_id: number; supplier_name: string; description?: string; supplier_sku?: string;
+  barcode?: string; price?: number; currency?: string; unit?: string; units_per_carton?: number;
+}
+
 export const catalogService = {
   listSuppliers: async (activeOnly = false) => {
     const { data } = await apiClient.get<{ success: boolean; suppliers: Supplier[] }>("/api/catalog/suppliers", { params: { active: activeOnly ? "true" : "false" } });
@@ -143,5 +163,33 @@ export const catalogService = {
   },
   deleteOffer: async (productId: number, offerId: number) => {
     await apiClient.delete(`/api/catalog/products/${productId}/offers/${offerId}`);
+  },
+  listMasterProducts: async (query = "") => {
+    const { data } = await apiClient.get<{ success: boolean; master_products: MasterProductRecord[] }>("/api/catalog/master-products", { params: { q: query, limit: 100 } });
+    return data.master_products;
+  },
+  listPendingSupplierProducts: async () => {
+    const { data } = await apiClient.get<{ success: boolean; supplier_products: SupplierProductListing[] }>("/api/catalog/supplier-products/pending");
+    return data.supplier_products;
+  },
+  suggestMasterProducts: async (name: string, barcode?: string) => {
+    const { data } = await apiClient.post<{ success: boolean; suggestions: MasterMatchSuggestion[] }>("/api/catalog/master-products/match-suggestions", { name, barcode, limit: 8 });
+    return data.suggestions;
+  },
+  intakeSupplierProduct: async (input: SupplierProductIntakeInput) => {
+    const { data } = await apiClient.post<{ success: boolean; supplier_product: SupplierProductListing; suggestions: MasterMatchSuggestion[] }>("/api/catalog/supplier-products/intake", input);
+    return data;
+  },
+  approveSupplierProduct: async (id: number, masterProductId: number) => {
+    const { data } = await apiClient.post<{ success: boolean; supplier_product: SupplierProductListing }>(`/api/catalog/supplier-products/${id}/approve`, { master_product_id: masterProductId });
+    return data.supplier_product;
+  },
+  createMasterAndApproveSupplierProduct: async (id: number, input: { canonical_name: string; brand?: string; category?: string; barcode?: string; base_unit?: string; package_size?: number; package_unit?: string }) => {
+    const { data } = await apiClient.post<{ success: boolean; supplier_product: SupplierProductListing; master_product: MasterProductRecord }>(`/api/catalog/supplier-products/${id}/approve`, { create_master_product: input });
+    return data;
+  },
+  rejectSupplierProduct: async (id: number) => {
+    const { data } = await apiClient.post<{ success: boolean; supplier_product: SupplierProductListing }>(`/api/catalog/supplier-products/${id}/reject`);
+    return data.supplier_product;
   },
 };
