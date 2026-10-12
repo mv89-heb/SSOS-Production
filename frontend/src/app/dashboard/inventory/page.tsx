@@ -35,6 +35,7 @@ function stockStatus(product: Product) {
 
 export default function InventoryPage() {
   const qc = useQueryClient();
+  const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "urgent" | "reorder" | "healthy">("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -55,11 +56,12 @@ export default function InventoryPage() {
 
   const rows = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("he");
-    return products.filter((product) => {
+    const filtered = products.filter((product) => {
       const matches = !query || [product.name, product.sku, product.barcode, product.category].filter(Boolean).some((v) => String(v).toLocaleLowerCase("he").includes(query));
       return matches && (statusFilter === "all" || stockStatus(product) === statusFilter);
     });
-  }, [products, search, statusFilter]);
+    return sortByHebrewName(filtered, (product) => product.name, sortDirection);
+  }, [products, search, statusFilter, sortDirection]);
 
   const selected = products.find((product) => product.id === selectedId) ?? null;
 
@@ -145,7 +147,7 @@ export default function InventoryPage() {
         {[["מוצרים פעילים", summary.data?.stats.active_products ?? 0, Package], ["מלאי חסר", summary.data?.stats.out_of_stock ?? 0, AlertTriangle], ["מתחת למינימום", summary.data?.stats.low_stock ?? 0, SlidersHorizontal], ["ללא כללי מלאי", summary.data?.stats.without_stock_rule ?? 0, ClipboardCheck], ["תנועות אחרונות", summary.data?.stats.movement_count ?? 0, History]].map(([label, value, Icon]) => { const C = Icon as typeof Package; return <button key={String(label)} onClick={() => label === "מלאי חסר" ? setStatusFilter("urgent") : label === "מתחת למינימום" ? setStatusFilter("reorder") : undefined} className="rounded-2xl border border-slate-200 bg-white p-5 text-right shadow-sm dark:border-slate-800 dark:bg-slate-950"><C className="text-indigo-500" size={21}/><div className="mt-3 text-xs font-bold text-slate-500">{label}</div><div className="mt-1 text-2xl font-black">{number(Number(value))}</div></button>; })}
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex flex-col gap-3 lg:flex-row lg:items-center"><label className="relative min-w-0 flex-1"><Search className="absolute right-3 top-3.5 text-slate-400" size={19}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="חפש לפי מוצר, מק״ט, ברקוד או קטגוריה…" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-10 pl-3 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900"/></label><div className="flex flex-wrap gap-2">{(["all","urgent","reorder","healthy"] as const).map((filter) => <button key={filter} onClick={() => setStatusFilter(filter)} className={`rounded-xl px-4 py-3 text-sm font-black ${statusFilter === filter ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-300"}`}>{filter === "all" ? "הכול" : statusMeta[filter].label}</button>)}</div></div></section>
+      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-slate-500">מוצרים לפי שם א׳–ת׳</span><ProductSortToggle direction={sortDirection} onToggle={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} /></div><div className="flex flex-col gap-3 lg:flex-row lg:items-center"><label className="relative min-w-0 flex-1"><Search className="absolute right-3 top-3.5 text-slate-400" size={19}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="חפש לפי מוצר, מק״ט, ברקוד או קטגוריה…" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-10 pl-3 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900"/></label><div className="flex flex-wrap gap-2">{(["all","urgent","reorder","healthy"] as const).map((filter) => <button key={filter} onClick={() => setStatusFilter(filter)} className={`rounded-xl px-4 py-3 text-sm font-black ${statusFilter === filter ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-300"}`}>{filter === "all" ? "הכול" : statusMeta[filter].label}</button>)}</div></div></section>
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="flex items-center justify-between border-b border-slate-200 p-5 dark:border-slate-800"><div><h2 className="text-xl font-black">מלאי לפי מוצר</h2><p className="mt-1 text-xs text-slate-500">{rows.length} מוצרים · הכמות היא ארגזים כברירת מחדל.</p></div><div className="rounded-xl bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300">ברקוד = מוצר, לא ספק</div></div>
