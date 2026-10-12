@@ -41,20 +41,20 @@ export default function MasterProductsPage() {
   const queryClient = useQueryClient();
   const productsQuery = useQuery({
     queryKey: ["master-products", search],
-    queryFn: async () => (await apiClient.get<{ products: MasterProduct[] }>("/api/master-products", { params: { q: search || undefined, limit: 1000 } })).data.products,
+    queryFn: async () => (await apiClient.get<{ master_products: MasterProduct[] }>("/api/catalog/master-products", { params: { q: search || undefined, limit: 1000 } })).data.master_products,
   });
   const comparisonQuery = useQuery({
     queryKey: ["master-product-comparison", selectedId],
     enabled: selectedId !== null,
-    queryFn: async () => (await apiClient.get<Comparison>(`/api/master-products/${selectedId}/comparison`)).data,
+    queryFn: async () => (await apiClient.get<Comparison>(`/api/catalog/master-products/${selectedId}/comparison`)).data,
   });
   const pendingQuery = useQuery({
     queryKey: ["master-products-pending"],
-    queryFn: async () => (await apiClient.get<{ items: Pending[] }>("/api/master-products/pending")).data.items,
+    queryFn: async () => (await apiClient.get<{ supplier_products: Pending[] }>("/api/catalog/supplier-products/pending")).data.supplier_products,
   });
   const reviewCandidatesQuery = useQuery({
     queryKey: ["master-product-review-candidates"],
-    queryFn: async () => (await apiClient.get<{ candidates: ReviewCandidate[] }>("/api/master-products/review-candidates", { params: { limit: 250 } })).data.candidates,
+    queryFn: async () => (await apiClient.get<{ candidates: ReviewCandidate[] }>("/api/catalog/master-products/review-candidates", { params: { limit: 250 } })).data.candidates,
   });
   const products = productsQuery.data ?? [];
   const comparison = comparisonQuery.data;
@@ -62,14 +62,14 @@ export default function MasterProductsPage() {
 
   const approve = async (item: Pending) => {
     if (!item.suggested_master_product_id) return;
-    await apiClient.post(`/api/master-products/supplier-products/${item.id}/approve`, { master_product_id: item.suggested_master_product_id });
+    await apiClient.post(`/api/catalog/supplier-products/${item.id}/approve`, { master_product_id: item.suggested_master_product_id });
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["master-products-pending"] }),
       queryClient.invalidateQueries({ queryKey: ["master-products"] }),
     ]);
   };
   const approveCandidate = async (candidate: ReviewCandidate) => {
-    await apiClient.post(`/api/master-products/supplier-products/${candidate.supplier_product.id}/approve`, {
+    await apiClient.post(`/api/catalog/supplier-products/${candidate.supplier_product.id}/approve`, {
       master_product_id: candidate.suggested_master_product.id,
     });
     await Promise.all([
