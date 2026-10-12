@@ -82,3 +82,34 @@ def test_incomparable_reason_for_unit_mismatch():
     right = {"currency": "ILS", "comparison_unit": "L"}
 
     assert "יחידת השוואה שונה" in PriceIntelligenceService._incomparable_reason(left, right)
+
+
+def test_missing_units_are_not_assumed_to_be_comparable():
+    product = SimpleNamespace(
+        id=10,
+        supplier_id=1,
+        current_price=100,
+        currency="ILS",
+        unit=None,
+        units_per_carton=None,
+        supplier=None,
+        supplier_offers=[],
+        to_dict=lambda: {"id": 10},
+    )
+    offer = SimpleNamespace(
+        active=True,
+        price=20,
+        supplier_id=2,
+        unit=None,
+        units_per_carton=None,
+        currency="ILS",
+    )
+    suppliers = {1: SimpleNamespace(name="ספק ראשי"), 2: SimpleNamespace(name="ספק חלופי")}
+
+    result = _service(product, [offer], suppliers).compare_product(10)
+
+    assert result["current"] is not None
+    assert result["best_offer"] is None
+    assert result["offers"] == []
+    assert len(result["incomparable_offers"]) == 2
+    assert all("חסרה יחידת השוואה" in row["incomparable_reason"] for row in result["incomparable_offers"])
