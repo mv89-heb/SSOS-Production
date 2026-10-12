@@ -162,7 +162,7 @@ class MasterProductMatchingService:
                 SupplierProduct.tenant_id == self.tenant_id,
                 SupplierProduct.supplier_id == supplier_id,
                 SupplierProduct.supplier_sku == sku,
-            )).scalar_one_or_none()
+            )).scalars().first()
             if existing:
                 if existing.match_status == "APPROVED":
                     existing.supplier_name = name
