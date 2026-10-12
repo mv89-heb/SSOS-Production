@@ -3,6 +3,8 @@
 Revision ID: 20261012_master_supplier_products
 Revises: 20261004_gemini_price_completion
 """
+from datetime import datetime, timezone
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -10,6 +12,11 @@ revision = "20261012_master_supplier_products"
 down_revision = "20261004_gemini_price_completion"
 branch_labels = None
 depends_on = None
+
+
+def _chunks(items, size=250):
+    for start in range(0, len(items), size):
+        yield items[start:start + size]
 
 
 def upgrade():
@@ -65,16 +72,12 @@ def upgrade():
     op.create_index("ix_supplier_products_master_product_id", "supplier_products", ["master_product_id"])
     op.create_index("ix_supplier_products_tenant_supplier", "supplier_products", ["tenant_id", "supplier_id"])
     op.create_index("ix_supplier_products_tenant_master", "supplier_products", ["tenant_id", "master_product_id"])
-    # Legacy data may contain duplicate supplier SKUs; index for lookup without
-    # making a historic migration fail or silently dropping catalog rows.
+    # Historical duplicates are preserved; uniqueness is enforced by application intake, not this backfill.
     op.create_index(
         "ix_supplier_products_tenant_supplier_sku",
-        "supplier_products", ["tenant_id", "supplier_id", "supplier_sku"],
-        unique=False,
+        "supplier_products", ["tenant_id", "supplier_id", "supplier_sku"], unique=False,
     )
 
-    # Backfill conservatively: each legacy catalog product becomes its own master
-    # product. No fuzzy merge is performed during a schema migration.
     bind = op.get_bind()
     products = sa.table(
         "products",
@@ -111,75 +114,101 @@ def upgrade():
         sa.column("last_seen_at", sa.DateTime), sa.column("created_at", sa.DateTime),
         sa.column("updated_at", sa.DateTime),
     )
-    now = sa.func.now()
-    master_ids = {}
-    primary_supplier_ids = {}
-    for row in bind.execute(sa.select(products)).mappings():
-        supplier = bind.execute(sa.select(suppliers.c.name).where(
-            suppliers.c.id == row["supplier_id"], suppliers.c.tenant_id == row["tenant_id"]
-        )).scalar_one_or_none()
-        if not supplier:
-            continue
+
+    # Fetch source data in bounded, deterministic batches to avoid one network
+    # round-trip per row against a remote Neon database during application boot.
+    supplier_rows = bind.execute(sa.select(suppliers)).mappings().all()
+    supplier_names = {(row["tenant_id"], row["id"]): row["name"] for row in supplier_rows}
+    product_rows = bind.execute(sa.select(products).order_by(products.c.id)).mappings().all()
+    valid_products = [
+        row for row in product_rows
+        if supplier_names.get((row["tenant_id"], row["supplier_id"]))
+    ]
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    master_values = []
+    for row in valid_products:
         normalized = " ".join(str(row["name"] or "").casefold().split())
-        master_id = bind.execute(master.insert().values(
-            tenant_id=row["tenant_id"], canonical_name=row["name"],
-            normalized_name=normalized, category=row["category"], barcode=row["barcode"],
-            base_unit=row["unit"], active=bool(row["active"]),
-            created_at=now, updated_at=now,
-        ).returning(master.c.id)).scalar_one()
-        master_ids[row["id"]] = master_id
+        master_values.append({
+            "tenant_id": row["tenant_id"], "canonical_name": row["name"] or "מוצר ללא שם",
+            "normalized_name": normalized, "category": row["category"], "barcode": row["barcode"],
+            "base_unit": row["unit"], "active": bool(row["active"]),
+            "created_at": now, "updated_at": now,
+        })
+
+    master_ids = {}
+    if master_values:
+        # sort_by_parameter_order preserves correlation between legacy product IDs
+        # and the returned master IDs while allowing SQLAlchemy's bulk insert path.
+        for product_batch, master_batch in zip(_chunks(valid_products), _chunks(master_values)):
+            returned_ids = bind.execute(
+                master.insert().returning(master.c.id, sort_by_parameter_order=True),
+                master_batch,
+            ).scalars().all()
+            if len(returned_ids) != len(product_batch):
+                raise RuntimeError("Master product backfill returned an unexpected number of IDs")
+            master_ids.update({row["id"]: master_id for row, master_id in zip(product_batch, returned_ids)})
+
+    supplier_values = []
+    primary_supplier_ids = {}
+    for row in valid_products:
+        master_id = master_ids[row["id"]]
         primary_supplier_ids[row["id"]] = row["supplier_id"]
         price = row["current_price"]
         if price is not None and price <= 0:
             price = None
-        bind.execute(supplier_product.insert().values(
-            tenant_id=row["tenant_id"], supplier_id=row["supplier_id"],
-            master_product_id=master_id, supplier_name=row["name"],
-            description=row["description"], supplier_sku=row["supplier_sku"] or row["sku"],
-            barcode=row["barcode"], price=price, currency=row["currency"] or "ILS",
-            unit=row["unit"], units_per_carton=row["units_per_carton"],
-            normalized_name=normalized, match_status="APPROVED",
-            match_confidence=1, match_method="LEGACY_BACKFILL", active=bool(row["active"]),
-            last_seen_at=now, created_at=now, updated_at=now,
-        ))
+        normalized = " ".join(str(row["name"] or "").casefold().split())
+        supplier_values.append({
+            "tenant_id": row["tenant_id"], "supplier_id": row["supplier_id"],
+            "master_product_id": master_id, "supplier_name": row["name"] or "מוצר ללא שם",
+            "description": row["description"], "supplier_sku": row["supplier_sku"] or row["sku"],
+            "barcode": row["barcode"], "price": price, "currency": row["currency"] or "ILS",
+            "unit": row["unit"], "units_per_carton": row["units_per_carton"],
+            "normalized_name": normalized, "match_status": "APPROVED",
+            "match_confidence": 1, "match_method": "LEGACY_BACKFILL", "active": bool(row["active"]),
+            "last_seen_at": now, "created_at": now, "updated_at": now,
+        })
+    for batch in _chunks(supplier_values):
+        bind.execute(supplier_product.insert(), batch)
 
-
-    # Preserve legacy alternate supplier prices in the normalized layer.
-    legacy_offers = sa.table(
-        "supplier_product_offers",
-        sa.column("tenant_id", sa.Integer), sa.column("product_id", sa.Integer),
-        sa.column("supplier_id", sa.Integer), sa.column("supplier_sku", sa.String),
-        sa.column("price", sa.Numeric), sa.column("currency", sa.String),
-        sa.column("unit", sa.String), sa.column("units_per_carton", sa.Integer),
-        sa.column("active", sa.Boolean),
-    )
     if sa.inspect(bind).has_table("supplier_product_offers"):
-        for offer in bind.execute(sa.select(legacy_offers)).mappings():
+        legacy_offers = sa.table(
+            "supplier_product_offers",
+            sa.column("tenant_id", sa.Integer), sa.column("product_id", sa.Integer),
+            sa.column("supplier_id", sa.Integer), sa.column("supplier_sku", sa.String),
+            sa.column("price", sa.Numeric), sa.column("currency", sa.String),
+            sa.column("unit", sa.String), sa.column("units_per_carton", sa.Integer),
+            sa.column("active", sa.Boolean),
+        )
+        master_by_legacy_id = {
+            row["id"]: row for row in valid_products
+        }
+        offer_rows = bind.execute(sa.select(legacy_offers)).mappings().all()
+        offer_values = []
+        for offer in offer_rows:
+            source = master_by_legacy_id.get(offer["product_id"])
             master_id = master_ids.get(offer["product_id"])
-            if master_id is None or offer["supplier_id"] == primary_supplier_ids.get(offer["product_id"]):
+            supplier_name = supplier_names.get((offer["tenant_id"], offer["supplier_id"]))
+            if source is None or master_id is None or not supplier_name:
                 continue
-            supplier_name = bind.execute(sa.select(suppliers.c.name).where(
-                suppliers.c.id == offer["supplier_id"], suppliers.c.tenant_id == offer["tenant_id"]
-            )).scalar_one_or_none()
-            master_row = bind.execute(sa.select(
-                master.c.canonical_name, master.c.normalized_name, master.c.barcode,
-                master.c.base_unit, master.c.category
-            ).where(master.c.id == master_id, master.c.tenant_id == offer["tenant_id"])).mappings().first()
-            if not supplier_name or not master_row:
+            if offer["supplier_id"] == primary_supplier_ids.get(offer["product_id"]):
                 continue
             price = offer["price"]
             if price is not None and price <= 0:
                 price = None
-            bind.execute(supplier_product.insert().values(
-                tenant_id=offer["tenant_id"], supplier_id=offer["supplier_id"],
-                master_product_id=master_id, supplier_name=master_row["canonical_name"],
-                description=master_row["canonical_name"], supplier_sku=offer["supplier_sku"],
-                barcode=master_row["barcode"], price=price, currency=offer["currency"] or "ILS",
-                unit=offer["unit"] or master_row["base_unit"], units_per_carton=offer["units_per_carton"],
-                normalized_name=master_row["normalized_name"], match_status="APPROVED",
-                match_confidence=1, match_method="LEGACY_OFFER_BACKFILL", active=bool(offer["active"]),
-                last_seen_at=now, created_at=now, updated_at=now,
-            ))
+            normalized = " ".join(str(source["name"] or "").casefold().split())
+            offer_values.append({
+                "tenant_id": offer["tenant_id"], "supplier_id": offer["supplier_id"],
+                "master_product_id": master_id, "supplier_name": source["name"] or "מוצר ללא שם",
+                "description": source["name"] or "מוצר ללא שם", "supplier_sku": offer["supplier_sku"],
+                "barcode": source["barcode"], "price": price, "currency": offer["currency"] or "ILS",
+                "unit": offer["unit"] or source["unit"], "units_per_carton": offer["units_per_carton"],
+                "normalized_name": normalized, "match_status": "APPROVED",
+                "match_confidence": 1, "match_method": "LEGACY_OFFER_BACKFILL",
+                "active": bool(offer["active"]), "last_seen_at": now, "created_at": now, "updated_at": now,
+            })
+        for batch in _chunks(offer_values):
+            bind.execute(supplier_product.insert(), batch)
+
 
 def downgrade():
     op.drop_index("ix_supplier_products_tenant_supplier_sku", table_name="supplier_products")
