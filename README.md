@@ -79,6 +79,10 @@ See `.env.example` for the full list. Key variables:
 | `MAX_UPLOAD_SIZE` | Upload size cap in bytes for OCR document uploads. |
 | `RATELIMIT_LOGIN` | Login attempt rate limit, e.g. `10 per minute`. |
 
+## Canonical supplier product matching
+
+The canonical master catalog, supplier-specific listings, matching review queue, and normalized price comparison are documented in [Master Product Matching](docs/MASTER_PRODUCT_MATCHING.md). The new tables are added through Alembic; legacy products are preserved without fuzzy merging.
+
 ## Database Migration
 
 Migrations are managed with Flask-Migrate (Alembic) and live under
