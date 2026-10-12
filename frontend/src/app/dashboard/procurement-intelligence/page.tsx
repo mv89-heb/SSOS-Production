@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 
 import { catalogService } from "@/services/catalog-service";
+import { orderService } from "@/services/order-service";
 import { priceIntelligenceService } from "@/services/price-intelligence-service";
 import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
 import { sortByHebrewName, type ProductSortDirection } from "@/lib/product-sorting";
@@ -131,6 +132,11 @@ export default function ProcurementIntelligencePage() {
     queryFn: () => priceIntelligenceService.getInventoryRecommendations({ lookback_days: 60, safety_days: 2, limit: 500 }),
     retry: 1,
   });
+  const orders = useQuery({
+    queryKey: ["procurement-intelligence", "orders"],
+    queryFn: () => orderService.getOrders(),
+    retry: 1,
+  });
   const readiness = useQuery({
     queryKey: ["procurement-intelligence", "data-readiness"],
     queryFn: () => priceIntelligenceService.getDataReadiness(),
@@ -140,6 +146,10 @@ export default function ProcurementIntelligencePage() {
   const [productSearch, setProductSearch] = useState("");
   const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc");
   const [showAllActions, setShowAllActions] = useState(false);
+  const [showAllOpportunities, setShowAllOpportunities] = useState(false);
+  const [showAllSuppliers, setShowAllSuppliers] = useState(false);
+  const [showAllProducts, setShowAllProducts] = useState(false);
+  const [productDataFilter, setProductDataFilter] = useState<"all" | "missing-price" | "missing-category" | "missing-unit" | "stock-rules">("all");
   const [briefing, setBriefing] = useState<Awaited<ReturnType<typeof priceIntelligenceService.getAiBriefing>> | null>(null);
   const [aiError, setAiError] = useState<string>();
   const [aiLoading, setAiLoading] = useState(false);
@@ -150,6 +160,7 @@ export default function ProcurementIntelligencePage() {
     void products.refetch();
     void supplierCatalog.refetch();
     void readiness.refetch();
+    void orders.refetch();
     void inventory.refetch();
   };
 
@@ -173,6 +184,7 @@ export default function ProcurementIntelligencePage() {
     [supplierCatalog.data],
   );
   const readinessData = readiness.data;
+  const orderRows = orders.data ?? [];
   const inventoryRows = inventory.data?.recommendations ?? [];
   const urgentStock = inventoryRows.filter((row) => row.status === "urgent");
   const reorderStock = inventoryRows.filter((row) => row.status === "reorder");
@@ -230,20 +242,32 @@ export default function ProcurementIntelligencePage() {
 
   const filteredProducts = useMemo(() => {
     const q = productSearch.trim().toLocaleLowerCase("he-IL");
-    const matches = !q ? productRows : productRows.filter((product) =>
+    const matches = (!q ? productRows : productRows.filter((product) =>
       [product.name, product.sku, product.barcode, product.category, supplierNames.get(product.supplier_id)]
         .some((value) => String(value ?? "").toLocaleLowerCase("he-IL").includes(q)),
-    );
-    return sortByHebrewName(matches.slice(0, q ? 50 : 20), (product) => product.name, sortDirection);
-  }, [productRows, productSearch, supplierNames, sortDirection]);
+    )).filter((product) => {
+      if (productDataFilter === "missing-price") return Number(product.current_price ?? 0) <= 0;
+      if (productDataFilter === "missing-category") return !String(product.category ?? "").trim();
+      if (productDataFilter === "missing-unit") return !String(product.unit ?? "").trim();
+      if (productDataFilter === "stock-rules") return product.min_stock != null || product.recommended_stock != null;
+      return true;
+    });
+    return sortByHebrewName(matches, (product) => product.name, sortDirection);
+  }, [productRows, productSearch, supplierNames, sortDirection, productDataFilter]);
 
   const coverageReady = inventoryRows.filter((row) => row.data_ready && row.coverage_days != null);
   const averageCoverage = coverageReady.length
     ? coverageReady.reduce((sum, row) => sum + Number(row.coverage_days ?? 0), 0) / coverageReady.length
     : null;
   const insufficientInventoryData = inventoryRows.filter((row) => row.status === "insufficient_data").length;
-  const loading = summary.isLoading || suppliers.isLoading || products.isLoading || supplierCatalog.isLoading || readiness.isLoading || inventory.isLoading;
-  const error = summary.isError || suppliers.isError || products.isError || supplierCatalog.isError || readiness.isError || inventory.isError;
+  const visibleProducts = filteredProducts.slice(0, showAllProducts ? filteredProducts.length : 50);
+  const completedOrders = orderRows.filter((order) => order.status === "completed");
+  const openOrders = orderRows.filter((order) => ["draft", "submitted", "approved", "sent"].includes(order.status));
+  const realizedSpend = completedOrders.reduce((sum, order) => sum + Number(order.final_total ?? 0), 0);
+  const ordersWithValue = orderRows.filter((order) => Number(order.final_total ?? 0) > 0).length;
+  const recentOrders = [...orderRows].sort((a, b) => String(b.updated_at || b.created_at).localeCompare(String(a.updated_at || a.created_at))).slice(0, 8);
+  const loading = summary.isLoading || suppliers.isLoading || products.isLoading || supplierCatalog.isLoading || readiness.isLoading || inventory.isLoading || orders.isLoading;
+  const error = summary.isError || suppliers.isError || products.isError || supplierCatalog.isError || readiness.isError || inventory.isError || orders.isError;
 
   return (
     <div dir="rtl" className="space-y-6 pb-10">
