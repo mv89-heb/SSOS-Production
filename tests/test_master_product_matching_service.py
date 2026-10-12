@@ -92,3 +92,48 @@ def test_pending_products_are_tenant_scoped(logged_in_client_a, logged_in_client
     response = logged_in_client_b.get("/api/catalog/supplier-products/pending")
     assert response.status_code == 200
     assert response.get_json()["supplier_products"] == []
+
+
+def test_master_product_comparison_ranks_only_compatible_supplier_prices(logged_in_client_a):
+    supplier_a = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "ספק א"}).get_json()["supplier"]
+    first = logged_in_client_a.post("/api/catalog/supplier-products/intake", json={
+        "supplier_id": supplier_a["id"], "supplier_name": "חלב תנובה 3% 1 ליטר",
+        "supplier_sku": "A-100", "price": 8.5, "unit": "יחידה",
+    }).get_json()["supplier_product"]
+    created = logged_in_client_a.post(
+        f"/api/catalog/supplier-products/{first['id']}/approve",
+        json={"create_master_product": {"canonical_name": "חלב תנובה 3% 1 ליטר", "base_unit": "יחידה"}},
+    )
+    master_id = created.get_json()["master_product"]["id"]
+
+    supplier_b = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "ספק ב"}).get_json()["supplier"]
+    second = logged_in_client_a.post("/api/catalog/supplier-products/intake", json={
+        "supplier_id": supplier_b["id"], "supplier_name": "חלב תנובה 3% 1 ליטר",
+        "supplier_sku": "B-100", "price": 7.25, "unit": "יחידה",
+    }).get_json()["supplier_product"]
+    approved = logged_in_client_a.post(
+        f"/api/catalog/supplier-products/{second['id']}/approve",
+        json={"master_product_id": master_id},
+    )
+    assert approved.status_code == 200
+
+    comparison = logged_in_client_a.get(f"/api/catalog/master-products/{master_id}/comparison")
+    assert comparison.status_code == 200, comparison.get_json()
+    group = comparison.get_json()["groups"][0]
+    assert group["comparison_unit"] == "UNIT"
+    assert len(group["offers"]) == 2
+    assert group["best_offer"]["supplier_id"] == supplier_b["id"]
+
+
+def test_master_product_comparison_cannot_cross_tenant(logged_in_client_a, logged_in_client_b):
+    supplier = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "ספק א"}).get_json()["supplier"]
+    item = logged_in_client_a.post("/api/catalog/supplier-products/intake", json={
+        "supplier_id": supplier["id"], "supplier_name": "מוצר פרטי", "supplier_sku": "PRIVATE-1", "price": 5,
+    }).get_json()["supplier_product"]
+    response = logged_in_client_a.post(
+        f"/api/catalog/supplier-products/{item['id']}/approve",
+        json={"create_master_product": {"canonical_name": "מוצר פרטי"}},
+    )
+    master_id = response.get_json()["master_product"]["id"]
+    cross_tenant = logged_in_client_b.get(f"/api/catalog/master-products/{master_id}/comparison")
+    assert cross_tenant.status_code == 404
