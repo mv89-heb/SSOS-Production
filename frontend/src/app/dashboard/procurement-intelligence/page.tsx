@@ -253,7 +253,7 @@ export default function ProcurementIntelligencePage() {
               <BrainCircuit size={18} />
               <span className="text-sm font-bold">Decision Center</span>
             </div>
-            <h1 className="text-3xl font-black text-slate-900 dark:text-white">מרכז מודיעין ורכש</h1>
+            <h1 className="text-3xl font-black text-slate-900 dark:text-white">מרכז החלטות רכש</h1>
             <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-600 dark:text-slate-300">
               לא עוד דוח נתונים. המסך מתרגם מלאי, צריכה, ספקים ומחירים ל־<strong>מה דורש טיפול עכשיו</strong>,
               <strong> מה כדאי להזמין</strong> ו־<strong>איפה קיימת הזדמנות לחיסכון</strong>.

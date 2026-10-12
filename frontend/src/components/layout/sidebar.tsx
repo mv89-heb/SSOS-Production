@@ -51,7 +51,7 @@ export default function Sidebar() {
             </Link>;
           })}</div>
         </section>)}
-        {isAdmin && <Link href="/dashboard/admin" className={cn("flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition", pathname.startsWith("/dashboard/admin") ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/8 hover:text-white")}><ShieldCheck className="h-5 w-5" /><span>ניהול משתמשים</span></Link>}
+        {isAdmin && <Link href="/dashboard/admin" className={cn("flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition", pathname.startsWith("/dashboard/admin") ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/8 hover:text-white")}><ShieldCheck className="h-5 w-5" /><span>ניהול מערכת</span></Link>}
       </nav>
       <div className="shrink-0 space-y-2 border-t border-white/10 p-4">
         <Link href="/dashboard/help" className={cn("flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition", pathname.startsWith("/dashboard/help") ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/8 hover:text-white")}><HelpCircle className="h-5 w-5" /><span>מרכז עזרה</span></Link>
