@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
-from sqlalchemy import func, select
+from sqlalchemy import select
 from werkzeug.exceptions import HTTPException, BadRequest
 
 from app.extensions import db
