@@ -3,7 +3,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { catalogService, CreateSupplierInput, UpdateSupplierInput, CreateProductInput, UpdateProductInput, CreateOfferInput, UpdateOfferInput } from "@/services/catalog-service";
 import type { Product, Supplier } from "@/types";
-import { sortByHebrewName } from "@/lib/product-sorting";
 
 const SUPPLIERS_KEY = ["suppliers"] as const;
 const PRODUCTS_KEY = ["products"] as const;
