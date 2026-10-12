@@ -184,8 +184,8 @@ class MasterProductMatchingService:
             if existing:
                 if existing.match_status == "APPROVED":
                     linked_master = existing.master_product
-                    incoming_barcode = re.sub(r"\\D", "", str(data.get("barcode") or ""))
-                    master_barcode = re.sub(r"\\D", "", str(linked_master.barcode or "")) if linked_master else ""
+                    incoming_barcode = re.sub(r"\D", "", str(data.get("barcode") or ""))
+                    master_barcode = re.sub(r"\D", "", str(linked_master.barcode or "")) if linked_master else ""
                     conflict = None
                     if linked_master:
                         _, name_reason = self._score(name, linked_master.canonical_name)
