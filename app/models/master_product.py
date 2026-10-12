@@ -35,5 +35,4 @@ class MasterProduct(db.Model):
             "base_unit": self.base_unit,
             "package_size": float(self.package_size) if self.package_size is not None else None,
             "package_unit": self.package_unit, "active": self.active,
-            "supplier_product_count": len(self.supplier_products or []),
         }
