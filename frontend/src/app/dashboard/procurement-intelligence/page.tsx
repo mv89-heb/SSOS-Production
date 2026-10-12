@@ -308,6 +308,17 @@ export default function ProcurementIntelligencePage() {
         <StatCard label="ספקים פעילים" value={number(readinessData?.suppliers.active)} hint={`${number(readinessData?.supplier_offers.suppliers_covered)} משתתפים בהשוואת מחירים`} icon={<Truck className="text-violet-500" size={18} />} tone="violet" />
       </section>
 
+      <Section title="📦 פעילות הזמנות והוצאה בפועל" hint="הנתונים מבוססים על הזמנות שנשמרו בפועל במערכת.">
+        <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-500">כל ההזמנות</div><div className="mt-1 text-2xl font-black">{number(orderRows.length)}</div><div className="mt-1 text-xs text-slate-500">{number(ordersWithValue)} עם סכום</div></div>
+          <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-500">בתהליך</div><div className="mt-1 text-2xl font-black text-indigo-600">{number(openOrders.length)}</div></div>
+          <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-500">הושלמו</div><div className="mt-1 text-2xl font-black">{number(completedOrders.length)}</div></div>
+          <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-500">הוצאה ממומשת</div><div className="mt-1 text-2xl font-black">{realizedSpend > 0 ? money(realizedSpend) : "אין נתון"}</div><div className="mt-1 text-xs text-slate-500">{realizedSpend > 0 ? "מסכום הזמנות שהושלמו" : "אין כרגע הזמנות שהושלמו עם סכום חיובי"}</div></div>
+        </div>
+        {recentOrders.length ? <div className="overflow-x-auto border-t border-slate-100"><table className="w-full min-w-[760px] text-right text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-5 py-3">מס׳ הזמנה</th><th className="px-5 py-3">ספק</th><th className="px-5 py-3">תאריך</th><th className="px-5 py-3">סטטוס</th><th className="px-5 py-3">פריטים</th><th className="px-5 py-3">סכום</th></tr></thead><tbody className="divide-y">{recentOrders.map((order) => <tr key={order.id}><td className="px-5 py-3 font-bold">{order.order_number}</td><td className="px-5 py-3">{order.supplier_name || "—"}</td><td className="px-5 py-3">{order.planned_order_date || (order.created_at ? new Intl.DateTimeFormat("he-IL").format(new Date(order.created_at)) : "—")}</td><td className="px-5 py-3">{({ draft: "טיוטה", submitted: "ממתינה לאישור", approved: "אושרה", sent: "נשלחה לספק", completed: "הושלמה", cancelled: "בוטלה" } as Record<string, string>)[order.status] || order.status}</td><td className="px-5 py-3">{number(order.items?.length ?? 0)}</td><td className="px-5 py-3 font-bold">{Number(order.final_total ?? 0) > 0 ? money(order.final_total, order.currency || "ILS") : "ללא סכום"}</td></tr>)}</tbody></table></div> : <div className="p-8 text-center text-sm text-slate-500">אין הזמנות להצגה.</div>}
+        <div className="border-t p-4"><a href="/dashboard/orders" className="text-sm font-bold text-indigo-600">לכל הזמנות הרכש ←</a></div>
+      </Section>
+
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <Section title="🔴 מה דורש טיפול עכשיו" hint="המערכת ממיינת לפי דחיפות ולא לפי סדר אלפביתי." action={<a href="/dashboard/inventory" className="text-sm font-bold text-indigo-600">תכנון מלאי ←</a>}>
           {actionRows.length ? (
