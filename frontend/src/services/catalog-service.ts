@@ -83,6 +83,17 @@ export interface SupplierProductIntakeInput {
   supplier_id: number; supplier_name: string; description?: string; supplier_sku?: string;
   barcode?: string; price?: number; currency?: string; unit?: string; units_per_carton?: number;
 }
+export interface MasterProductPriceOffer {
+  supplier_id: number; supplier_name?: string | null; supplier_product_id: number;
+  supplier_sku?: string | null; supplier_product_name: string; price: number; currency: string;
+  unit?: string | null; comparison_unit?: string | null; normalized_price: number;
+}
+export interface MasterProductPriceComparison {
+  master_product: MasterProductRecord;
+  groups: Array<{ currency: string; comparison_unit: string; offers: MasterProductPriceOffer[]; best_offer?: MasterProductPriceOffer }>;
+  incomplete_offers: Array<SupplierProductListing & { incomparable_reason?: string }>;
+  supplier_product_count: number;
+}
 
 export const catalogService = {
   listSuppliers: async (activeOnly = false) => {
@@ -167,6 +178,10 @@ export const catalogService = {
   listMasterProducts: async (query = "") => {
     const { data } = await apiClient.get<{ success: boolean; master_products: MasterProductRecord[] }>("/api/catalog/master-products", { params: { q: query, limit: 100 } });
     return data.master_products;
+  },
+  compareMasterProduct: async (id: number) => {
+    const { data } = await apiClient.get<{ success: boolean } & MasterProductPriceComparison>(`/api/catalog/master-products/${id}/comparison`);
+    return data;
   },
   listPendingSupplierProducts: async () => {
     const { data } = await apiClient.get<{ success: boolean; supplier_products: SupplierProductListing[] }>("/api/catalog/supplier-products/pending");
