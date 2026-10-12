@@ -48,11 +48,19 @@ function safeFilename(value: string) {
   return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/\s+/g, "-").slice(0, 90) || "report";
 }
 
-function worksheetName(value: string, index: number) {
-  const cleaned = value.replace(/[\[\]:*?\/\\]/g, " ").trim().slice(0, 31);
-  return cleaned || `Sheet${index + 1}`;
+function worksheetName(value: string, index: number, usedNames: Set<string>) {
+  const cleaned = value.replace(/[\[\]:*?\/\\]/g, " ").replace(/[\u0000-\u001F]/g, " ").trim();
+  const base = cleaned || \`Sheet\${index + 1}\`;
+  let candidate = base.slice(0, 31);
+  let suffixIndex = 2;
+  // Excel worksheet names must be unique, case-insensitively, within a workbook.
+  while (usedNames.has(candidate.toLocaleLowerCase("en-US"))) {
+    const suffix = \` (\${suffixIndex++})\`;
+    candidate = \`\${base.slice(0, 31 - suffix.length)}\${suffix}\`;
+  }
+  usedNames.add(candidate.toLocaleLowerCase("en-US"));
+  return candidate;
 }
-
 function createExcelXml(title: string, tables: HTMLTableElement[]) {
   const usedNames = new Set<string>();
   const worksheets = tables.map((table, index) => {
