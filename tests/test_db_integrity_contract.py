@@ -4,7 +4,7 @@ from pathlib import Path
 MIGRATION = Path("migrations/versions/20260917_db_integrity.py")
 
 
-def test_stage9_migration_targets_procurement_foundation():
+def test_stage9_migration_follows_idempotency_keys():
     text = MIGRATION.read_text(encoding="utf-8")
     assert 'down_revision = "20260917_idempotency_keys"' in text
     assert 'raise RuntimeError' in text
