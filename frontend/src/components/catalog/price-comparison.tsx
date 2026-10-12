@@ -186,7 +186,7 @@ export function PriceComparison({
           <label className="text-xs text-slate-600 sm:col-span-2">יחידות בקרטון (רק למחיר קרטון)<input type="number" min="1" step="1" value={newCartonSize} onChange={(e) => setNewCartonSize(e.target.value)} placeholder="למשל 12" className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" /></label>
         </div>
         {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
-        <div className="flex gap-2"><Button onClick={handleAddOffer} disabled={createOffer.isPending || updateOffer.isPending} className="text-xs">{createOffer.isPending || updateOffer.isPending ? "שומר..." : editingOfferId !== null ? "שמירת עדכון" : "שמירת הצעה"}</Button><Button variant="ghost" onClick={() => { setAddingOffer(false); setError(null); }} disabled={createOffer.isPending || updateOffer.isPending} onClick={() => { setAddingOffer(false); setEditingOfferId(null); setError(null); }} className="text-xs">ביטול</Button></div>
+        <div className="flex gap-2"><Button onClick={handleAddOffer} disabled={createOffer.isPending || updateOffer.isPending} className="text-xs">{createOffer.isPending || updateOffer.isPending ? "שומר..." : editingOfferId !== null ? "שמירת עדכון" : "שמירת הצעה"}</Button><Button variant="ghost" onClick={() => { setAddingOffer(false); setEditingOfferId(null); setError(null); }} disabled={createOffer.isPending || updateOffer.isPending} className="text-xs">ביטול</Button></div>
       </div>}
     </section>
   );
