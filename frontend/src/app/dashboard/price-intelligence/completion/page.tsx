@@ -61,7 +61,7 @@ export default function PriceCompletionPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="mb-2 flex items-center gap-2 text-violet-600"><Sparkles size={18} /><span className="text-sm font-semibold">Gemini Price Completion</span></div>
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">השלמת מחירים אוטומטית</h1>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">השלמת מחירים חסרים</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-500">Gemini מחפש מחירים עדכניים באינטרנט באמצעות Google Search, מתאים את האריזה ומכניס את המחיר החסר לקטלוג עם מקור ורמת ביטחון.</p>
           </div>
           <button type="button" onClick={runAll} disabled={running || status.missing_price === 0} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60">
@@ -85,7 +85,7 @@ export default function PriceCompletionPage() {
       {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/20">{error}</div>}
 
       {results.length > 0 && <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-        <div className="border-b border-slate-100 p-5 dark:border-slate-800"><h2 className="font-bold">תוצאות אחרונות</h2><p className="mt-1 text-xs text-slate-500">כל מחיר שנמצא נשמר עם מקור ב־Price History.</p></div>
+        <div className="border-b border-slate-100 p-5 dark:border-slate-800"><h2 className="font-bold">תוצאות אחרונות</h2><p className="mt-1 text-xs text-slate-500">הפעלת חיפוש למחירים חסרים בלבד. כל תוצאה נשמרת עם מקור ב־Price History.</p></div>
         <div className="divide-y divide-slate-100 dark:divide-slate-800">
           {results.map((row, index) => <div key={row.product_id + "-" + index} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div><div className="font-semibold">{row.product_name}</div><div className="mt-1 text-xs text-slate-500">{row.match_type || row.reason || "—"} {row.confidence != null ? "· ביטחון " + row.confidence + "%" : ""}</div></div>
