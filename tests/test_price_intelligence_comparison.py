@@ -149,3 +149,9 @@ def test_hebrew_crate_alias_normalizes_to_unit_price_when_quantity_is_known():
     price, comparison_unit = PriceIntelligenceService.normalize_offer_price(120, "ארגז", 12)
     assert price == 10
     assert comparison_unit == "UNIT"
+
+
+def test_carton_price_without_package_quantity_is_not_comparable():
+    price, comparison_unit = PriceIntelligenceService.normalize_offer_price(120, "קרטון", None)
+    assert price == 120
+    assert comparison_unit is None
