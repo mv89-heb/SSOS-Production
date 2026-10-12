@@ -112,6 +112,8 @@ def upgrade():
         sa.column("updated_at", sa.DateTime),
     )
     now = sa.func.now()
+    master_ids = {}
+    primary_supplier_ids = {}
     for row in bind.execute(sa.select(products)).mappings():
         supplier = bind.execute(sa.select(suppliers.c.name).where(
             suppliers.c.id == row["supplier_id"], suppliers.c.tenant_id == row["tenant_id"]
@@ -126,6 +128,8 @@ def upgrade():
             created_at=now, updated_at=now,
         ))
         master_id = result.inserted_primary_key[0]
+        master_ids[row["id"]] = master_id
+        primary_supplier_ids[row["id"]] = row["supplier_id"]
         price = row["current_price"]
         if price is not None and price <= 0:
             price = None
