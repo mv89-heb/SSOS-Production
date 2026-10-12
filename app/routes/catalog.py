@@ -692,3 +692,14 @@ def reject_supplier_product_match(supplier_product_id):
     except HTTPException as exc:
         db.session.rollback()
         return _handle(exc)
+
+
+@catalog_bp.route("/master-products/<int:master_product_id>/comparison", methods=["GET"])
+@login_required
+def compare_master_product(master_product_id):
+    from app.services.master_product_matching_service import MasterProductMatchingService
+    try:
+        result = MasterProductMatchingService(current_user.tenant_id, current_user.id).compare_master_product(master_product_id)
+        return jsonify({"success": True, **result})
+    except HTTPException as exc:
+        return _handle(exc)
