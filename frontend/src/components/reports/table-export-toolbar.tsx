@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Download, FileSpreadsheet, FileText } from "lucide-react";
 
 function cleanCell(value: string) {
-  return value.replace(/\\s+/g, " ").trim();
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function xmlEscape(value: string) {
@@ -44,11 +44,11 @@ function downloadFile(content: string, filename: string, type: string) {
 }
 
 function safeFilename(value: string) {
-  return value.replace(/[<>:"/\\\\|?*\\u0000-\\u001f]/g, "-").replace(/\\s+/g, "-").slice(0, 90) || "report";
+  return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/\\s+/g, "-").slice(0, 90) || "report";
 }
 
 function worksheetName(value: string, index: number) {
-  const cleaned = value.replace(/[\\[\\]:*?/\\\\]/g, " ").trim().slice(0, 31);
+  const cleaned = value.replace(/[\[\]:*?/\\]/g, " ").trim().slice(0, 31);
   return cleaned || `Sheet${index + 1}`;
 }
 
@@ -89,7 +89,7 @@ export default function TableExportToolbar() {
       return;
     }
     const xml = createExcelXml(pageTitle, tables);
-    downloadFile("\\uFEFF" + xml, `${safeFilename(pageTitle)}.xls`, "application/vnd.ms-excel;charset=utf-8");
+    downloadFile("\uFEFF" + xml, `${safeFilename(pageTitle)}.xls`, "application/vnd.ms-excel;charset=utf-8");
     setMessage(`יוצאו ${tables.length} גיליונות Excel לפי הטבלאות המוצגות והסינון הפעיל.`);
   }
 
