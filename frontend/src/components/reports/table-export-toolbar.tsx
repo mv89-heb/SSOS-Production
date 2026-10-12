@@ -8,7 +8,9 @@ function cleanCell(value: string) {
 }
 
 function xmlEscape(value: string) {
+  // SpreadsheetML is XML 1.0: strip forbidden control characters before escaping.
   return value
+    .replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\uFFFE\\uFFFF]/g, "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -53,6 +55,7 @@ function worksheetName(value: string, index: number) {
 }
 
 function createExcelXml(title: string, tables: HTMLTableElement[]) {
+  const usedNames = new Set<string>();
   const worksheets = tables.map((table, index) => {
     const heading = table.closest("section")?.querySelector("h2, h3")?.textContent?.trim()
       || table.getAttribute("aria-label")
@@ -64,7 +67,7 @@ function createExcelXml(title: string, tables: HTMLTableElement[]) {
       ).join("");
       return `<Row>${cells}</Row>`;
     }).join("");
-    return `<Worksheet ss:Name="${xmlEscape(worksheetName(heading, index))}"><Table>${rowXml}</Table></Worksheet>`;
+    return `<Worksheet ss:Name="${xmlEscape(worksheetName(heading, index, usedNames))}"><Table>${rowXml}</Table></Worksheet>`;
   }).join("");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <?mso-application progid="Excel.Sheet"?>
