@@ -61,8 +61,10 @@ class PriceIntelligenceService:
         normalized = cls.normalize_unit(unit)
         cartons = cls._decimal(units_per_carton) if units_per_carton is not None else Decimal("0")
         if normalized == "CARTON":
+            # A carton price is only comparable to a unit price when its
+            # contents are known. Two cartons can contain different quantities.
             if cartons <= 0:
-                return amount, "CARTON"
+                return amount, None
             amount = amount / cartons
             normalized = "UNIT"
         factor = cls.UNIT_FACTORS.get(normalized)
