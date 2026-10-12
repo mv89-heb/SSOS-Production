@@ -84,9 +84,9 @@ export interface SupplierProductIntakeInput {
   barcode?: string; price?: number; currency?: string; unit?: string; units_per_carton?: number;
 }
 export interface MasterProductPriceOffer {
-  supplier_id: number; supplier_name?: string | null; supplier_product_id: number;
+  supplier_id: number; supplier_name?: string | null; supplier_product_id: number | null;
   supplier_sku?: string | null; supplier_product_name: string; price: number; currency: string;
-  unit?: string | null; comparison_unit?: string | null; normalized_price: number;
+  unit?: string | null; comparison_unit?: string | null; normalized_price: number; source_type?: string; observed_at?: string | null; source_document_id?: number | null; match_confidence?: number | null;
 }
 export interface MasterProductPriceComparison {
   master_product: MasterProductRecord;

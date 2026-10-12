@@ -346,6 +346,8 @@ class MasterProductMatchingService:
 
     def compare_master_product(self, master_product_id: int):
         from decimal import Decimal
+        from app.models.price_observation import PriceObservation
+        from app.models.product import Product
         from app.services.price_intelligence_service import PriceIntelligenceService
 
         master = db.session.execute(select(MasterProduct).where(
@@ -391,9 +393,88 @@ class MasterProductMatchingService:
             key = (row["currency"], row["comparison_unit"])
             groups.setdefault(key, []).append(row)
 
+        # Use invoice/delivery observations as price evidence for the same
+        # canonical item. Product names come from the legacy product identity;
+        # tenant and supplier constraints prevent cross-tenant joins. A newer
+        # observation supersedes a stale catalog price for that supplier.
+        source_names = {listing.supplier_name for listing in listings if listing.supplier_name}
+        if source_names:
+            observations = db.session.execute(
+                select(PriceObservation, Product, Supplier)
+                .join(Product, (Product.id == PriceObservation.product_id) & (Product.tenant_id == self.tenant_id))
+                .join(Supplier, (Supplier.id == PriceObservation.supplier_id) & (Supplier.tenant_id == self.tenant_id))
+                .where(
+                    PriceObservation.tenant_id == self.tenant_id,
+                    PriceObservation.observed_price > 0,
+                    Product.name.in_(source_names),
+                    Supplier.active.is_(True),
+                )
+                .order_by(PriceObservation.observed_at.desc(), PriceObservation.id.desc())
+            ).all()
+            latest_observation_by_supplier = {}
+            for observation, source_product, supplier in observations:
+                latest_observation_by_supplier.setdefault(supplier.id, (observation, source_product, supplier))
+
+            listing_by_supplier = {}
+            for listing in listings:
+                current = listing_by_supplier.get(listing.supplier_id)
+                has_price = listing.price is not None and Decimal(str(listing.price)) > 0
+                updated_at = listing.updated_at.replace(tzinfo=None) if listing.updated_at else None
+                if current is None or (updated_at and (current[0] is None or updated_at > current[0])):
+                    listing_by_supplier[listing.supplier_id] = (updated_at, has_price)
+                elif has_price:
+                    listing_by_supplier[listing.supplier_id] = (current[0], True)
+
+            for supplier_id, (observation, source_product, supplier) in latest_observation_by_supplier.items():
+                listing_state = listing_by_supplier.get(supplier_id)
+                observed_at = observation.observed_at.replace(tzinfo=None) if observation.observed_at else None
+                has_catalog_price = bool(listing_state and listing_state[1])
+                catalog_updated_at = listing_state[0] if listing_state else None
+                if has_catalog_price and catalog_updated_at and observed_at and observed_at <= catalog_updated_at:
+                    continue
+
+                # A fresh document observation replaces the supplier's catalog
+                # row, avoiding double-counting the same supplier.
+                incomplete[:] = [entry for entry in incomplete if entry.get("supplier_id") != supplier_id]
+                for group_key in list(groups):
+                    groups[group_key] = [row for row in groups[group_key] if row["supplier_id"] != supplier_id]
+                    if not groups[group_key]:
+                        del groups[group_key]
+
+                unit_name = observation.unit or observation.comparison_unit or source_product.unit or master.base_unit
+                units_per_carton = None
+                if PriceIntelligenceService.normalize_unit(unit_name) == "CARTON" and observation.package_quantity is not None:
+                    units_per_carton = observation.package_quantity
+                row = PriceIntelligenceService._price_payload(
+                    supplier_id, supplier.name, observation.observed_price, unit_name,
+                    units_per_carton, observation.currency, primary=False,
+                )
+                row.update({
+                    "supplier_product_id": None,
+                    "supplier_sku": None,
+                    "supplier_product_name": source_product.name,
+                    "source_type": observation.source_type,
+                    "observed_at": observation.observed_at.isoformat() if observation.observed_at else None,
+                    "source_document_id": observation.source_document_id,
+                    "match_confidence": float(observation.match_confidence) if observation.match_confidence is not None else None,
+                })
+                if row["comparison_unit"] is None:
+                    incomplete.append({**row, "incomparable_reason": "חסרה יחידת השוואה או כמות באריזה"})
+                    continue
+                groups.setdefault((row["currency"], row["comparison_unit"]), []).append(row)
+
         formatted_groups = []
         for (currency, unit), offers in sorted(groups.items(), key=lambda item: (item[0][0], item[0][1])):
-            offers.sort(key=lambda row: (row["normalized_price"], row["supplier_name"] or ""))
+            # One comparable row per supplier in each unit/currency group.
+            # If a supplier has multiple packs/SKUs for the same master product,
+            # expose its cheapest normalized offer rather than duplicating the supplier.
+            best_by_supplier = {}
+            for offer in offers:
+                supplier_key = offer["supplier_id"]
+                current = best_by_supplier.get(supplier_key)
+                if current is None or offer["normalized_price"] < current["normalized_price"]:
+                    best_by_supplier[supplier_key] = offer
+            offers = sorted(best_by_supplier.values(), key=lambda row: (row["normalized_price"], row["supplier_name"] or ""))
             formatted_groups.append({
                 "currency": currency,
                 "comparison_unit": unit,
