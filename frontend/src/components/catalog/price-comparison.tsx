@@ -5,8 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Award, CheckCircle2, Plus, Trash2 } from "lucide-react";
 import { useOffers, useCreateOffer, useDeleteOffer } from "@/hooks/use-catalog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Supplier } from "@/types";
 import { priceIntelligenceService, type PriceOfferComparison } from "@/services/price-intelligence-service";
 
