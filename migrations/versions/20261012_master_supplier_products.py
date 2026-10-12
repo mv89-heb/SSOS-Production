@@ -121,13 +121,12 @@ def upgrade():
         if not supplier:
             continue
         normalized = " ".join(str(row["name"] or "").casefold().split())
-        result = bind.execute(master.insert().values(
+        master_id = bind.execute(master.insert().values(
             tenant_id=row["tenant_id"], canonical_name=row["name"],
             normalized_name=normalized, category=row["category"], barcode=row["barcode"],
             base_unit=row["unit"], active=bool(row["active"]),
             created_at=now, updated_at=now,
-        ))
-        master_id = result.inserted_primary_key[0]
+        ).returning(master.c.id)).scalar_one()
         master_ids[row["id"]] = master_id
         primary_supplier_ids[row["id"]] = row["supplier_id"]
         price = row["current_price"]
