@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ExternalLink, Loader2, Sparkles, TriangleAlert } from "lucide-react";
 import { geminiPriceCompletionService, type PriceCompletionResult } from "@/services/gemini-price-completion-service";
+import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
+import { sortByHebrewName, type ProductSortDirection } from "@/lib/product-sorting";
 
 const money = (value?: number | null, currency = "ILS") => {
   if (value == null) return "—";
@@ -18,6 +20,7 @@ export default function PriceCompletionPage() {
   const [running, setRunning] = useState(false);
   const [processed, setProcessed] = useState(0);
   const [updated, setUpdated] = useState(0);
+  const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc");
   const [results, setResults] = useState<PriceCompletionResult[]>([]);
   const [error, setError] = useState<string>();
 
@@ -84,10 +87,10 @@ export default function PriceCompletionPage() {
 
       {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/20">{error}</div>}
 
-      {results.length > 0 && <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      {results.length > 0 && <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex justify-end border-b border-slate-100 p-3 dark:border-slate-800"><ProductSortToggle direction={sortDirection} onToggle={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} /></div>
         <div className="border-b border-slate-100 p-5 dark:border-slate-800"><h2 className="font-bold">תוצאות אחרונות</h2><p className="mt-1 text-xs text-slate-500">הפעלת חיפוש למחירים חסרים בלבד. כל תוצאה נשמרת עם מקור ב־Price History.</p></div>
         <div className="divide-y divide-slate-100 dark:divide-slate-800">
-          {results.map((row, index) => <div key={row.product_id + "-" + index} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
+          {sortByHebrewName(results, (row) => row.product_name ?? String(row.product_id), sortDirection).map((row, index) => <div key={row.product_id + "-" + index} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div><div className="font-semibold">{row.product_name}</div><div className="mt-1 text-xs text-slate-500">{row.match_type || row.reason || "—"} {row.confidence != null ? "· ביטחון " + row.confidence + "%" : ""}</div></div>
             <div className="flex items-center gap-4">
               {row.status === "updated" ? <><div className="text-right"><div className="font-bold text-emerald-700">{money(row.new_price, row.currency)}</div><div className="text-xs text-slate-400">{row.package_description || "מחיר שנמצא באינטרנט"}</div></div><CheckCircle2 className="text-emerald-600" size={20} />{row.sources?.[0] && <a className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline" href={row.sources[0]} target="_blank" rel="noreferrer">מקור <ExternalLink size={13} /></a>}</> : <><TriangleAlert className="text-amber-600" size={20} /><span className="max-w-xl text-sm text-amber-800">{row.reason || "לא נמצא מחיר אמין"}</span></>}

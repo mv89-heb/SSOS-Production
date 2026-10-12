@@ -76,7 +76,7 @@ function filterProducts(items: Product[], supplierId?: number, activeOnly = fals
     if (missing === "sku" && String(product.sku ?? "").trim()) return false;
     if (missing === "barcode" && String(product.barcode ?? "").trim()) return false;
     return true;
-  });
+  }).sort((a, b) => a.name.localeCompare(b.name, "he", { sensitivity: "base", numeric: true }));
 }
 
 function globalFilterKey() {

@@ -13,6 +13,8 @@ import { useProducts } from "@/hooks/use-catalog";
 import { priceIntelligenceService } from "@/services/price-intelligence-service";
 import type { GeminiInsight } from "@/services/price-intelligence-service";
 import type { Product } from "@/types";
+import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
+import { sortByHebrewName, type ProductSortDirection } from "@/lib/product-sorting";
 
 const money = (value: number, currency = "ILS") => {
   try {
@@ -53,6 +55,7 @@ function GeminiCard({ insight, model, isLoading, error, onRun }: { insight?: Gem
 
 export default function PriceIntelligencePage() {
   const { data: products = [], isLoading: productsLoading, isError: productsError } = useProducts();
+  const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc");
   const [search, setSearch] = useState("");
   const searchParams = useSearchParams();
   const initialProductId = Number(searchParams.get("product")) || null;
@@ -64,8 +67,9 @@ export default function PriceIntelligencePage() {
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return products.filter((p) => !term || p.name.toLowerCase().includes(term) || String(p.sku ?? "").toLowerCase().includes(term));
-  }, [products, search]);
+    const matches = products.filter((p) => !term || p.name.toLowerCase().includes(term) || String(p.sku ?? "").toLowerCase().includes(term));
+    return sortByHebrewName(matches, (product) => product.name, sortDirection);
+  }, [products, search, sortDirection]);
   const selected: Product | null = products.find((p) => p.id === selectedId) ?? filtered[0] ?? null;
 
   const comparison = useQuery({
@@ -116,6 +120,7 @@ export default function PriceIntelligencePage() {
     <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="mb-3 flex items-center justify-between"><h2 className="font-semibold text-slate-900 dark:text-white">מוצרים</h2><span className="text-xs text-slate-400">{filtered.length}</span></div><div className="max-h-[720px] space-y-1 overflow-auto">
         {productsLoading && <p className="p-3 text-sm text-slate-400">טוען מוצרים...</p>}{productsError && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">לא ניתן לטעון את הקטלוג.</p>}{!productsLoading && !productsError && filtered.length === 0 && <p className="p-3 text-sm text-slate-400">לא נמצאו מוצרים.</p>}
+        <div className="mb-2 flex justify-end"><ProductSortToggle direction={sortDirection} onToggle={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} /></div>
         {filtered.map((product) => <button key={product.id} type="button" onClick={() => { setSelectedId(product.id); setGeminiInsight(undefined); setGeminiError(undefined); }} className={`w-full rounded-xl p-3 text-right transition ${selected?.id === product.id ? "bg-violet-50 ring-1 ring-violet-200 dark:bg-violet-950/40" : "hover:bg-slate-50 dark:hover:bg-slate-900"}`}><div className="font-medium text-slate-900 dark:text-white">{product.name}</div><div className="mt-1 flex justify-between text-xs text-slate-500"><span>{product.sku || "ללא מק״ט"}</span><span>{product.current_price != null && product.current_price > 0 ? money(product.current_price, product.currency) : "חסר מחיר"}</span></div></button>)}
       </div></section>
 

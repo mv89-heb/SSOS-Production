@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { catalogService } from "@/services/catalog-service";
 import type { MasterMatchSuggestion, SupplierProductListing } from "@/services/catalog-service";
+import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
+import { sortByHebrewName, type ProductSortDirection } from "@/lib/product-sorting";
 
 const money = (value?: number | null, currency = "ILS") => {
   if (value == null) return "מחיר חסר";
@@ -22,6 +24,7 @@ export default function ProductMatchingPage() {
   const { user } = useAuth();
   const canManage = permissions.canManageCatalog(user);
   const queryClient = useQueryClient();
+  const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc");
   const [supplierId, setSupplierId] = useState("");
   const [supplierName, setSupplierName] = useState("");
   const [supplierSku, setSupplierSku] = useState("");
@@ -70,7 +73,7 @@ export default function ProductMatchingPage() {
     onError: (error: any) => setMessage(error?.response?.data?.message || "דחיית הפריט נכשלה."),
   });
 
-  const pendingItems = useMemo(() => pending.data || [], [pending.data]);
+  const pendingItems = useMemo(() => sortByHebrewName(pending.data || [], (item) => item.supplier_name || "", sortDirection), [pending.data, sortDirection]);
   const busy = intake.isPending || approve.isPending || createMaster.isPending || reject.isPending;
 
   function submitIntake(event: FormEvent<HTMLFormElement>) {
@@ -126,8 +129,9 @@ export default function ProductMatchingPage() {
       {pending.isLoading && <div className="flex items-center gap-2 rounded-xl border border-slate-200 p-6 text-sm text-slate-500"><Loader2 className="animate-spin" size={18} />טוען פריטים...</div>}
       {pending.isError && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">לא ניתן לטעון את תור האישור. בדוק הרשאות או רענן את המסך.</div>}
       {!pending.isLoading && !pending.isError && pendingItems.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 p-10 text-center"><Check className="mx-auto mb-2 text-emerald-600" size={28} /><p className="font-semibold">אין פריטים שממתינים לאישור</p><p className="mt-1 text-sm text-slate-500">פריטים חדשים שיובאו ממחירוני ספקים יופיעו כאן אם לא ניתן לזהות אותם בבטחה.</p></div>}
+      <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-slate-500">פריטים ממתינים ממוינים לפי שם א׳–ת׳.</p><ProductSortToggle direction={sortDirection} onToggle={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} /></div>
       {pendingItems.map((item) => {
-        const suggestions = suggestionsById[item.id] || [];
+        const suggestions = sortByHebrewName(suggestionsById[item.id] || [], (suggestion) => suggestion.master_product.canonical_name || "", sortDirection);
         const selectedId = Number(selectedById[item.id] || item.suggested_master_product_id || 0);
         return <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">

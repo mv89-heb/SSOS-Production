@@ -6,6 +6,7 @@ import { ArrowLeft, Calculator, Loader2, PackageSearch, Plus, Trash2 } from "luc
 
 import { catalogService } from "@/services/catalog-service";
 import { priceIntelligenceService } from "@/services/price-intelligence-service";
+import { sortByHebrewName } from "@/lib/product-sorting";
 
 const money = (value: number, currency = "ILS") => {
   try {
@@ -31,7 +32,7 @@ export default function ProcurementBasketPage() {
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
 
-  const catalog = products.data ?? [];
+  const catalog = useMemo(() => sortByHebrewName(products.data ?? [], (product) => product.name), [products.data]);
   const available = useMemo(() => catalog.filter((product) => !items.some((item) => item.product_id === product.id)), [catalog, items]);
 
   const addItem = () => {

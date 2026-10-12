@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ActiveBadge } from "@/components/ui/badge";
 import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell } from "@/components/ui/table";
+import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
+import { sortByHebrewName, type ProductSortDirection } from "@/lib/product-sorting";
 
 const WEEK_DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"] as const;
 type WeekDay = (typeof WEEK_DAYS)[number];
@@ -164,16 +166,17 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
   const { data: products } = useProducts(supplierId);
   const updateSupplier = useUpdateSupplier(supplierId);
 
+  const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc");
   const [search, setSearch] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState({ name: "", contact_name: "", email: "", phone: "", phone2: "", customer_number: "", order_days: [] as WeekDay[], delivery_days: [] as WeekDay[], active: true });
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
-    if (!search) return products;
     const q = search.toLowerCase();
-    return products.filter((p) => p.name.toLowerCase().includes(q) || (p.sku ?? "").toLowerCase().includes(q));
-  }, [products, search]);
+    const matches = !search ? products : products.filter((p) => p.name.toLowerCase().includes(q) || (p.sku ?? "").toLowerCase().includes(q));
+    return sortByHebrewName(matches, (product) => product.name, sortDirection);
+  }, [products, search, sortDirection]);
 
   useEffect(() => {
     if (supplier) {
@@ -284,7 +287,7 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
           {products && products.length > 0 && <div className="relative max-w-sm"><Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><Input placeholder="חיפוש מוצר..." value={search} onChange={(e) => setSearch(e.target.value)} className="pr-9" /></div>}
           {!products || products.length === 0 ? <p className="text-sm text-slate-400">אין מוצרים עדיין.</p> : filteredProducts.length === 0 ? <p className="text-sm text-slate-400">לא נמצאו מוצרים התואמים לחיפוש.</p> : (
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-              <Table><TableHead><tr><TableHeaderCell></TableHeaderCell><TableHeaderCell>מק"ט</TableHeaderCell><TableHeaderCell>שם</TableHeaderCell><TableHeaderCell>קטגוריה</TableHeaderCell><TableHeaderCell>יחידה</TableHeaderCell><TableHeaderCell>מחיר</TableHeaderCell><TableHeaderCell>סטטוס</TableHeaderCell></tr></TableHead><TableBody>{filteredProducts.map((p) => <TableRow key={p.id}>
+              <div className="mb-3 flex justify-end"><ProductSortToggle direction={sortDirection} onToggle={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} /></div><Table><TableHead><tr><TableHeaderCell></TableHeaderCell><TableHeaderCell>מק"ט</TableHeaderCell><TableHeaderCell>שם</TableHeaderCell><TableHeaderCell>קטגוריה</TableHeaderCell><TableHeaderCell>יחידה</TableHeaderCell><TableHeaderCell>מחיר</TableHeaderCell><TableHeaderCell>סטטוס</TableHeaderCell></tr></TableHead><TableBody>{filteredProducts.map((p) => <TableRow key={p.id}>
                 <TableCell>{p.image_url ? <img src={p.image_url} alt={p.name} className="h-8 w-8 rounded object-cover bg-slate-100" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} /> : <div className="flex h-8 w-8 items-center justify-center rounded bg-slate-100 text-slate-300"><ImageOff size={14} /></div>}</TableCell>
                 <TableCell className="text-slate-500">{p.sku || "—"}</TableCell><TableCell className="font-medium">{p.name}</TableCell><TableCell className="text-slate-500">{p.category || "—"}</TableCell><TableCell className="text-slate-500">{p.unit || "—"}</TableCell><TableCell>{p.current_price != null && p.current_price > 0 ? `${p.currency} ${p.current_price.toLocaleString()}` : "חסר מחיר"}</TableCell><TableCell><ActiveBadge active={p.active} /></TableCell>
               </TableRow>)}</TableBody></Table>
