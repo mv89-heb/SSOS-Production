@@ -7,12 +7,13 @@ function cleanCell(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function csvEscape(value: string) {
-  // Keep real negative numbers numeric in Excel, while guarding text cells
-  // that could be interpreted as spreadsheet formulas.
-  const isNumeric = value.trim() !== "" && Number.isFinite(Number(value));
-  const safe = !isNumeric && /^[\s]*[=+@\-]/.test(value) ? "'" + value : value;
-  return '"' + safe.replace(/"/g, '""') + '"';
+function xmlEscape(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 function visibleTables(): HTMLTableElement[] {
@@ -35,12 +36,43 @@ function downloadFile(content: string, filename: string, type: string) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function safeFilename(value: string) {
   return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/\s+/g, "-").slice(0, 90) || "report";
+}
+
+function worksheetName(value: string, index: number) {
+  const cleaned = value.replace(/[\[\]:*?\/\\]/g, " ").trim().slice(0, 31);
+  return cleaned || `Sheet${index + 1}`;
+}
+
+function createExcelXml(title: string, tables: HTMLTableElement[]) {
+  const worksheets = tables.map((table, index) => {
+    const heading = table.closest("section")?.querySelector("h2, h3")?.textContent?.trim()
+      || table.getAttribute("aria-label")
+      || `טבלה ${index + 1}`;
+    const rows = tableRows(table);
+    const rowXml = rows.map((row, rowIndex) => {
+      const cells = row.map((value) =>
+        `<Cell${rowIndex === 0 ? ' ss:StyleID="Header"' : ""}><Data ss:Type="String">${xmlEscape(value)}</Data></Cell>`
+      ).join("");
+      return `<Row>${cells}</Row>`;
+    }).join("");
+    return `<Worksheet ss:Name="${xmlEscape(worksheetName(heading, index))}"><Table>${rowXml}</Table></Worksheet>`;
+  }).join("");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:html="http://www.w3.org/TR/REC-html40">
+  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office"><Title>${xmlEscape(title)}</Title></DocumentProperties>
+  <Styles><Style ss:ID="Header"><Font ss:Bold="1"/><Interior ss:Color="#DDE6F7" ss:Pattern="Solid"/></Style></Styles>
+  ${worksheets}
+</Workbook>`;
 }
 
 export default function TableExportToolbar() {
@@ -56,23 +88,15 @@ export default function TableExportToolbar() {
       setMessage("במסך הזה לא נמצאו טבלאות לייצוא.");
       return;
     }
-    const sections: string[] = [];
-    tables.forEach((table, index) => {
-      const heading = table.closest("section")?.querySelector("h2, h3")?.textContent?.trim()
-        || table.getAttribute("aria-label")
-        || `טבלה ${index + 1}`;
-      sections.push(csvEscape(heading));
-      tableRows(table).forEach((row) => sections.push(row.map(csvEscape).join(",")));
-      sections.push("");
-    });
-    downloadFile("\uFEFF" + sections.join("\r\n"), `${safeFilename(pageTitle)}.csv`, "text/csv;charset=utf-8");
-    setMessage(`יוצאו ${tables.length} טבלאות לפי התוצאות שמוצגות כעת, כולל הסינון הפעיל.`);
+    const xml = createExcelXml(pageTitle, tables);
+    downloadFile("\uFEFF" + xml, `${safeFilename(pageTitle)}.xls`, "application/vnd.ms-excel;charset=utf-8");
+    setMessage(`יוצאו ${tables.length} גיליונות Excel לפי הטבלאות המוצגות והסינון הפעיל.`);
   }
 
   function exportPdf() {
     const tables = visibleTables();
     setMessage(tables.length
-      ? "בחלון ההדפסה בחר/י ״שמירה כ-PDF״. התצוגה והסינון הנוכחיים נשמרים."
+      ? "נפתח חלון ההדפסה. בחר/י ״שמירה כ-PDF״ כדי לשמור את הדוח עם הסינון הנוכחי."
       : "לא נמצאו טבלאות; ניתן לשמור את הדוח הגלוי כ-PDF דרך חלון ההדפסה.");
     window.print();
   }
@@ -83,12 +107,12 @@ export default function TableExportToolbar() {
         <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
           <Download size={17} className="text-indigo-600" /> ייצוא דוחות מהמסך
         </div>
-        <p className="mt-1 text-xs text-slate-500">הייצוא מתייחס לטבלאות שמוצגות כעת ולסינון הפעיל. אפשר לייצא את כולן יחד.</p>
+        <p className="mt-1 text-xs text-slate-500">הייצוא מתייחס לטבלאות שמוצגות כעת ולסינון הפעיל. כל טבלה מיוצאת לגיליון נפרד.</p>
         {message && <p role="status" className="mt-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">{message}</p>}
       </div>
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={exportExcel} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700">
-          <FileSpreadsheet size={16} /> Excel (CSV)
+          <FileSpreadsheet size={16} /> Excel (.xls)
         </button>
         <button type="button" onClick={exportPdf} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
           <FileText size={16} /> PDF / הדפסה
