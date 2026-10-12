@@ -115,6 +115,26 @@ def _assert_clean_data(bind):
             """,
         ),
         (
+            "order_item_offer_product_mismatch",
+            """
+            SELECT COUNT(*) FROM order_items oi
+            JOIN supplier_product_offers offer ON offer.id = oi.supplier_offer_id
+            WHERE oi.supplier_offer_id IS NOT NULL
+              AND (offer.tenant_id <> oi.tenant_id OR offer.product_id <> oi.product_id)
+            """,
+        ),
+        (
+            "order_item_offer_supplier_mismatch",
+            """
+            SELECT COUNT(*) FROM order_items oi
+            JOIN orders ord ON ord.id = oi.order_id
+            JOIN supplier_product_offers offer ON offer.id = oi.supplier_offer_id
+            WHERE oi.supplier_offer_id IS NOT NULL
+              AND ord.supplier_id IS NOT NULL
+              AND offer.supplier_id <> ord.supplier_id
+            """,
+        ),
+        (
             "receipt_order_tenant_mismatch",
             """
             SELECT COUNT(*) FROM receipts r
@@ -142,6 +162,15 @@ def _assert_clean_data(bind):
                 SELECT 1 FROM order_items oi
                 WHERE oi.id = ri.order_item_id AND oi.tenant_id = ri.tenant_id
             )
+            """,
+        ),
+        (
+            "receipt_item_order_mismatch",
+            """
+            SELECT COUNT(*) FROM receipt_items ri
+            JOIN receipts r ON r.id = ri.receipt_id
+            JOIN order_items oi ON oi.id = ri.order_item_id
+            WHERE r.order_id <> oi.order_id
             """,
         ),
         (
