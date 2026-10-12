@@ -121,7 +121,7 @@ export function TableHeaderCell({ className, ...props }: ThHTMLAttributes<HTMLTa
   return (
     <th
       className={cn(
-        "whitespace-nowrap px-4 py-3 text-xs font-bold tracking-wide text-slate-500 dark:text-slate-400",
+        "whitespace-normal break-words [overflow-wrap:anywhere] px-4 py-3 text-xs font-bold tracking-wide text-slate-500 dark:text-slate-400",
         className,
       )}
       {...props}
@@ -133,7 +133,7 @@ export function TableCell({ className, ...props }: TdHTMLAttributes<HTMLTableCel
   return (
     <td
       className={cn(
-        "px-4 py-3.5 text-slate-700 dark:text-slate-200",
+        "whitespace-normal break-words [overflow-wrap:anywhere] px-4 py-3.5 align-top text-slate-700 dark:text-slate-200",
         className,
       )}
       {...props}
