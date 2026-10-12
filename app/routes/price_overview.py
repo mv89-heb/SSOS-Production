@@ -6,6 +6,9 @@ from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.extensions import db
 from app.models.price_observation import PriceObservation
+from app.models.master_product import MasterProduct
+from app.models.supplier_product import SupplierProduct
+
 from app.models.product import Product
 from app.models.supplier import Supplier
 from app.models.supplier_offer import SupplierProductOffer
@@ -18,6 +21,160 @@ def _handle(exc: HTTPException):
     return jsonify({"success": False, "error": exc.name.lower().replace(" ", "_"), "message": exc.description}), exc.code
 
 
+
+def _master_catalog_overview(tenant_id, search, limit, only_opportunities):
+    """Compare approved supplier listings linked to one canonical master product."""
+    query = (
+        select(SupplierProduct, MasterProduct, Supplier)
+        .join(
+            MasterProduct,
+            (MasterProduct.id == SupplierProduct.master_product_id)
+            & (MasterProduct.tenant_id == tenant_id)
+            & (MasterProduct.active.is_(True)),
+        )
+        .join(
+            Supplier,
+            (Supplier.id == SupplierProduct.supplier_id)
+            & (Supplier.tenant_id == tenant_id)
+            & (Supplier.active.is_(True)),
+        )
+        .where(
+            SupplierProduct.tenant_id == tenant_id,
+            SupplierProduct.active.is_(True),
+            SupplierProduct.match_status == "APPROVED",
+            SupplierProduct.master_product_id.is_not(None),
+            SupplierProduct.price.is_not(None),
+            SupplierProduct.price > 0,
+        )
+        .order_by(MasterProduct.canonical_name.asc(), SupplierProduct.price.asc())
+    )
+    if search:
+        pattern = f"%{search}%"
+        query = query.where(or_(
+            MasterProduct.canonical_name.ilike(pattern),
+            MasterProduct.brand.ilike(pattern),
+            MasterProduct.category.ilike(pattern),
+            MasterProduct.barcode.ilike(pattern),
+            SupplierProduct.supplier_name.ilike(pattern),
+            SupplierProduct.supplier_sku.ilike(pattern),
+            Supplier.name.ilike(pattern),
+        ))
+    records = db.session.execute(query).all()
+    groups = {}
+    for listing, master, supplier in records:
+        payload = PriceIntelligenceService._price_payload(
+            listing.supplier_id, supplier.name, listing.price, listing.unit,
+            listing.units_per_carton, listing.currency,
+        )
+        key = (master.id, payload["currency"], payload["comparison_unit"])
+        # Missing units cannot be used to claim a comparable price gap.
+        if payload["comparison_unit"] is None:
+            continue
+        groups.setdefault(key, {"master": master, "offers": {}})
+        previous = groups[key]["offers"].get(listing.supplier_id)
+        if previous is None or payload["normalized_price"] < previous["normalized_price"]:
+            groups[key]["offers"][listing.supplier_id] = payload
+
+    by_master = {}
+    for (master_id, currency, unit), group in groups.items():
+        offers = list(group["offers"].values())
+        if not offers:
+            continue
+        # A master product may have distinct valid comparison groups (e.g. kg and pack).
+        offers.sort(key=lambda offer: (offer["normalized_price"], offer["supplier_name"] or ""))
+        master = group["master"]
+        gap = max(0.0, offers[-1]["normalized_price"] - offers[0]["normalized_price"])
+        row = {
+            "product_id": master.id,
+            "master_product_id": master.id,
+            "product_name": master.canonical_name,
+            "category": master.category,
+            "sku": None,
+            "current_supplier": offers[-1]["supplier_name"],
+            "current_price": offers[-1]["normalized_price"],
+            "currency": currency,
+            "comparison_unit": unit,
+            "best_supplier": offers[0]["supplier_name"],
+            "best_supplier_id": offers[0]["supplier_id"],
+            "best_price": offers[0]["normalized_price"],
+            "savings_per_unit": round(gap, 6),
+            "savings_percent": round(gap / offers[-1]["normalized_price"] * 100, 2) if offers[-1]["normalized_price"] else 0.0,
+            "supplier_count": len(offers),
+            "offers": [
+                {
+                    "supplier_id": offer["supplier_id"],
+                    "supplier_name": offer["supplier_name"],
+                    "price": offer["normalized_price"],
+                    "currency": offer["currency"],
+                    "unit": offer["comparison_unit"],
+                    "primary": offer["supplier_id"] == offers[-1]["supplier_id"],
+                }
+                for offer in offers
+            ],
+        }
+        by_master.setdefault(master_id, []).append(row)
+
+    if not by_master:
+        return None
+
+    rows = []
+    for master_rows in by_master.values():
+        # Keep each valid currency/unit group distinct, never compare unlike packages.
+        rows.extend(master_rows)
+    rows.sort(key=lambda row: (-row["savings_per_unit"], row["product_name"], row["comparison_unit"] or ""))
+    if only_opportunities:
+        rows = [row for row in rows if row["supplier_count"] >= 2 and row["savings_per_unit"] > 0]
+    rows = rows[:limit]
+
+    supplier_stats = {}
+    comparable_count = 0
+    for row in rows:
+        if row["supplier_count"] >= 2:
+            comparable_count += 1
+        for offer in row["offers"]:
+            entry = supplier_stats.setdefault(
+                offer["supplier_id"],
+                {"supplier_id": offer["supplier_id"], "supplier_name": offer["supplier_name"], "participation": 0, "wins": 0},
+            )
+            entry["participation"] += 1
+            if offer["supplier_id"] == row["best_supplier_id"]:
+                entry["wins"] += 1
+    supplier_scores = []
+    for entry in supplier_stats.values():
+        coverage = entry["participation"] / comparable_count if comparable_count else 0
+        win_rate = entry["wins"] / entry["participation"] if entry["participation"] else 0
+        supplier_scores.append({
+            **entry,
+            "coverage_percent": round(coverage * 100, 1),
+            "win_rate_percent": round(win_rate * 100, 1),
+            "score": round(coverage * 50 + win_rate * 50, 1),
+        })
+    supplier_scores.sort(key=lambda row: (-row["score"], -row["wins"], row["supplier_name"] or ""))
+
+    # This is a sum of comparable unit-price gaps, not a basket forecast:
+    # no purchasing quantities are assumed.
+    potential_savings = sum(row["savings_per_unit"] for row in rows if row["supplier_count"] >= 2)
+    current_total = sum(row["current_price"] or 0 for row in rows if row["supplier_count"] >= 2)
+    summary = {
+        "products_analyzed": len(rows),
+        "products_with_comparable_alternatives": comparable_count,
+        "opportunity_products": sum(1 for row in rows if row["supplier_count"] >= 2 and row["savings_per_unit"] > 0),
+        "current_unit_total": round(current_total, 2),
+        "best_unit_total": round(max(0, current_total - potential_savings), 2),
+        "potential_savings": round(potential_savings, 2),
+        "potential_savings_percent": round(potential_savings / current_total * 100, 2) if current_total else 0.0,
+    }
+    return jsonify({
+        "success": True,
+        "summary": summary,
+        "supplier_scores": {"products_analyzed": comparable_count, "suppliers": supplier_scores[:10]},
+        "products": rows,
+        "returned": len(rows),
+        "comparison_source": "approved_master_catalog",
+        "note": "הפערים מחושבים בין מחירים מאושרים של אותו מוצר אב, באותו מטבע ובאותה יחידת השוואה. החיסכון הוא פער ליחידה; תחזית כוללת מחייבת כמויות רכש.",
+    })
+
+
 @price_overview_bp.route("/overview", methods=["GET"])
 @login_required
 def overview():
@@ -27,6 +184,10 @@ def overview():
         limit = max(20, min(request.args.get("limit", default=150, type=int), 300))
         search = str(request.args.get("search") or "").strip()
         only_opportunities = str(request.args.get("opportunities") or "").lower() in {"1", "true", "yes"}
+
+        master_response = _master_catalog_overview(tenant_id, search, limit, only_opportunities)
+        if master_response is not None:
+            return master_response
 
         primary_supplier = aliased(Supplier)
         alternate_supplier = aliased(Supplier)
