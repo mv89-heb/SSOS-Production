@@ -13,6 +13,8 @@ import { useProducts } from "@/hooks/use-catalog";
 import { priceIntelligenceService } from "@/services/price-intelligence-service";
 import type { GeminiInsight } from "@/services/price-intelligence-service";
 import type { Product } from "@/types";
+import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
+import { sortByHebrewName, type ProductSortDirection } from "@/lib/product-sorting";
 
 const money = (value: number, currency = "ILS") => {
   try {
