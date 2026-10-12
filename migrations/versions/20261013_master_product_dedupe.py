@@ -24,6 +24,7 @@ def upgrade():
         "supplier_products",
         sa.column("id", sa.Integer), sa.column("tenant_id", sa.Integer),
         sa.column("master_product_id", sa.Integer),
+        sa.column("suggested_master_product_id", sa.Integer),
     )
     rows = bind.execute(sa.select(master).order_by(master.c.tenant_id, master.c.id)).mappings().all()
     buckets = {}
@@ -57,6 +58,12 @@ def upgrade():
                 .where(listings.c.tenant_id == candidates[0]["tenant_id"])
                 .where(listings.c.master_product_id == duplicate_id)
                 .values(master_product_id=canonical_id)
+            )
+            bind.execute(
+                listings.update()
+                .where(listings.c.tenant_id == candidates[0]["tenant_id"])
+                .where(listings.c.suggested_master_product_id == duplicate_id)
+                .values(suggested_master_product_id=canonical_id)
             )
         bind.execute(master.delete().where(master.c.id.in_(duplicate_ids)))
 
