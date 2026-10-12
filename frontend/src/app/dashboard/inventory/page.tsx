@@ -19,8 +19,8 @@ import type { Product } from "@/types";
 const number = (value: number | null | undefined) => new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 }).format(Number(value ?? 0));
 const dateTime = (value: string) => new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 const movementLabels: Record<InventoryMovementType, string> = { count: "ספירה", receipt: "קבלה", issue: "ניפוק", adjustment: "התאמה" };
-const unitLabel = (product: Product | null | undefined) => product?.unit === "יחידה" ? "יחידות" : "ארגזים";
-const unitSingular = (product: Product | null | undefined) => product?.unit === "יחידה" ? "יחידה" : "ארגז";
+const unitLabel = (product: Product | null | undefined) => product?.stock_unit === "יחידה" ? "יחידות" : "ארגזים";
+const unitSingular = (product: Product | null | undefined) => product?.stock_unit === "יחידה" ? "יחידה" : "ארגז";
 const statusMeta = {
   urgent: { label: "חסר במלאי", className: "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300" },
   reorder: { label: "להזמין", className: "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300" },
