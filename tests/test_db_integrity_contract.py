@@ -6,7 +6,7 @@ MIGRATION = Path("migrations/versions/20260917_db_integrity.py")
 
 def test_stage9_migration_targets_procurement_foundation():
     text = MIGRATION.read_text(encoding="utf-8")
-    assert 'down_revision = "20260917_procurement_foundation"' in text
+    assert 'down_revision = "20260917_idempotency_keys"' in text
     assert 'raise RuntimeError' in text
     assert 'must be applied against PostgreSQL' in text
 
