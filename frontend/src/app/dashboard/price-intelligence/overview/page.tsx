@@ -11,6 +11,7 @@ const money = (value: number | null | undefined, currency = "ILS") =>
 
 type Row = {
   product_id: number;
+  master_product_id?: number | null;
   product_name: string;
   category: string | null;
   sku: string | null;
@@ -74,7 +75,7 @@ export default function SupplierOverviewPage() {
             </div>
             <h1 className="mt-2 text-3xl font-black sm:text-4xl">לוח השוואת ספקים וחיסכון</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-indigo-100">
-              תמונה רוחבית של המחיר הנוכחי מול החלופה הזולה, הזדמנויות חיסכון וכיסוי הספקים.
+              השוואה בין מחירים של אותו מוצר אצל ספקים שונים, עם פער המחיר ליחידת השוואה והספק הזול ביותר.
             </p>
           </div>
           <Link
@@ -142,7 +143,7 @@ export default function SupplierOverviewPage() {
             <div>
               <h2 className="text-xl font-black">השוואת מחירים לפי מוצר</h2>
               <p className="mt-1 text-xs text-slate-500">
-                המחיר הזול ביותר מודגש. ניתן לפתוח ניתוח מלא של כל מוצר.
+                הפער מוצג רק בין הצעות מאושרות באותו מטבע ובאותה יחידת השוואה. במוצרי קטלוג אחיד, המחיר הגבוה משמש בסיס להצגת פער המחיר.
               </p>
             </div>
             <span className="text-xs font-bold text-slate-400">{data?.returned ?? 0} שורות</span>
@@ -161,11 +162,11 @@ export default function SupplierOverviewPage() {
                   <tr>
                     <th className="px-4 py-3">מוצר</th>
                     <th className="px-4 py-3">קטגוריה</th>
-                    <th className="px-4 py-3">ספק נוכחי</th>
-                    <th className="px-4 py-3">מחיר נוכחי</th>
+                    <th className="px-4 py-3">הספק היקר בקבוצה</th>
+                    <th className="px-4 py-3">המחיר הגבוה בקבוצה</th>
                     <th className="px-4 py-3">ספק זול ביותר</th>
                     <th className="px-4 py-3">מחיר זול ביותר</th>
-                    <th className="px-4 py-3">חיסכון</th>
+                    <th className="px-4 py-3">פער ליחידה</th>
                     <th className="px-4 py-3">מס׳ ספקים</th>
                     <th className="px-4 py-3">פעולה</th>
                   </tr>
@@ -174,7 +175,7 @@ export default function SupplierOverviewPage() {
                   {rows.map((row) => (
                     <tr key={row.product_id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
                       <td className="px-4 py-4">
-                        <Link href={"/dashboard/price-intelligence?product=" + row.product_id} className="font-black hover:text-violet-600">
+                        <Link href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="font-black hover:text-violet-600">
                           {row.product_name}
                         </Link>
                         <span className="mt-1 block text-xs text-slate-400">
@@ -199,10 +200,10 @@ export default function SupplierOverviewPage() {
                       <td className="px-4 py-4">{row.supplier_count}</td>
                       <td className="px-4 py-4">
                         <Link
-                          href={"/dashboard/price-intelligence?product=" + row.product_id}
+                          href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id}
                           className="rounded-lg bg-violet-50 px-3 py-2 text-xs font-black text-violet-700"
                         >
-                          פתח
+                          {row.master_product_id ? "פתח קטלוג אחיד" : "פתח"}
                         </Link>
                       </td>
                     </tr>
@@ -211,7 +212,7 @@ export default function SupplierOverviewPage() {
               </table>
               {!rows.length && !query.isLoading && (
                 <div className="p-10 text-center text-sm text-slate-500">
-                  לא נמצאו מוצרים מתאימים לחיפוש.
+                  לא נמצאו מחירים תואמים להשוואה. ודא שמוצרי הספקים משויכים לאותו מוצר בקטלוג האחיד.
                 </div>
               )}
             </div>
@@ -252,7 +253,7 @@ export default function SupplierOverviewPage() {
           <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-900 dark:bg-emerald-950/20">
             <div className="text-xs font-bold text-emerald-700">מה חשוב כאן?</div>
             <p className="mt-2 text-sm leading-6 text-emerald-900 dark:text-emerald-100">
-              ההשוואה נעשית רק כשמטבע ויחידת ההשוואה תואמים. חיפוש לפי ספק מוצא גם מוצרים שבהם הספק הוא הספק הראשי וגם מוצרים שבהם קיימת לספק הצעה חלופית.
+              ההשוואה נשענת על מוצרים ששויכו ואושרו בקטלוג האחיד. היא מציגה פער בין המחיר הגבוה לנמוך באותו מטבע ובאותה יחידת השוואה; פער ליחידה אינו תחזית לחיסכון כולל ללא כמויות רכש.
             </p>
           </section>
         </aside>
