@@ -159,3 +159,25 @@ def test_exact_barcode_does_not_override_explicit_package_size_conflict(logged_i
     assert conflicting["master_product_id"] is None
     assert conflicting["suggested_master_product_id"] == master["id"]
     assert conflicting["match_method"] == "PACKAGE_SIZE_MISMATCH"
+
+
+def test_updated_supplier_sku_is_sent_back_to_review_on_package_conflict(logged_in_client_a):
+    supplier = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "ספק"}).get_json()["supplier"]
+    intake = logged_in_client_a.post("/api/catalog/supplier-products/intake", json={
+        "supplier_id": supplier["id"], "supplier_name": "חלב תנובה 3% 1 ליטר",
+        "supplier_sku": "MILK-ONE", "barcode": "7290000000044", "price": 7.5,
+    }).get_json()["supplier_product"]
+    created = logged_in_client_a.post(
+        f"/api/catalog/supplier-products/{intake['id']}/approve",
+        json={"create_master_product": {"canonical_name": "חלב תנובה 3% 1 ליטר", "barcode": "7290000000044"}},
+    ).get_json()
+    updated = logged_in_client_a.post("/api/catalog/supplier-products/intake", json={
+        "supplier_id": supplier["id"], "supplier_name": "חלב תנובה 3% 2 ליטר",
+        "supplier_sku": "MILK-ONE", "barcode": "7290000000044", "price": 12,
+    })
+    assert updated.status_code == 201, updated.get_json()
+    item = updated.get_json()["supplier_product"]
+    assert item["id"] == intake["id"]
+    assert item["match_status"] == "PENDING"
+    assert item["master_product_id"] is None
+    assert item["suggested_master_product_id"] == created["master_product"]["id"]
