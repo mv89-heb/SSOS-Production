@@ -65,12 +65,12 @@ def upgrade():
     op.create_index("ix_supplier_products_master_product_id", "supplier_products", ["master_product_id"])
     op.create_index("ix_supplier_products_tenant_supplier", "supplier_products", ["tenant_id", "supplier_id"])
     op.create_index("ix_supplier_products_tenant_master", "supplier_products", ["tenant_id", "master_product_id"])
+    # Legacy data may contain duplicate supplier SKUs; index for lookup without
+    # making a historic migration fail or silently dropping catalog rows.
     op.create_index(
-        "uq_supplier_products_tenant_supplier_sku",
+        "ix_supplier_products_tenant_supplier_sku",
         "supplier_products", ["tenant_id", "supplier_id", "supplier_sku"],
-        unique=True,
-        postgresql_where=sa.text("supplier_sku IS NOT NULL AND btrim(supplier_sku) <> ''"),
-        sqlite_where=sa.text("supplier_sku IS NOT NULL AND trim(supplier_sku) <> ''"),
+        unique=False,
     )
 
     # Backfill conservatively: each legacy catalog product becomes its own master
@@ -142,7 +142,7 @@ def upgrade():
 
 
 def downgrade():
-    op.drop_index("uq_supplier_products_tenant_supplier_sku", table_name="supplier_products")
+    op.drop_index("ix_supplier_products_tenant_supplier_sku", table_name="supplier_products")
     op.drop_index("ix_supplier_products_tenant_master", table_name="supplier_products")
     op.drop_index("ix_supplier_products_tenant_supplier", table_name="supplier_products")
     op.drop_index("ix_supplier_products_master_product_id", table_name="supplier_products")
