@@ -57,10 +57,10 @@ def test_master_catalog_and_comparison_are_tenant_scoped(logged_in_client_a, log
     )
     master_id = created.get_json()["master_product"]["id"]
 
-    catalog_b = logged_in_client_b.get("/api/master-products")
+    catalog_b = logged_in_client_b.get("/api/catalog/master-products")
     assert catalog_b.status_code == 200
     assert all(item["id"] != master_id for item in catalog_b.get_json()["master_products"])
-    comparison_b = logged_in_client_b.get(f"/api/master-products/{master_id}/comparison")
+    comparison_b = logged_in_client_b.get(f"/api/catalog/master-products/{master_id}/comparison")
     assert comparison_b.status_code == 404
 
 
