@@ -39,3 +39,46 @@ def test_invalid_decimal_values_raise_instead_of_silently_becoming_zero():
 
 def test_blank_unit_is_none():
     assert PriceIntelligenceService.normalize_unit("  ") is None
+
+
+def test_portfolio_counts_only_real_alternative_suppliers():
+    from types import SimpleNamespace
+
+    service = PriceIntelligenceService.__new__(PriceIntelligenceService)
+    service.product_repo = SimpleNamespace(get_all_for_matching=lambda: [SimpleNamespace(id=1)])
+    service.history_repo = SimpleNamespace(list_all=lambda limit: [])
+    current = {"supplier_id": 10, "supplier_name": "Current", "normalized_price": 10, "currency": "ILS", "primary": True}
+    service.compare_product = lambda product_id: {
+        "current": current,
+        "best_offer": current,
+        "offers": [current],
+    }
+
+    summary = service.get_portfolio_summary()
+
+    assert summary["products_with_comparable_alternatives"] == 0
+    assert summary["opportunity_products"] == 0
+    assert summary["potential_savings"] == 0
+
+
+def test_supplier_scores_do_not_double_count_the_current_supplier():
+    from types import SimpleNamespace
+
+    service = PriceIntelligenceService.__new__(PriceIntelligenceService)
+    service.product_repo = SimpleNamespace(get_all_for_matching=lambda: [SimpleNamespace(id=1)])
+    current = {"supplier_id": 10, "supplier_name": "Current", "normalized_price": 10, "currency": "ILS", "primary": True}
+    alternative = {"supplier_id": 20, "supplier_name": "Alternative", "normalized_price": 8, "currency": "ILS", "primary": False}
+    service.compare_product = lambda product_id: {
+        "current": current,
+        "best_offer": alternative,
+        "offers": [current, alternative],
+    }
+
+    result = service.get_supplier_price_scores()
+    suppliers = {row["supplier_id"]: row for row in result["suppliers"]}
+
+    assert result["products_analyzed"] == 1
+    assert suppliers[10]["participation"] == 1
+    assert suppliers[20]["participation"] == 1
+    assert suppliers[10]["coverage_percent"] <= 100
+    assert suppliers[20]["coverage_percent"] <= 100
