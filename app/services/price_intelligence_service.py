@@ -89,10 +89,10 @@ class PriceIntelligenceService:
     def _incomparable_reason(left, right) -> str | None:
         if left["currency"] != right["currency"]:
             return "מטבע שונה — נדרש שער המרה לפני השוואה"
+        if left["comparison_unit"] is None or right["comparison_unit"] is None:
+            return "חסרה יחידת השוואה — יש להשלים יחידת מכירה לפני דירוג"
         if left["comparison_unit"] != right["comparison_unit"]:
             return "יחידת השוואה שונה — לא ניתן להשוות מחיר ישירות"
-        if left["comparison_unit"] is None:
-            return "חסרה יחידת השוואה"
         return None
 
     def compare_product(self, product_id: int):
