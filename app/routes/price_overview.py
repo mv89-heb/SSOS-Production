@@ -114,6 +114,9 @@ def _master_catalog_overview(tenant_id, search, limit, only_opportunities):
         }
         by_master.setdefault(master_id, []).append(row)
 
+    if not by_master:
+        return None
+
     rows = []
     for master_rows in by_master.values():
         # Keep each valid currency/unit group distinct, never compare unlike packages.
@@ -183,7 +186,7 @@ def overview():
         only_opportunities = str(request.args.get("opportunities") or "").lower() in {"1", "true", "yes"}
 
         master_response = _master_catalog_overview(tenant_id, search, limit, only_opportunities)
-        if master_response.get_json().get("returned", 0) > 0:
+        if master_response is not None:
             return master_response
 
         primary_supplier = aliased(Supplier)
