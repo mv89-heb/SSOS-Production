@@ -435,6 +435,7 @@ class MasterProductMatchingService:
 
                 # A fresh document observation replaces the supplier's catalog
                 # row, avoiding double-counting the same supplier.
+                incomplete[:] = [entry for entry in incomplete if entry.get("supplier_id") != supplier_id]
                 for group_key in list(groups):
                     groups[group_key] = [row for row in groups[group_key] if row["supplier_id"] != supplier_id]
                     if not groups[group_key]:
