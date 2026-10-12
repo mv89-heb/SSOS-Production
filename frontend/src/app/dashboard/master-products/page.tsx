@@ -52,7 +52,6 @@ export default function MasterProductsPage() {
     queryFn: async () => (await apiClient.get<{ items: Pending[] }>("/api/master-products/pending")).data.items,
   });
   const products = productsQuery.data ?? [];
-  const selected = products.find(item => item.id === selectedId) ?? null;
   const comparison = comparisonQuery.data;
   const sortedProducts = useMemo(() => [...products].sort((a, b) => a.canonical_name.localeCompare(b.canonical_name, "he")), [products]);
 
