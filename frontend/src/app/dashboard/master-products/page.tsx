@@ -54,7 +54,7 @@ export default function MasterProductsPage() {
   });
   const reviewCandidatesQuery = useQuery({
     queryKey: ["master-product-review-candidates"],
-    queryFn: async () => (await apiClient.get<{ candidates: ReviewCandidate[] }>("/api/master-products/review-candidates", { params: { limit: 100 } })).data.candidates,
+    queryFn: async () => (await apiClient.get<{ candidates: ReviewCandidate[] }>("/api/master-products/review-candidates", { params: { limit: 250 } })).data.candidates,
   });
   const products = productsQuery.data ?? [];
   const comparison = comparisonQuery.data;
