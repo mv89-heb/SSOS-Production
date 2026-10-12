@@ -329,7 +329,7 @@ class MasterProductMatchingService:
                 SupplierProduct.master_product_id == master.id,
                 SupplierProduct.match_status == "APPROVED",
                 SupplierProduct.active.is_(True),
-            ).order_by(SupplierProduct.price.asc().nullslast(), SupplierProduct.id.asc())
+            ).order_by(SupplierProduct.id.asc())
         ).scalars().all()
 
         groups = {}
