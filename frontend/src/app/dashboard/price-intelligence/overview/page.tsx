@@ -72,9 +72,9 @@ export default function SupplierOverviewPage() {
             <div className="flex items-center gap-2 text-sm font-bold text-indigo-100">
               <BarChart3 size={18} /> רכש והשוואת ספקים
             </div>
-            <h1 className="mt-2 text-3xl font-black sm:text-4xl">תמונת מצב של המחירים</h1>
+            <h1 className="mt-2 text-3xl font-black sm:text-4xl">לוח השוואת ספקים וחיסכון</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-indigo-100">
-              חיפוש לפי מוצר, מק״ט, ברקוד, קטגוריה או ספק — והצגת המחירים והחלופות הרלוונטיות.
+              תמונה רוחבית של המחיר הנוכחי מול החלופה הזולה, הזדמנויות חיסכון וכיסוי הספקים.
             </p>
           </div>
           <Link
