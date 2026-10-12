@@ -114,7 +114,7 @@ export default function ProcurementIntelligencePage() {
   });
   const suppliers = useQuery({
     queryKey: ["procurement-intelligence", "suppliers"],
-    queryFn: () => priceIntelligenceService.getSupplierScores(12),
+    queryFn: () => priceIntelligenceService.getSupplierScores(50),
     retry: 1,
   });
   const products = useQuery({
@@ -380,7 +380,7 @@ export default function ProcurementIntelligencePage() {
         <Section title="💰 איפה יש כסף על השולחן" hint="השוואות מחיר אמיתיות בלבד, לפי יחידת השוואה ומטבע תואמים.">
           {data?.top_opportunities?.length ? (
             <div className="space-y-4 p-5">
-              {data.top_opportunities.slice(0, 8).map((row) => (
+              {data.top_opportunities.slice(0, showAllOpportunities ? data.top_opportunities.length : 15).map((row) => (
                 <div key={row.product_id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0"><div className="truncate font-bold">{row.product_name}</div><div className="mt-1 text-xs text-slate-500">{row.current_supplier || "ללא ספק נוכחי"} → {row.best_supplier || "ללא ספק חלופי"}</div></div>
@@ -389,6 +389,7 @@ export default function ProcurementIntelligencePage() {
                   <div className="mt-3"><ProgressBar value={row.savings_percent} max={Math.max(10, Number(row.savings_percent))} label="פער המחיר" suffix="%" /></div>
                 </div>
               ))}
+              {data.top_opportunities.length > 15 && <button type="button" onClick={() => setShowAllOpportunities((value) => !value)} className="w-full rounded-xl border border-slate-200 p-3 text-sm font-bold text-indigo-600 dark:border-slate-800">{showAllOpportunities ? "הצג פחות הזדמנויות" : `הצג את כל ${number(data.top_opportunities.length)} ההזדמנויות`}</button>}
               <a href="/dashboard/price-intelligence/overview" className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600">פתח את כל השוואות הספקים <ArrowLeft size={15} /></a>
             </div>
           ) : (
@@ -416,7 +417,7 @@ export default function ProcurementIntelligencePage() {
       <Section title="🚚 ספקים — איפה יש כיסוי ואיפה יש תלות" hint="הדירוג כאן מתייחס לתחרותיות מחיר וכיסוי בלבד, לא לאיכות שירות.">
         {supplierData?.suppliers?.length ? (
           <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
-            {supplierData.suppliers.slice(0, 9).map((supplier) => (
+            {supplierData.suppliers.slice(0, showAllSuppliers ? supplierData.suppliers.length : 12).map((supplier) => (
               <div key={supplier.supplier_id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
                 <div className="flex items-center justify-between gap-3"><div className="truncate font-bold">{supplier.supplier_name || `ספק #${supplier.supplier_id}`}</div><div className="text-lg font-black text-indigo-600">{number(supplier.score)}</div></div>
                 <div className="mt-3 space-y-2">
@@ -427,7 +428,12 @@ export default function ProcurementIntelligencePage() {
               </div>
             ))}
           </div>
+          {supplierData.suppliers.length > 12 && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllSuppliers((value) => !value)} className="text-sm font-bold text-indigo-600">{showAllSuppliers ? "הצג 12 ספקים מובילים" : `הצג את כל ${number(supplierData.suppliers.length)} הספקים`}</button></div>}
         ) : <div className="p-10 text-center text-sm text-slate-500">אין מספיק הצעות ספקים להשוואה.</div>}
+      </Section>
+
+      <Section title="🧾 תנועות מחיר אחרונות" hint="שינויי מחיר מתועדים מהיסטוריית המערכת; הנתונים מוצגים לפי תאריך המקור, ללא תחזיות.">
+        {data?.recent_changes?.length ? <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-right text-sm"><thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-5 py-3">מוצר</th><th className="px-5 py-3">ספק</th><th className="px-5 py-3">מחיר קודם</th><th className="px-5 py-3">מחיר חדש</th><th className="px-5 py-3">שינוי</th><th className="px-5 py-3">תאריך</th><th className="px-5 py-3">מקור</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{data.recent_changes.slice(0, 20).map((change) => <tr key={change.id}><td className="px-5 py-3 font-semibold">{productById.get(change.product_id)?.name || `מוצר #${change.product_id}`}</td><td className="px-5 py-3">{change.supplier_name || supplierNames.get(change.supplier_id) || "—"}</td><td className="px-5 py-3">{change.old_price == null ? "—" : money(change.old_price, change.currency)}</td><td className="px-5 py-3 font-bold">{money(change.new_price, change.currency)}</td><td className={`px-5 py-3 font-bold ${change.change_percent == null ? "text-slate-500" : change.change_percent > 0 ? "text-red-600" : change.change_percent < 0 ? "text-emerald-600" : "text-slate-500"}`}>{change.change_percent == null ? "—" : `${change.change_percent > 0 ? "+" : ""}${number(change.change_percent)}%`}</td><td className="px-5 py-3">{change.effective_at ? new Intl.DateTimeFormat("he-IL").format(new Date(change.effective_at)) : "—"}</td><td className="px-5 py-3">{change.source_type || "רישום מחיר"}</td></tr>)}</tbody></table></div> : <div className="p-8 text-center text-sm text-slate-500">אין עדיין שינויי מחיר מתועדים להצגה.</div>}
       </Section>
 
       <Section title="🧭 מה המערכת יודעת — ומה עדיין חסר" hint="החלק הזה חשוב כדי שלא נקבל החלטות על בסיס נתון שלא קיים.">
