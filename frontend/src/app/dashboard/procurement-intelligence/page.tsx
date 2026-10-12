@@ -24,6 +24,8 @@ import {
 
 import { catalogService } from "@/services/catalog-service";
 import { priceIntelligenceService } from "@/services/price-intelligence-service";
+import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
+import { sortByHebrewName, type ProductSortDirection } from "@/lib/product-sorting";
 
 const money = (value: number | null | undefined, currency = "ILS") => {
   const amount = Number(value ?? 0);
@@ -136,6 +138,7 @@ export default function ProcurementIntelligencePage() {
   });
 
   const [productSearch, setProductSearch] = useState("");
+  const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc");
   const [showAllActions, setShowAllActions] = useState(false);
   const [briefing, setBriefing] = useState<Awaited<ReturnType<typeof priceIntelligenceService.getAiBriefing>> | null>(null);
   const [aiError, setAiError] = useState<string>();
@@ -173,7 +176,7 @@ export default function ProcurementIntelligencePage() {
   const inventoryRows = inventory.data?.recommendations ?? [];
   const urgentStock = inventoryRows.filter((row) => row.status === "urgent");
   const reorderStock = inventoryRows.filter((row) => row.status === "reorder");
-  const actionRows = [...urgentStock, ...reorderStock];
+  const actionRows = sortByHebrewName([...urgentStock, ...reorderStock], (row) => productRows.find((product) => product.id === row.product_id)?.name ?? "", sortDirection);
 
   const productById = useMemo(() => new Map(productRows.map((product) => [product.id, product])), [productRows]);
   const opportunityByProduct = useMemo(
@@ -227,14 +230,12 @@ export default function ProcurementIntelligencePage() {
 
   const filteredProducts = useMemo(() => {
     const q = productSearch.trim().toLocaleLowerCase("he-IL");
-    if (!q) return productRows.slice(0, 20);
-    return productRows
-      .filter((product) =>
-        [product.name, product.sku, product.barcode, product.category, supplierNames.get(product.supplier_id)]
-          .some((value) => String(value ?? "").toLocaleLowerCase("he-IL").includes(q)),
-      )
-      .slice(0, 50);
-  }, [productRows, productSearch, supplierNames]);
+    const matches = !q ? productRows : productRows.filter((product) =>
+      [product.name, product.sku, product.barcode, product.category, supplierNames.get(product.supplier_id)]
+        .some((value) => String(value ?? "").toLocaleLowerCase("he-IL").includes(q)),
+    );
+    return sortByHebrewName(matches.slice(0, q ? 50 : 20), (product) => product.name, sortDirection);
+  }, [productRows, productSearch, supplierNames, sortDirection]);
 
   const coverageReady = inventoryRows.filter((row) => row.data_ready && row.coverage_days != null);
   const averageCoverage = coverageReady.length
