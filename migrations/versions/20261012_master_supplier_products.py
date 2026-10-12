@@ -145,6 +145,43 @@ def upgrade():
         ))
 
 
+    # Preserve legacy alternate supplier prices in the normalized layer.
+    legacy_offers = sa.table(
+        "supplier_product_offers",
+        sa.column("tenant_id", sa.Integer), sa.column("product_id", sa.Integer),
+        sa.column("supplier_id", sa.Integer), sa.column("supplier_sku", sa.String),
+        sa.column("price", sa.Numeric), sa.column("currency", sa.String),
+        sa.column("unit", sa.String), sa.column("units_per_carton", sa.Integer),
+        sa.column("active", sa.Boolean),
+    )
+    if sa.inspect(bind).has_table("supplier_product_offers"):
+        for offer in bind.execute(sa.select(legacy_offers)).mappings():
+            master_id = master_ids.get(offer["product_id"])
+            if master_id is None or offer["supplier_id"] == primary_supplier_ids.get(offer["product_id"]):
+                continue
+            supplier_name = bind.execute(sa.select(suppliers.c.name).where(
+                suppliers.c.id == offer["supplier_id"], suppliers.c.tenant_id == offer["tenant_id"]
+            )).scalar_one_or_none()
+            master_row = bind.execute(sa.select(
+                master.c.canonical_name, master.c.normalized_name, master.c.barcode,
+                master.c.base_unit, master.c.category
+            ).where(master.c.id == master_id, master.c.tenant_id == offer["tenant_id"])).mappings().first()
+            if not supplier_name or not master_row:
+                continue
+            price = offer["price"]
+            if price is not None and price <= 0:
+                price = None
+            bind.execute(supplier_product.insert().values(
+                tenant_id=offer["tenant_id"], supplier_id=offer["supplier_id"],
+                master_product_id=master_id, supplier_name=master_row["canonical_name"],
+                description=master_row["canonical_name"], supplier_sku=offer["supplier_sku"],
+                barcode=master_row["barcode"], price=price, currency=offer["currency"] or "ILS",
+                unit=offer["unit"] or master_row["base_unit"], units_per_carton=offer["units_per_carton"],
+                normalized_name=master_row["normalized_name"], match_status="APPROVED",
+                match_confidence=1, match_method="LEGACY_OFFER_BACKFILL", active=bool(offer["active"]),
+                last_seen_at=now, created_at=now, updated_at=now,
+            ))
+
 def downgrade():
     op.drop_index("ix_supplier_products_tenant_supplier_sku", table_name="supplier_products")
     op.drop_index("ix_supplier_products_tenant_master", table_name="supplier_products")
