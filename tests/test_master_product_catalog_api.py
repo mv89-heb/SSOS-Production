@@ -62,3 +62,63 @@ def test_master_catalog_and_comparison_are_tenant_scoped(logged_in_client_a, log
     assert all(item["id"] != master_id for item in catalog_b.get_json()["products"])
     comparison_b = logged_in_client_b.get(f"/api/master-products/{master_id}/comparison")
     assert comparison_b.status_code == 404
+
+
+
+def test_recent_invoice_observation_updates_master_product_supplier_comparison(logged_in_client_a, db):
+    from datetime import datetime, timedelta
+    from app.models.price_observation import PriceObservation
+    from app.models.product import Product
+
+    supplier_a = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "ספק א"}).get_json()["supplier"]
+    supplier_b = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "ספק ב"}).get_json()["supplier"]
+    legacy_product_response = logged_in_client_a.post("/api/catalog/products", json={
+        "supplier_id": supplier_a["id"], "name": "חלב תנובה 1 ליטר",
+        "sku": "MILK-LEGACY-OBS", "current_price": 10, "unit": "יחידה",
+    })
+    assert legacy_product_response.status_code == 201, legacy_product_response.get_json()
+    legacy_product_id = legacy_product_response.get_json()["product"]["id"]
+
+    first = logged_in_client_a.post("/api/catalog/supplier-products/intake", json={
+        "supplier_id": supplier_a["id"], "supplier_name": "חלב תנובה 1 ליטר",
+        "supplier_sku": "MILK-A", "price": 10, "unit": "יחידה",
+    }).get_json()["supplier_product"]
+    created = logged_in_client_a.post(
+        f"/api/catalog/supplier-products/{first['id']}/approve",
+        json={"create_master_product": {"canonical_name": "חלב תנובה 1 ליטר", "base_unit": "יחידה"}},
+    ).get_json()
+    master_id = created["master_product"]["id"]
+
+    second = logged_in_client_a.post("/api/catalog/supplier-products/intake", json={
+        "supplier_id": supplier_b["id"], "supplier_name": "חלב תנובה 1 ליטר",
+        "supplier_sku": "MILK-B", "price": 12, "unit": "יחידה",
+    }).get_json()["supplier_product"]
+    approved = logged_in_client_a.post(
+        f"/api/catalog/supplier-products/{second['id']}/approve",
+        json={"master_product_id": master_id},
+    )
+    assert approved.status_code == 200, approved.get_json()
+
+    legacy_product = db.session.get(Product, legacy_product_id)
+    db.session.add(PriceObservation(
+        tenant_id=legacy_product.tenant_id,
+        product_id=legacy_product.id,
+        supplier_id=supplier_b["id"],
+        observed_price=8,
+        currency="ILS",
+        unit="יחידה",
+        source_type="INVOICE",
+        source_document_id=321,
+        match_confidence=0.99,
+        observed_at=datetime.utcnow() + timedelta(days=1),
+    ))
+    db.session.commit()
+
+    response = logged_in_client_a.get(f"/api/master-products/{master_id}/comparison")
+    assert response.status_code == 200, response.get_json()
+    group = response.get_json()["groups"][0]
+    best = group["best_offer"]
+    assert best["supplier_id"] == supplier_b["id"]
+    assert best["price"] == 8
+    assert best["source_type"] == "INVOICE"
+    assert best["source_document_id"] == 321
