@@ -61,7 +61,29 @@ export function Table({
   }, []);
 
   return (
-    <div
+    <div className="w-full min-w-0">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-xs text-indigo-900 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-200">
+        <span className="font-semibold">הטבלה רחבה — השתמש בכפתורים כדי לראות את כל העמודות</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => viewportRef.current?.scrollBy({ left: -Math.max(240, (viewportRef.current?.clientWidth ?? 0) * 0.75), behavior: "smooth" })}
+            className="rounded-lg border border-indigo-200 bg-white px-3 py-2 font-bold hover:bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 dark:border-indigo-800 dark:bg-slate-900 dark:hover:bg-indigo-950"
+            aria-label="גלילה שמאלה להצגת עמודות נוספות"
+          >
+            ← גלילה שמאלה
+          </button>
+          <button
+            type="button"
+            onClick={() => viewportRef.current?.scrollBy({ left: Math.max(240, (viewportRef.current?.clientWidth ?? 0) * 0.75), behavior: "smooth" })}
+            className="rounded-lg border border-indigo-200 bg-white px-3 py-2 font-bold hover:bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 dark:border-indigo-800 dark:bg-slate-900 dark:hover:bg-indigo-950"
+            aria-label="גלילה ימינה להצגת עמודות נוספות"
+          >
+            גלילה ימינה →
+          </button>
+        </div>
+      </div>
+      <div
       ref={viewportRef}
       dir="ltr"
       role="region"
@@ -85,6 +107,7 @@ export function Table({
       >
         {children}
       </table>
+      </div>
     </div>
   );
 }
