@@ -36,6 +36,8 @@ def test_master_catalog_lists_one_canonical_product_and_compares_all_suppliers(l
     assert len(matching) == 1
     assert matching[0]["supplier_count"] == 2
     assert matching[0]["current_price"] == 37.0
+    assert matching[0]["comparable_supplier_count"] == 2
+    assert matching[0]["comparison_unit"]
 
     comparison = logged_in_client_a.get(f"/api/catalog/master-products/{master_id}/comparison")
     assert comparison.status_code == 200, comparison.get_json()
