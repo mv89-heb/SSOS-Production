@@ -587,8 +587,12 @@ def master_product_match_suggestions():
 def list_master_products():
     from sqlalchemy import select, or_
     from app.models.master_product import MasterProduct
+    from app.models.supplier_product import SupplierProduct
+    from app.models.supplier import Supplier
+    from app.services.price_intelligence_service import PriceIntelligenceService
+
     query = str(request.args.get("q") or "").strip()
-    limit = max(1, min(request.args.get("limit", 100, type=int) or 100, 250))
+    limit = max(1, min(request.args.get("limit", 100, type=int) or 100, 1000))
     stmt = select(MasterProduct).where(
         MasterProduct.tenant_id == current_user.tenant_id,
         MasterProduct.active.is_(True),
@@ -600,8 +604,129 @@ def list_master_products():
             MasterProduct.normalized_name.ilike(pattern),
             MasterProduct.barcode == query,
         ))
-    masters = db.session.execute(stmt.order_by(MasterProduct.canonical_name.asc()).limit(limit)).scalars().all()
-    return jsonify({"success": True, "master_products": [m.to_dict() for m in masters]})
+    masters = db.session.execute(stmt.order_by(MasterProduct.canonical_name.asc(), MasterProduct.id.asc()).limit(limit)).scalars().all()
+    master_ids = [master.id for master in masters]
+    grouped = {master_id: [] for master_id in master_ids}
+    if master_ids:
+        rows = db.session.execute(
+            select(SupplierProduct, Supplier)
+            .join(Supplier, (Supplier.id == SupplierProduct.supplier_id) & (Supplier.tenant_id == current_user.tenant_id))
+            .where(
+                SupplierProduct.tenant_id == current_user.tenant_id,
+                SupplierProduct.master_product_id.in_(master_ids),
+                SupplierProduct.match_status == "APPROVED",
+                SupplierProduct.active.is_(True),
+                Supplier.active.is_(True),
+            )
+            .order_by(SupplierProduct.master_product_id.asc(), SupplierProduct.id.asc())
+        ).all()
+        for listing, supplier in rows:
+            grouped[listing.master_product_id].append((listing, supplier))
+
+    items = []
+    for master in masters:
+        listings = grouped.get(master.id, [])
+        normalized = []
+        for listing, supplier in listings:
+            if listing.price is None or float(listing.price) <= 0:
+                continue
+            offer = PriceIntelligenceService._price_payload(
+                listing.supplier_id, supplier.name, listing.price, listing.unit,
+                listing.units_per_carton, listing.currency,
+            )
+            if offer["comparison_unit"] is not None:
+                normalized.append((listing, supplier, offer))
+        keys = {(offer["currency"], offer["comparison_unit"]) for _, _, offer in normalized}
+        best_pair = min(normalized, key=lambda row: row[2]["normalized_price"]) if normalized and len(keys) == 1 else None
+        data = master.to_dict()
+        data.update({
+            "supplier_count": len({listing.supplier_id for listing, _ in listings if listing.price is not None and float(listing.price) > 0}),
+            "listing_count": len(listings),
+            "current_price": best_pair[2]["normalized_price"] if best_pair else None,
+            "currency": best_pair[2]["currency"] if best_pair else "ILS",
+            "best_supplier_name": best_pair[1].name if best_pair else None,
+            "has_price": best_pair is not None,
+        })
+        items.append(data)
+    return jsonify({"success": True, "master_products": items, "total": len(items)})
+
+
+@catalog_bp.route("/master-products/review-candidates", methods=["GET"])
+@login_required
+def review_master_product_candidates():
+    from sqlalchemy import select
+    from app.models.master_product import MasterProduct
+    from app.models.supplier_product import SupplierProduct
+    from app.models.supplier import Supplier
+    from app.services.master_product_matching_service import MasterProductMatchingService
+
+    try:
+        PermissionService.require_role_at_least("manager")
+    except HTTPException as exc:
+        return _handle(exc)
+
+    tenant_id = current_user.tenant_id
+    limit = max(1, min(request.args.get("limit", 100, type=int), 250))
+    service = MasterProductMatchingService(tenant_id, current_user.id)
+    masters = db.session.execute(select(MasterProduct).where(
+        MasterProduct.tenant_id == tenant_id, MasterProduct.active.is_(True)
+    ).order_by(MasterProduct.id.asc())).scalars().all()
+    rows = db.session.execute(
+        select(SupplierProduct, Supplier)
+        .join(Supplier, (Supplier.id == SupplierProduct.supplier_id) & (Supplier.tenant_id == tenant_id))
+        .where(
+            SupplierProduct.tenant_id == tenant_id,
+            SupplierProduct.match_status == "APPROVED",
+            SupplierProduct.active.is_(True),
+            Supplier.active.is_(True),
+            SupplierProduct.master_product_id.is_not(None),
+        )
+        .order_by(SupplierProduct.updated_at.desc(), SupplierProduct.id.asc())
+        .limit(limit)
+    ).all()
+
+    candidates = []
+    for item, supplier in rows:
+        matches = []
+        incoming_barcode = "".join(ch for ch in str(item.barcode or "") if ch.isdigit())
+        incoming_is_real = bool(incoming_barcode) and not service._is_synthetic_barcode(incoming_barcode)
+        current_master = item.master_product
+        for master in masters:
+            if master.id == item.master_product_id:
+                continue
+            current_category = str((current_master.category if current_master else None) or "").strip().casefold()
+            candidate_category = str(master.category or "").strip().casefold()
+            if current_category and candidate_category and current_category != candidate_category:
+                continue
+            current_unit = service.normalize((current_master.base_unit if current_master else None) or "")
+            candidate_unit = service.normalize(master.base_unit or "")
+            if current_unit and candidate_unit and current_unit != candidate_unit:
+                continue
+            incoming_package = (current_master.package_size, service.normalize(current_master.package_unit or "")) if current_master else (None, "")
+            candidate_package = (master.package_size, service.normalize(master.package_unit or ""))
+            if incoming_package[0] is not None and candidate_package[0] is not None and incoming_package != candidate_package:
+                continue
+            master_barcode = "".join(ch for ch in str(master.barcode or "") if ch.isdigit())
+            master_is_real = bool(master_barcode) and not service._is_synthetic_barcode(master_barcode)
+            if incoming_is_real and master_is_real and incoming_barcode != master_barcode:
+                continue
+            score, method = service._score(item.supplier_name, master.canonical_name)
+            if score >= 0.82 and method not in {"PACKAGE_SIZE_MISMATCH", "PRODUCT_VARIANT_MISMATCH"}:
+                matches.append((score, master, method))
+        matches.sort(key=lambda match: (-match[0], match[1].id))
+        if not matches or (len(matches) > 1 and matches[0][0] - matches[1][0] < 0.04):
+            continue
+        score, master, method = matches[0]
+        candidates.append({
+            "supplier_product": item.to_dict(),
+            "supplier_company_name": supplier.name,
+            "current_master_product": current_master.to_dict() if current_master else None,
+            "suggested_master_product": master.to_dict(),
+            "confidence": score,
+            "match_method": method,
+        })
+    candidates.sort(key=lambda candidate: (-candidate["confidence"], candidate["supplier_product"]["id"]))
+    return jsonify({"success": True, "candidates": candidates})
 
 
 @catalog_bp.route("/supplier-products/intake", methods=["POST"])
