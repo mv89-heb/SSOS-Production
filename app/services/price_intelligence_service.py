@@ -97,7 +97,7 @@ class PriceIntelligenceService:
 
     def compare_product(self, product_id: int):
         product = self.product_repo.get_by_id_or_404(product_id)
-        default_unit = self.normalize_unit(product.unit) or "UNIT"
+        default_unit = self.normalize_unit(product.unit)
         by_supplier = {}
 
         if product.current_price is not None and self._decimal(product.current_price) > 0:
@@ -125,7 +125,7 @@ class PriceIntelligenceService:
                 offer.supplier_id,
                 supplier.name,
                 offer.price,
-                offer.unit or product.unit or default_unit,
+                offer.unit,
                 offer.units_per_carton,
                 offer.currency,
             )
