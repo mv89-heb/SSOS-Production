@@ -1,19 +1,15 @@
 "use client";
 
-import { Bell } from "lucide-react";
+import { Bell, FileSpreadsheet } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
+import type { UserRole } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 const ROLE_LABELS: Record<UserRole, string> = { admin: "מנהל מערכת", manager: "מנהל רכש", employee: "עובד רכש" };
-
-type ApiError = { response?: { data?: { message?: string; error?: string } } };
-function errorMessage(error: unknown): string {
-  const response = (error as ApiError)?.response?.data;
-  return response?.message || response?.error || "הפעולה נכשלה. נסה שוב.";
-}
 
 export default function SettingsPage() {
   const { user, tenant } = useAuth();
