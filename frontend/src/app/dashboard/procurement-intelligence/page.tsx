@@ -414,6 +414,7 @@ export default function ProcurementIntelligencePage() {
 
       <Section title="🔎 חיפוש מוצר לצלילה מהירה" hint="רק כשצריך לעבור מהחלטה לפריט ספציפי.">
         <div className="border-b border-slate-100 p-5 dark:border-slate-800">
+          <div className="mb-3 flex justify-end"><ProductSortToggle direction={sortDirection} onToggle={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} /></div>
           <div className="relative"><Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="מוצר, מק״ט, ברקוד, קטגוריה או ספק..." className="w-full rounded-xl border border-slate-200 bg-white py-3 pr-10 pl-3 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900" /></div>
         </div>
         <div className="overflow-x-auto">
