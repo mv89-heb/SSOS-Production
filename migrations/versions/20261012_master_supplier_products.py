@@ -1,6 +1,6 @@
 """Add canonical master products and supplier-specific product listings.
 
-Revision ID: 20261012_master_supplier_products
+Revision ID: 20261012_master_supplier_prod
 Revises: 20261004_gemini_price_completion
 """
 from datetime import datetime, timezone
@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from alembic import op
 import sqlalchemy as sa
 
-revision = "20261012_master_supplier_products"
+revision = "20261012_master_supplier_prod"
 down_revision = "20261004_gemini_price_completion"
 branch_labels = None
 depends_on = None
