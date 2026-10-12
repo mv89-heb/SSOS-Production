@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Package, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { catalogService } from "@/services/catalog-service";
 import type { MasterProductRecord } from "@/services/catalog-service";
+import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
+import { sortByHebrewName, type ProductSortDirection } from "@/lib/product-sorting";
 
 const money = (value: number, currency: string) => {
   try { return new Intl.NumberFormat("he-IL", { style: "currency", currency, maximumFractionDigits: 3 }).format(value); }
@@ -16,9 +18,11 @@ const unitLabel: Record<string, string> = { UNIT: "יחידה", KG: "ק״ג", G:
 
 export default function MasterProductsPage() {
   const [query, setQuery] = useState("");
+  const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [selected, setSelected] = useState<MasterProductRecord | null>(null);
   const masters = useQuery({ queryKey: ["catalog", "master-products", submittedQuery], queryFn: () => catalogService.listMasterProducts(submittedQuery) });
+  const sortedMasters = useMemo(() => sortByHebrewName(masters.data ?? [], (master) => master.canonical_name, sortDirection), [masters.data, sortDirection]);
   const comparison = useQuery({ queryKey: ["catalog", "master-product-comparison", selected?.id], queryFn: () => catalogService.compareMasterProduct(selected!.id), enabled: selected != null });
 
   return <main dir="rtl" className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
@@ -27,11 +31,11 @@ export default function MasterProductsPage() {
     <div className="grid gap-4 lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.7fr)]">
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <form onSubmit={(e) => { e.preventDefault(); setSubmittedQuery(query.trim()); }} className="flex gap-2"><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מוצר אב, מותג או ברקוד" /><Button type="submit" aria-label="חיפוש"><Search size={16} /></Button></form>
-        <div className="mt-3 flex items-center justify-between text-xs text-slate-500"><span>{masters.data?.length ?? 0} מוצרים</span><span>בחר מוצר להשוואה</span></div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>{masters.data?.length ?? 0} מוצרים · מיון לפי שם</span><ProductSortToggle direction={sortDirection} onToggle={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} /></div>
         <div className="mt-3 max-h-[65vh] space-y-2 overflow-y-auto">
           {masters.isLoading && <p className="p-4 text-sm text-slate-500">טוען קטלוג...</p>}
           {masters.isError && <p className="p-4 text-sm text-red-700">טעינת הקטלוג נכשלה. נסה שוב.</p>}
-          {(masters.data || []).map((master) => <button key={master.id} type="button" onClick={() => setSelected(master)} className={`w-full rounded-xl border p-3 text-right transition ${selected?.id === master.id ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"}`}><span className="flex items-start gap-2"><Package size={17} className="mt-0.5 shrink-0 text-slate-400" /><span className="min-w-0"><span className="block font-semibold text-slate-900 dark:text-white">{master.canonical_name}</span><span className="mt-1 block text-xs text-slate-500">{[master.brand, master.category, master.barcode].filter(Boolean).join(" · ") || "אין פרטי זיהוי נוספים"}</span></span></span></button>)}
+          {sortedMasters.map((master) => <button key={master.id} type="button" onClick={() => setSelected(master)} className={`w-full rounded-xl border p-3 text-right transition ${selected?.id === master.id ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"}`}><span className="flex items-start gap-2"><Package size={17} className="mt-0.5 shrink-0 text-slate-400" /><span className="min-w-0"><span className="block font-semibold text-slate-900 dark:text-white">{master.canonical_name}</span><span className="mt-1 block text-xs text-slate-500">{[master.brand, master.category, master.barcode].filter(Boolean).join(" · ") || "אין פרטי זיהוי נוספים"}</span></span></span></button>)}
           {!masters.isLoading && !masters.isError && masters.data?.length === 0 && <p className="p-6 text-center text-sm text-slate-500">לא נמצאו מוצרי אב. אפשר ליצור מוצר אב חדש דרך מסך התאמת מוצרי ספקים.</p>}
         </div>
       </section>
