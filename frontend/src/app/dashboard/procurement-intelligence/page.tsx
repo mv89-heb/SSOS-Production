@@ -417,8 +417,8 @@ export default function ProcurementIntelligencePage() {
           <div className="mb-3 flex justify-end"><ProductSortToggle direction={sortDirection} onToggle={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} /></div>
           <div className="relative"><Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="מוצר, מק״ט, ברקוד, קטגוריה או ספק..." className="w-full rounded-xl border border-slate-200 bg-white py-3 pr-10 pl-3 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900" /></div>
         </div>
-        <div className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
-          <table className="w-max min-w-full text-right text-sm">
+        <div dir="rtl" className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
+          <table dir="rtl" className="w-max min-w-[950px] text-right text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-5 py-3">מוצר</th><th className="px-5 py-3">ספק</th><th className="px-5 py-3">מחיר</th><th className="px-5 py-3">מלאי</th><th className="px-5 py-3">סטטוס</th></tr></thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredProducts.map((product) => {
