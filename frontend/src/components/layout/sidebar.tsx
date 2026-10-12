@@ -13,6 +13,7 @@ const navigation = [
   { name: "ניהול ספקים", href: "/dashboard/suppliers", icon: Users },
   { name: "קטלוג מוצרים", href: "/dashboard/catalog", icon: Package },
   { name: "התאמת מוצרי ספקים", href: "/dashboard/catalog/matching", icon: Package },
+  { name: "קטלוג אחיד והשוואה", href: "/dashboard/catalog/master-products", icon: BarChart3 },
   { name: "מחסן ומלאי", href: "/dashboard/inventory", icon: Warehouse },
   { name: "דיווח ספירת מלאי", href: "/dashboard/inventory/count", icon: ClipboardCheck },
   { name: "הזמנות רכש", href: "/dashboard/orders", icon: ShoppingCart },
