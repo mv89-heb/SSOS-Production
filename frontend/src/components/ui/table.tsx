@@ -3,8 +3,16 @@ import { cn } from "@/lib/utils";
 
 export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>) {
   return (
-    <div dir="rtl" className="block w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/10">
-      <table dir="rtl" className={cn("w-max min-w-[950px] text-right text-sm", className)} {...props} />
+    <div
+      dir="ltr"
+      className="block w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/10"
+      style={{ direction: "ltr", WebkitOverflowScrolling: "touch" }}
+    >
+      <table
+        dir="rtl"
+        className={cn("w-max min-w-[950px] text-right text-sm", className)}
+        {...props}
+      />
     </div>
   );
 }
