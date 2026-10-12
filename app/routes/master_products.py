@@ -84,6 +84,69 @@ def list_master_products():
     return jsonify({"success": True, "products": items, "total": len(items)})
 
 
+@master_products_bp.get("/review-candidates")
+@login_required
+def review_candidates():
+    try:
+        PermissionService.require_role_at_least("manager")
+    except HTTPException as exc:
+        return _error(exc)
+
+    tenant_id = current_user.tenant_id
+    limit = max(1, min(request.args.get("limit", default=100, type=int), 250))
+    service = MasterProductMatchingService(tenant_id, current_user.id)
+    masters = db.session.execute(select(MasterProduct).where(
+        MasterProduct.tenant_id == tenant_id,
+        MasterProduct.active.is_(True),
+    ).order_by(MasterProduct.id.asc())).scalars().all()
+    rows = db.session.execute(
+        select(SupplierProduct, Supplier)
+        .join(Supplier, (Supplier.id == SupplierProduct.supplier_id) & (Supplier.tenant_id == tenant_id))
+        .where(
+            SupplierProduct.tenant_id == tenant_id,
+            SupplierProduct.match_status == "APPROVED",
+            SupplierProduct.active.is_(True),
+            Supplier.active.is_(True),
+            SupplierProduct.master_product_id.is_not(None),
+        )
+        .order_by(SupplierProduct.updated_at.desc(), SupplierProduct.id.asc())
+        .limit(limit)
+    ).all()
+
+    candidates = []
+    for item, supplier in rows:
+        matches = []
+        incoming_barcode = "".join(ch for ch in str(item.barcode or "") if ch.isdigit())
+        incoming_is_real = bool(incoming_barcode) and not service._is_synthetic_barcode(incoming_barcode)
+        for master in masters:
+            if master.id == item.master_product_id:
+                continue
+            master_barcode = "".join(ch for ch in str(master.barcode or "") if ch.isdigit())
+            master_is_real = bool(master_barcode) and not service._is_synthetic_barcode(master_barcode)
+            if incoming_is_real and master_is_real and incoming_barcode != master_barcode:
+                continue
+            score, method = service._score(item.supplier_name, master.canonical_name)
+            if score >= 0.82 and method not in {"PACKAGE_SIZE_MISMATCH", "PRODUCT_VARIANT_MISMATCH"}:
+                matches.append((score, master, method))
+        matches.sort(key=lambda match: (-match[0], match[1].id))
+        if not matches:
+            continue
+        if len(matches) > 1 and matches[0][0] - matches[1][0] < 0.04:
+            # Close scores are ambiguous: do not present a single-click merge.
+            continue
+        score, master, method = matches[0]
+        candidates.append({
+            "supplier_product": item.to_dict(),
+            "supplier_company_name": supplier.name,
+            "current_master_product": item.master_product.to_dict() if item.master_product else None,
+            "suggested_master_product": master.to_dict(),
+            "confidence": score,
+            "match_method": method,
+        })
+    candidates.sort(key=lambda candidate: (-candidate["confidence"], candidate["supplier_product"]["id"]))
+    return jsonify({"success": True, "candidates": candidates})
+
+
 @master_products_bp.get("/pending")
 @login_required
 def list_pending_supplier_products():
