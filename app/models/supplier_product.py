@@ -12,6 +12,7 @@ class SupplierProduct(db.Model):
         db.CheckConstraint("match_status IN ('PENDING', 'APPROVED', 'REJECTED')", name="ck_supplier_products_match_status"),
         db.Index("ix_supplier_products_tenant_supplier", "tenant_id", "supplier_id"),
         db.Index("ix_supplier_products_tenant_master", "tenant_id", "master_product_id"),
+        db.Index("ix_supplier_products_tenant_supplier_sku", "tenant_id", "supplier_id", "supplier_sku"),
     )
 
     id = db.Column(db.Integer, primary_key=True)
