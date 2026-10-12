@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Award, CheckCircle2, Plus, Trash2 } from "lucide-react";
-import { useOffers, useCreateOffer, useDeleteOffer } from "@/hooks/use-catalog";
+import { AlertTriangle, Award, Pencil, Plus, Trash2 } from "lucide-react";
+import { useOffers, useCreateOffer, useUpdateOffer, useDeleteOffer } from "@/hooks/use-catalog";
 import { Button } from "@/components/ui/button";
 import { Supplier } from "@/types";
 import { priceIntelligenceService, type PriceOfferComparison } from "@/services/price-intelligence-service";
@@ -51,6 +51,7 @@ export function PriceComparison({
     retry: 1,
   });
   const createOffer = useCreateOffer(productId);
+  const updateOffer = useUpdateOffer(productId);
   const deleteOffer = useDeleteOffer(productId);
   const [addingOffer, setAddingOffer] = useState(false);
   const [newSupplierId, setNewSupplierId] = useState("");
@@ -71,7 +72,7 @@ export function PriceComparison({
 
   const handleAddOffer = () => {
     setError(null);
-    if (!newSupplierId) return setError("בחר ספק.");
+    if (editingOfferId === null && !newSupplierId) return setError("בחר ספק.");
     const price = Number(newPrice);
     if (!Number.isFinite(price) || price <= 0) return setError("הזן מחיר גדול מאפס; מחיר חסר יש להשאיר לא מוגדר.");
     if (!newUnit.trim()) return setError("יש להזין יחידת מכירה כדי למנוע השוואה שגויה בין אריזות שונות.");
@@ -83,23 +84,30 @@ export function PriceComparison({
       return setError("מספר היחידות בקרטון חייב להיות מספר שלם וחיובי.");
     }
 
-    createOffer.mutate(
-      { supplier_id: Number(newSupplierId), price, currency: newCurrency, unit: newUnit.trim() || undefined, units_per_carton: cartonSize },
-      {
-        onSuccess: () => {
-          setAddingOffer(false);
-          setNewSupplierId("");
-          setNewPrice("");
-          setNewUnit("");
-          setNewCartonSize("");
-          setError(null);
-        },
-        onError: (err) => {
-          const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-          setError(message || "הוספת הצעת המחיר נכשלה.");
-        },
-      },
-    );
+    const resetOfferForm = () => {
+      setAddingOffer(false);
+      setEditingOfferId(null);
+      setNewSupplierId("");
+      setNewPrice("");
+      setNewUnit("");
+      setNewCartonSize("");
+      setError(null);
+    };
+    const onError = (err: unknown) => {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(message || (editingOfferId !== null ? "עדכון הצעת המחיר נכשל." : "הוספת הצעת המחיר נכשלה."));
+    };
+    if (editingOfferId !== null) {
+      updateOffer.mutate(
+        { offerId: editingOfferId, input: { price, currency: newCurrency, unit: newUnit.trim(), units_per_carton: cartonSize } },
+        { onSuccess: resetOfferForm, onError },
+      );
+    } else {
+      createOffer.mutate(
+        { supplier_id: Number(newSupplierId), price, currency: newCurrency, unit: newUnit.trim(), units_per_carton: cartonSize },
+        { onSuccess: resetOfferForm, onError },
+      );
+    }
   };
 
   const renderRow = (row: PriceOfferComparison, index: number, isComparable: boolean) => {
@@ -129,7 +137,7 @@ export function PriceComparison({
         </div>
         <div className="flex items-center justify-end gap-2">
           {saving !== null && isComparable && <span className={saving > 0.000001 ? "text-xs font-semibold text-emerald-700" : saving < -0.000001 ? "text-xs font-semibold text-red-600" : "text-xs text-slate-400"}>{saving > 0.000001 ? "חיסכון " : saving < -0.000001 ? "יקר ב־" : ""}{Math.abs(saving) > 0.000001 ? money(Math.abs(saving), comparison.data?.current?.currency || currency) : "—"}</span>}
-          {canManage && offer && <button type="button" onClick={() => deleteOffer.mutate(offer.id)} disabled={deleteOffer.isPending} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" aria-label={`הסרת הצעת ${row.supplier_name ?? "ספק"}`} title="הסרת הצעת מחיר"><Trash2 size={14} /></button>}
+          {canManage && offer && <><button type="button" onClick={() => { setEditingOfferId(offer.id); setNewSupplierId(String(offer.supplier_id)); setNewPrice(String(offer.price)); setNewUnit(offer.unit ?? ""); setNewCartonSize(offer.units_per_carton != null ? String(offer.units_per_carton) : ""); setNewCurrency(offer.currency || "ILS"); setError(null); setAddingOffer(true); }} disabled={updateOffer.isPending} className="rounded p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-50" aria-label={`עריכת הצעת ${row.supplier_name ?? "ספק"}`} title="עריכת הצעת מחיר"><Pencil size={14} /></button><button type="button" onClick={() => deleteOffer.mutate(offer.id)} disabled={deleteOffer.isPending} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" aria-label={`הסרת הצעת ${row.supplier_name ?? "ספק"}`} title="הסרת הצעת מחיר"><Trash2 size={14} /></button></>}
         </div>
       </div>
     );
@@ -169,16 +177,16 @@ export function PriceComparison({
       {!loading && !comparison.isError && comparison.data && comparableRows.length <= 1 && incomparableRows.length === 0 && offers.length === 0 && <p className="text-xs text-slate-500">עדיין לא הוזנו מחירים מספקים חלופיים.</p>}
 
       {addingOffer && <div className="space-y-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
-        <div className="font-semibold text-sm">הוספת הצעת מחיר</div>
+        <div className="font-semibold text-sm">{editingOfferId !== null ? "עריכת הצעת מחיר" : "הוספת הצעת מחיר"}</div>
         <div className="grid gap-2 sm:grid-cols-2">
-          <label className="text-xs text-slate-600">ספק<select value={newSupplierId} onChange={(e) => setNewSupplierId(e.target.value)} className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm"><option value="">בחר ספק...</option>{availableSuppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+          {editingOfferId === null && <label className="text-xs text-slate-600">ספק<select value={newSupplierId} onChange={(e) => setNewSupplierId(e.target.value)} className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm"><option value="">בחר ספק...</option>{availableSuppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}
           <label className="text-xs text-slate-600">מחיר חיובי<input type="number" min="0.01" step="0.01" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} placeholder="למשל 12.50" className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" /></label>
           <label className="text-xs text-slate-600">מטבע<select value={newCurrency} onChange={(e) => setNewCurrency(e.target.value)} className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm"><option value="ILS">שקל (ILS)</option><option value="USD">דולר (USD)</option><option value="EUR">אירו (EUR)</option></select></label>
           <label className="text-xs text-slate-600">יחידת מכירה<input value={newUnit} onChange={(e) => setNewUnit(e.target.value)} placeholder="יחידה, ק״ג, ליטר, קרטון..." required className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" /></label>
           <label className="text-xs text-slate-600 sm:col-span-2">יחידות בקרטון (רק למחיר קרטון)<input type="number" min="1" step="1" value={newCartonSize} onChange={(e) => setNewCartonSize(e.target.value)} placeholder="למשל 12" className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" /></label>
         </div>
         {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
-        <div className="flex gap-2"><Button onClick={handleAddOffer} disabled={createOffer.isPending} className="text-xs">{createOffer.isPending ? "שומר..." : "שמירת הצעה"}</Button><Button variant="ghost" onClick={() => { setAddingOffer(false); setError(null); }} disabled={createOffer.isPending} className="text-xs">ביטול</Button></div>
+        <div className="flex gap-2"><Button onClick={handleAddOffer} disabled={createOffer.isPending || updateOffer.isPending} className="text-xs">{createOffer.isPending || updateOffer.isPending ? "שומר..." : editingOfferId !== null ? "שמירת עדכון" : "שמירת הצעה"}</Button><Button variant="ghost" onClick={() => { setAddingOffer(false); setError(null); }} disabled={createOffer.isPending || updateOffer.isPending} onClick={() => { setAddingOffer(false); setEditingOfferId(null); setError(null); }} className="text-xs">ביטול</Button></div>
       </div>}
     </section>
   );
