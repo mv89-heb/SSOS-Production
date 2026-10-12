@@ -44,11 +44,11 @@ function downloadFile(content: string, filename: string, type: string) {
 }
 
 function safeFilename(value: string) {
-  return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/\\s+/g, "-").slice(0, 90) || "report";
+  return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/\s+/g, "-").slice(0, 90) || "report";
 }
 
 function worksheetName(value: string, index: number) {
-  const cleaned = value.replace(/[\[\]:*?/\\]/g, " ").trim().slice(0, 31);
+  const cleaned = value.replace(/[\[\]:*?\/\\]/g, " ").trim().slice(0, 31);
   return cleaned || `Sheet${index + 1}`;
 }
 
