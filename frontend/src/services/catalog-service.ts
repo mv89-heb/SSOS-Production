@@ -67,7 +67,7 @@ export interface UpdateOfferInput { price?: number; currency?: string; supplier_
 export interface MasterProductRecord {
   id: number; canonical_name: string; brand?: string | null; category?: string | null;
   barcode?: string | null; base_unit?: string | null; package_size?: number | null; package_unit?: string | null;
-  supplier_count?: number; listing_count?: number; current_price?: number | null; currency?: string | null; best_supplier_name?: string | null; has_price?: boolean;
+  supplier_count?: number; listing_count?: number; current_price?: number | null; currency?: string | null; comparison_unit?: string | null; comparable_supplier_count?: number; best_supplier_name?: string | null; has_price?: boolean;
 }
 export interface SupplierProductListing {
   id: number; supplier_id: number; supplier_name: string; supplier_company_name?: string | null;
