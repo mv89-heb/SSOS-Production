@@ -7,7 +7,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "20260917_idempotency_keys"
-down_revision = "20260916_inventory_periods"
+down_revision = "20260917_procurement_foundation"
 branch_labels = None
 depends_on = None
 
