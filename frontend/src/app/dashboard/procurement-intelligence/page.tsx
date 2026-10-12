@@ -297,12 +297,15 @@ export default function ProcurementIntelligencePage() {
         </div>
       )}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
         <StatCard label="דורש טיפול" value={number(actionRows.length)} hint={`${number(urgentStock.length)} דחופים · ${number(reorderStock.length)} להזמנה`} icon={<AlertTriangle className="text-red-500" size={18} />} tone={actionRows.length ? "red" : "emerald"} />
         <StatCard label="סל רכש מומלץ" value={money(basketTotal)} hint={`${number(purchaseBasket.length)} מוצרים · לפני התאמות ידניות`} icon={<ShoppingCart className="text-indigo-500" size={18} />} tone="blue" />
         <StatCard label="חיסכון פוטנציאלי" value={money(data?.potential_savings)} hint={`${number(data?.opportunity_products)} מוצרים עם חלופה זולה יותר`} icon={<TrendingDown className="text-emerald-500" size={18} />} tone="emerald" />
         <StatCard label="כיסוי מלאי ממוצע" value={averageCoverage == null ? "—" : `${number(averageCoverage)} ימים`} hint={`${number(coverageReady.length)} מוצרים עם נתוני צריכה מספיקים`} icon={<PackageSearch className="text-violet-500" size={18} />} tone="violet" />
         <StatCard label="נתוני מלאי חסרים" value={number(insufficientInventoryData)} hint="נדרשות לפחות שתי ספירות כדי לחשב צריכה" icon={<XCircle className="text-amber-500" size={18} />} tone="amber" />
+        <StatCard label="מוצרים פעילים" value={number(readinessData?.products.active)} hint={`${number(readinessData?.products.categorized)} עם קטגוריה`} icon={<PackageSearch className="text-blue-500" size={18} />} tone="blue" />
+        <StatCard label="מוצרים עם מחיר" value={number(readinessData?.products.priced)} hint={`${number((readinessData?.products.active ?? 0) - (readinessData?.products.priced ?? 0))} ללא מחיר`} icon={<WalletCards className="text-emerald-500" size={18} />} tone="emerald" />
+        <StatCard label="ספקים פעילים" value={number(readinessData?.suppliers.active)} hint={`${number(readinessData?.supplier_offers.suppliers_covered)} משתתפים בהשוואת מחירים`} icon={<Truck className="text-violet-500" size={18} />} tone="violet" />
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
