@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import math
 import re
 import unicodedata
-from difflib import SequenceMatcher
+
+from rapidfuzz import fuzz
 
 from sqlalchemy import select
 from werkzeug.exceptions import BadRequest, NotFound
@@ -85,10 +87,10 @@ class MasterProductMatchingService:
         if left_pct is not None and right_pct is not None and abs(left_pct - right_pct) > 0.0001:
             return 0.0, "PRODUCT_VARIANT_MISMATCH"
 
-        sequence = SequenceMatcher(None, left, right).ratio()
+        sequence = fuzz.ratio(left, right) / 100
+        token_score = fuzz.token_set_ratio(left, right) / 100
         left_tokens, right_tokens = set(left.split()), set(right.split())
         overlap = len(left_tokens & right_tokens)
-        token_score = overlap / max(len(left_tokens), len(right_tokens)) if left_tokens or right_tokens else 0
         containment = overlap / min(len(left_tokens), len(right_tokens)) if left_tokens and right_tokens else 0
         score = max(sequence, token_score, containment * 0.92)
         # A matching package/variant is useful corroboration, never enough on its own.
@@ -154,8 +156,21 @@ class MasterProductMatchingService:
                 price = float(raw_price)
             except (TypeError, ValueError):
                 raise BadRequest("המחיר חייב להיות מספר חיובי")
-            if price <= 0:
-                raise BadRequest("המחיר חייב להיות גדול מאפס")
+            if not math.isfinite(price) or price <= 0:
+                raise BadRequest("המחיר חייב להיות מספר סופי וגדול מאפס")
+        currency = str(data.get("currency") or "ILS").strip().upper()
+        if not re.fullmatch(r"[A-Z]{3}", currency):
+            raise BadRequest("יש להזין קוד מטבע תקין בן שלוש אותיות")
+        carton_value = data.get("units_per_carton")
+        if carton_value not in (None, ""):
+            try:
+                carton_value = int(carton_value)
+            except (TypeError, ValueError):
+                raise BadRequest("מספר היחידות באריזה חייב להיות מספר שלם וחיובי")
+            if carton_value <= 0 or str(data.get("units_per_carton")).strip() != str(carton_value):
+                raise BadRequest("מספר היחידות באריזה חייב להיות מספר שלם וחיובי")
+        else:
+            carton_value = None
         sku = str(data.get("supplier_sku") or "").strip() or None
         if sku:
             existing = db.session.execute(select(SupplierProduct).where(
@@ -169,9 +184,9 @@ class MasterProductMatchingService:
                     existing.description = data.get("description") or name
                     existing.barcode = str(data.get("barcode") or "").strip() or existing.barcode
                     existing.price = price if price is not None else existing.price
-                    existing.currency = str(data.get("currency") or existing.currency or "ILS").upper()
+                    existing.currency = currency
                     existing.unit = data.get("unit") or existing.unit
-                    existing.units_per_carton = data.get("units_per_carton") or existing.units_per_carton
+                    existing.units_per_carton = carton_value or existing.units_per_carton
                     existing.normalized_name = self.normalize(name)
                     existing.last_seen_at = db.func.now()
                     db.session.flush()
@@ -181,9 +196,9 @@ class MasterProductMatchingService:
                 existing.description = data.get("description") or name
                 existing.barcode = str(data.get("barcode") or "").strip() or None
                 existing.price = price
-                existing.currency = str(data.get("currency") or "ILS").upper()
+                existing.currency = currency
                 existing.unit = data.get("unit")
-                existing.units_per_carton = data.get("units_per_carton")
+                existing.units_per_carton = carton_value
                 existing.normalized_name = self.normalize(name)
                 existing.last_seen_at = db.func.now()
                 existing.match_status = "PENDING"
@@ -201,8 +216,8 @@ class MasterProductMatchingService:
                 tenant_id=self.tenant_id, supplier_id=supplier_id, supplier_name=name,
                 description=str(data.get("description") or name), supplier_sku=sku,
                 barcode=str(data.get("barcode") or "").strip() or None, price=price,
-                currency=str(data.get("currency") or "ILS").upper(), unit=data.get("unit"),
-                units_per_carton=data.get("units_per_carton"), normalized_name=self.normalize(name),
+                currency=currency, unit=str(data.get("unit") or "").strip() or None,
+                units_per_carton=carton_value, normalized_name=self.normalize(name),
                 match_status="APPROVED" if safe else "PENDING",
                 master_product_id=safe["master_product"]["id"] if safe else None,
                 suggested_master_product_id=best["master_product"]["id"] if best and not safe else None,
