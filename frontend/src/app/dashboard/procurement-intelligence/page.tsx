@@ -22,7 +22,7 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { catalogService } from "@/services/catalog-service";
+import { catalogService, type MasterProductRecord } from "@/services/catalog-service";
 import { orderService } from "@/services/order-service";
 import { priceIntelligenceService } from "@/services/price-intelligence-service";
 import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
@@ -122,6 +122,11 @@ export default function ProcurementIntelligencePage() {
     queryFn: () => catalogService.listProducts(undefined, true),
     retry: 1,
   });
+  const masterCatalog = useQuery({
+    queryKey: ["procurement-intelligence", "master-catalog"],
+    queryFn: () => catalogService.listMasterProducts("", 1000),
+    retry: 1,
+  });
   const supplierCatalog = useQuery({
     queryKey: ["procurement-intelligence", "catalog-suppliers"],
     queryFn: () => catalogService.listSuppliers(true),
@@ -149,6 +154,8 @@ export default function ProcurementIntelligencePage() {
   const [showAllOpportunities, setShowAllOpportunities] = useState(false);
   const [showAllSuppliers, setShowAllSuppliers] = useState(false);
   const [showAllProducts, setShowAllProducts] = useState(false);
+  const [masterProductSearch, setMasterProductSearch] = useState("");
+  const [showAllMasterProducts, setShowAllMasterProducts] = useState(false);
   const [productDataFilter, setProductDataFilter] = useState<"all" | "missing-price" | "missing-category" | "missing-unit" | "stock-rules">("all");
   const [briefing, setBriefing] = useState<Awaited<ReturnType<typeof priceIntelligenceService.getAiBriefing>> | null>(null);
   const [aiError, setAiError] = useState<string>();
@@ -158,6 +165,7 @@ export default function ProcurementIntelligencePage() {
     void summary.refetch();
     void suppliers.refetch();
     void products.refetch();
+    void masterCatalog.refetch();
     void supplierCatalog.refetch();
     void readiness.refetch();
     void orders.refetch();
@@ -179,6 +187,7 @@ export default function ProcurementIntelligencePage() {
   const data = summary.data;
   const supplierData = suppliers.data;
   const productRows = products.data ?? [];
+  const masterProductRows = masterCatalog.data ?? [];
   const supplierNames = useMemo(
     () => new Map((supplierCatalog.data ?? []).map((supplier) => [supplier.id, supplier.name])),
     [supplierCatalog.data],
@@ -255,6 +264,17 @@ export default function ProcurementIntelligencePage() {
     return sortByHebrewName(matches, (product) => product.name, sortDirection);
   }, [productRows, productSearch, supplierNames, sortDirection, productDataFilter]);
 
+  const masterProductMatches = useMemo(() => {
+    const q = masterProductSearch.trim().toLocaleLowerCase("he-IL");
+    return masterProductRows.filter((product) =>
+      !q || [product.canonical_name, product.brand, product.category, product.barcode, product.best_supplier_name]
+        .some((value) => String(value ?? "").toLocaleLowerCase("he-IL").includes(q)),
+    );
+  }, [masterProductRows, masterProductSearch]);
+  const visibleMasterProducts = masterProductMatches.slice(0, showAllMasterProducts ? masterProductMatches.length : 25);
+  const masterProductsWithPrice = masterProductRows.filter((product) => product.has_price && Number(product.current_price ?? 0) > 0).length;
+  const masterProductsWithMultipleSuppliers = masterProductRows.filter((product) => Number(product.supplier_count ?? 0) > 1).length;
+
   const coverageReady = inventoryRows.filter((row) => row.data_ready && row.coverage_days != null);
   const averageCoverage = coverageReady.length
     ? coverageReady.reduce((sum, row) => sum + Number(row.coverage_days ?? 0), 0) / coverageReady.length
@@ -266,8 +286,8 @@ export default function ProcurementIntelligencePage() {
   const realizedSpend = completedOrders.reduce((sum, order) => sum + Number(order.final_total ?? 0), 0);
   const ordersWithValue = orderRows.filter((order) => Number(order.final_total ?? 0) > 0).length;
   const recentOrders = [...orderRows].sort((a, b) => String(b.updated_at || b.created_at).localeCompare(String(a.updated_at || a.created_at))).slice(0, 8);
-  const loading = summary.isLoading || suppliers.isLoading || products.isLoading || supplierCatalog.isLoading || readiness.isLoading || inventory.isLoading || orders.isLoading;
-  const error = summary.isError || suppliers.isError || products.isError || supplierCatalog.isError || readiness.isError || inventory.isError || orders.isError;
+  const loading = summary.isLoading || suppliers.isLoading || products.isLoading || supplierCatalog.isLoading || masterCatalog.isLoading || readiness.isLoading || inventory.isLoading || orders.isLoading;
+  const error = summary.isError || suppliers.isError || products.isError || supplierCatalog.isError || masterCatalog.isError || readiness.isError || inventory.isError || orders.isError;
 
   return (
     <div dir="rtl" className="space-y-6 pb-10">
