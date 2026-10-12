@@ -124,6 +124,9 @@ class MasterProductMatchingService:
         if clean_barcode and not self._is_synthetic_barcode(clean_barcode):
             exact = [m for m in masters if re.sub(r"\D", "", str(m.barcode or "")) == clean_barcode and m.barcode]
             if len(exact) == 1:
+                score, reason = cls._score(name, exact[0].canonical_name)
+                if reason in {"PACKAGE_SIZE_MISMATCH", "PRODUCT_VARIANT_MISMATCH"}:
+                    return [{"master_product": exact[0].to_dict(), "confidence": score, "method": reason, "decision": "REVIEW_CONFLICT"}]
                 return [{"master_product": exact[0].to_dict(), "confidence": 1.0, "method": "EXACT_BARCODE", "decision": "SAFE_AUTO_LINK"}]
         for master in masters:
             score, method = self._score(normalized, master.canonical_name)
