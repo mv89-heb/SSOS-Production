@@ -25,7 +25,8 @@
   .status-timeline-line { background: repeating-linear-gradient(to bottom, rgb(203 213 225) 0, rgb(203 213 225) 5px, transparent 5px, transparent 10px); }
   .interactive-card { @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg; }
   .dashboard-section { @apply rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/90; }
-  .table-shell { @apply overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900; }
+  .table-shell { @apply max-w-full overflow-x-auto overflow-y-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900; overscroll-behavior-x: contain; }
+  .table-shell > table { min-width: max-content; }
   .table-shell tbody tr { @apply transition-colors duration-150 hover:bg-slate-50/80 dark:hover:bg-slate-800/40; }
   .action-link { @apply inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-sm font-bold text-indigo-600 transition-colors hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40; }
   .metric-value { @apply text-2xl font-extrabold tracking-tight text-slate-950 dark:text-white; }
