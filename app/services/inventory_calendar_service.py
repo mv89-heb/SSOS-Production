@@ -8,6 +8,7 @@ from app.models.inventory_movement import InventoryMovement, MOVEMENT_COUNT
 from app.models.inventory_planning_period import InventoryPlanningPeriod
 from app.models.product import Product
 from app.models.supplier import Supplier
+from app.services.inventory_consumption_planning_service import InventoryConsumptionPlanningService
 from app.services.inventory_unified_planning_service import InventoryUnifiedPlanningService
 
 
@@ -20,7 +21,7 @@ class InventoryCalendarService:
 
     def __init__(self, tenant_id: int):
         self.tenant_id = tenant_id
-        self.engine = InventoryUnifiedPlanningService(tenant_id)
+        self.engine = InventoryConsumptionPlanningService(tenant_id)
 
     @staticmethod
     def _parse_weekdays(value):
@@ -51,6 +52,23 @@ class InventoryCalendarService:
         periods = periods if periods is not None else self.periods(start=today, end=today + timedelta(days=180), active_only=True)
         supplier = db.session.scalar(select(Supplier).where(Supplier.id == product.supplier_id, Supplier.tenant_id == self.tenant_id, Supplier.active.is_(True)))
         return self.engine._schedule(product, supplier, today, periods)
+
+    def _consumption_metrics(self, product_id: int, lookback_days=60):
+        since = datetime.now(timezone.utc) - timedelta(days=max(1, int(lookback_days)))
+        metric = self.engine._consumption_batch([int(product_id)], since).get(int(product_id), {})
+        return (
+            float(metric.get("consumption", 0)),
+            float(metric.get("observed_days", 0)),
+            float(metric.get("receipts", 0)),
+            int(metric.get("stock_checks", 0)),
+        )
+
+    def _inbound_quantities(self, product_ids=None):
+        if product_ids is None:
+            product_ids = db.session.scalars(
+                select(Product.id).where(Product.tenant_id == self.tenant_id, Product.active.is_(True))
+            ).all()
+        return self.engine._open_inbound([int(product_id) for product_id in product_ids])
 
     def recommendation(self, product_id: int, *, lookback_days=60, safety_days=2, inbound_quantities=None):
         return self.engine.recommendation(product_id, lookback_days=lookback_days, safety_days=safety_days)
