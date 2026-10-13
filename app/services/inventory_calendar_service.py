@@ -53,6 +53,23 @@ class InventoryCalendarService:
         supplier = db.session.scalar(select(Supplier).where(Supplier.id == product.supplier_id, Supplier.tenant_id == self.tenant_id, Supplier.active.is_(True)))
         return self.engine._schedule(product, supplier, today, periods)
 
+    def _consumption_metrics(self, product_id: int, lookback_days=60):
+        since = datetime.now(timezone.utc) - timedelta(days=max(1, int(lookback_days)))
+        metric = self.engine._consumption_batch([int(product_id)], since).get(int(product_id), {})
+        return (
+            float(metric.get("consumption", 0)),
+            float(metric.get("observed_days", 0)),
+            float(metric.get("receipts", 0)),
+            int(metric.get("stock_checks", 0)),
+        )
+
+    def _inbound_quantities(self, product_ids=None):
+        if product_ids is None:
+            product_ids = db.session.scalars(
+                select(Product.id).where(Product.tenant_id == self.tenant_id, Product.active.is_(True))
+            ).all()
+        return self.engine._open_inbound([int(product_id) for product_id in product_ids])
+
     def recommendation(self, product_id: int, *, lookback_days=60, safety_days=2, inbound_quantities=None):
         return self.engine.recommendation(product_id, lookback_days=lookback_days, safety_days=safety_days)
 
