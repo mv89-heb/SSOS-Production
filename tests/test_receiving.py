@@ -100,3 +100,27 @@ def test_receipt_is_tenant_scoped(logged_in_client_a, logged_in_client_b, make_o
 
     listed = logged_in_client_b.get(f"/api/orders/{order['id']}/receipts")
     assert listed.status_code == 404
+
+
+def test_receipt_rejects_order_item_from_another_order(logged_in_client_a, make_order, db):
+    first_response, _, _ = make_order(
+        logged_in_client_a, quantity=3, price=10.0, supplier_name="Supplier A",
+        product_name="Product A", sku="CROSS-ORDER-A",
+    )
+    second_response, _, _ = make_order(
+        logged_in_client_a, quantity=3, price=10.0, supplier_name="Supplier B",
+        product_name="Product B", sku="CROSS-ORDER-B",
+    )
+    first_order = first_response.get_json()["order"]
+    second_order = second_response.get_json()["order"]
+    second_item_id = second_order["order_items"][0]["id"]
+    _send_order(logged_in_client_a, db, first_order["id"])
+    _send_order(logged_in_client_a, db, second_order["id"])
+
+    rejected = logged_in_client_a.post(
+        f"/api/orders/{first_order['id']}/receipts",
+        json={"items": [{"order_item_id": second_item_id, "quantity": 1}]},
+    )
+
+    assert rejected.status_code == 404, rejected.get_json()
+    assert db.session.query(Receipt).filter_by(order_id=first_order["id"]).count() == 0

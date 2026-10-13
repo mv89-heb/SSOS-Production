@@ -274,6 +274,7 @@ class InventoryUnifiedPlanningService:
                 "base_average_daily_usage": round(float(daily_rate), 3),
                 "estimated_depletion": round(float(metric.get("consumption", 0)), 3),
                 "receipts_in_observation_period": round(float(metric.get("receipts", 0)), 3),
+                "adjustment_delta_in_observation_period": round(float(metric.get("adjustment_delta", 0)), 3),
                 "stock_checks_in_period": checks,
                 "observed_days": round(float(metric.get("observed_days", 0)), 1),
                 "lead_time_days": lead_time_days,

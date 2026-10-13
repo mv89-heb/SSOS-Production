@@ -143,7 +143,7 @@ class DevelopmentConfig(BaseConfig):
         db_url = _normalize_db_url(db_url)
         app.config["SQLALCHEMY_DATABASE_URI"] = db_url
         if db_url.startswith("postgresql"):
-            app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"connect_args": {"sslmode": "require"}, "pool_pre_ping": True}
+            app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"connect_args": {"sslmode": os.environ.get("DATABASE_SSLMODE", "require")}, "pool_pre_ping": True}
 
 
 class TestingConfig(BaseConfig):

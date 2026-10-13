@@ -6,7 +6,12 @@ class SupplierProductOffer(db.Model):
     """A tenant-scoped supplier price that can be selected for a purchase order."""
     __tablename__ = "supplier_product_offers"
     __table_args__ = (
-        db.UniqueConstraint("product_id", "supplier_id", name="uq_offer_product_supplier"),
+        db.UniqueConstraint("tenant_id", "product_id", "supplier_id", name="uq_offer_tenant_product_supplier"),
+        db.CheckConstraint("price >= 0", name="ck_supplier_offers_price_nonnegative"),
+        db.CheckConstraint(
+            "units_per_carton IS NULL OR units_per_carton > 0",
+            name="ck_supplier_offers_units_per_carton_positive",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
