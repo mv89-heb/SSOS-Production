@@ -139,6 +139,7 @@ export const inventoryService = {
   seedHolidayPeriods: async () =>
     (await apiClient.post<{ success: boolean; created_count: number; periods: InventoryPlanningPeriod[] }>("/api/inventory/planning/seed-holidays")).data,
   getLatestCount: async () => (await apiClient.get<LatestInventoryCount>("/api/inventory/count/latest")).data,
+  getCountHistory: async (days = 30) => (await apiClient.get<{ success: boolean; days: number; history: LatestInventoryCount[] }>("/api/inventory/count/history", { params: { days } })).data.history,
   getCountStatus: async () =>
     (await apiClient.get<{ success: boolean } & InventoryCountStatus>("/api/inventory/planning/count-status")).data,
 };

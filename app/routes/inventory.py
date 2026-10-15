@@ -387,3 +387,175 @@ def create_movement():
     except Exception:
         db.session.rollback()
         raise
+
+
+@inventory_bp.route("/count/bulk", methods=["POST"])
+@login_required
+def bulk_count():
+    """Save one physical inventory-count session as grouped count movements."""
+    from uuid import uuid4
+
+    payload = request.get_json(silent=True) or {}
+    raw_items = payload.get("items")
+    if not isinstance(raw_items, list) or not raw_items:
+        return _handle(BadRequest("items must be a non-empty list"))
+
+    parsed = []
+    seen = set()
+    for item in raw_items:
+        if not isinstance(item, dict):
+            return _handle(BadRequest("each item must include product_id and quantity"))
+        try:
+            product_id = int(item.get("product_id"))
+            quantity = int(item.get("quantity"))
+        except (TypeError, ValueError):
+            return _handle(BadRequest("product_id and quantity must be whole numbers"))
+        if product_id <= 0 or quantity < 0 or str(item.get("quantity")).strip() in ("", "None"):
+            return _handle(BadRequest("product_id must be positive and quantity cannot be negative"))
+        if product_id in seen:
+            return _handle(BadRequest("each product may appear only once per count"))
+        seen.add(product_id)
+        parsed.append((product_id, quantity))
+
+    # Validate the entire request before changing any stock.
+    product_ids = [product_id for product_id, _ in parsed]
+    found_ids = set(db.session.scalars(
+        select(Product.id).where(
+            Product.tenant_id == current_user.tenant_id,
+            Product.id.in_(product_ids),
+            Product.active.is_(True),
+        )
+    ).all())
+    if found_ids != set(product_ids):
+        return _handle(BadRequest("some products are unavailable or inactive"))
+
+    count_id = uuid4().hex
+    counted_at = datetime.now(timezone.utc)
+    note = str(payload.get("note") or "").strip() or None
+    service = InventoryPlanningService(current_user.tenant_id)
+    movements = []
+    try:
+        for product_id, quantity in parsed:
+            movement = service.record_movement(
+                product_id=product_id,
+                movement_type="count",
+                quantity=quantity,
+                user_id=current_user.id,
+                reference_type="inventory_count",
+                reference_id=count_id,
+                note=note,
+                occurred_at=counted_at,
+            )
+            movements.append(movement)
+        db.session.commit()
+    except (ValueError, TypeError) as exc:
+        db.session.rollback()
+        return _handle(BadRequest(str(exc)))
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+    except Exception:
+        db.session.rollback()
+        raise
+
+    return jsonify({
+        "success": True,
+        "count_id": count_id,
+        "counted": len(movements),
+        "counted_at": counted_at.isoformat(),
+        "movements": [movement.to_dict() for movement in movements],
+    }), 201
+
+
+@inventory_bp.route("/count/latest", methods=["GET"])
+@login_required
+def latest_inventory_count():
+    """Return all product rows from the most recently saved physical count session."""
+    latest = db.session.scalar(
+        select(InventoryMovement).where(
+            InventoryMovement.tenant_id == current_user.tenant_id,
+            InventoryMovement.movement_type == "count",
+        ).order_by(InventoryMovement.occurred_at.desc(), InventoryMovement.id.desc()).limit(1)
+    )
+    if latest is None:
+        return jsonify({
+            "success": True,
+            "has_count": False,
+            "count_id": None,
+            "counted_at": None,
+            "counted": 0,
+            "note": None,
+            "movements": [],
+        })
+
+    if latest.reference_type == "inventory_count" and latest.reference_id:
+        # New-format counts share a session ID, so return that exact session.
+        statement = select(InventoryMovement).where(
+            InventoryMovement.tenant_id == current_user.tenant_id,
+            InventoryMovement.movement_type == "count",
+            InventoryMovement.reference_type == "inventory_count",
+            InventoryMovement.reference_id == latest.reference_id,
+        )
+        count_id = latest.reference_id
+    else:
+        # Legacy records were written one product at a time, often without a
+        # session ID. Recover the complete day's count instead of showing one row.
+        counted_at = latest.occurred_at
+        day_start = counted_at.replace(hour=0, minute=0, second=0, microsecond=0)
+        from datetime import timedelta
+        day_end = day_start + timedelta(days=1)
+        statement = select(InventoryMovement).where(
+            InventoryMovement.tenant_id == current_user.tenant_id,
+            InventoryMovement.movement_type == "count",
+            InventoryMovement.occurred_at >= day_start,
+            InventoryMovement.occurred_at < day_end,
+        )
+        count_id = f"legacy-day-{day_start.date().isoformat()}"
+
+    movements = db.session.scalars(
+        statement.order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
+    ).all()
+    return jsonify({
+        "success": True,
+        "has_count": True,
+        "count_id": count_id,
+        "counted_at": latest.occurred_at.isoformat() if latest.occurred_at else None,
+        "counted": len(movements),
+        "note": latest.note,
+        "movements": [movement.to_dict() for movement in movements],
+    })
+
+
+@inventory_bp.route("/count/history", methods=["GET"])
+@login_required
+def inventory_count_history():
+    """Return physical-count history grouped by day, including legacy single-row saves."""
+    from collections import defaultdict
+    from datetime import timedelta
+
+    days = max(1, min(request.args.get("days", default=30, type=int), 365))
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    rows = db.session.scalars(
+        select(InventoryMovement).where(
+            InventoryMovement.tenant_id == current_user.tenant_id,
+            InventoryMovement.movement_type == "count",
+            InventoryMovement.occurred_at >= cutoff,
+        ).order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
+    ).all()
+
+    grouped = defaultdict(list)
+    for movement in rows:
+        day = movement.occurred_at.date().isoformat() if movement.occurred_at else "unknown"
+        grouped[day].append(movement)
+
+    history = []
+    for day, movements in sorted(grouped.items(), reverse=True):
+        history.append({
+            "count_id": f"legacy-day-{day}",
+            "counted_at": movements[-1].occurred_at.isoformat() if movements[-1].occurred_at else None,
+            "counted": len(movements),
+            "note": next((m.note for m in movements if m.note), None),
+            "movements": [m.to_dict() for m in movements],
+        })
+
+    return jsonify({"success": True, "days": days, "history": history})
