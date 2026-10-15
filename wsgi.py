@@ -1,5 +1,8 @@
 import os
 
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
+
 from app import create_app
 from app.extensions import db
 from flask_migrate import upgrade as migrate_upgrade
@@ -7,21 +10,32 @@ from sqlalchemy import text
 
 
 def _run_startup_migrations(app):
-    """Bring the production database to all current Alembic heads before serving.
+    """Bring the production database to current Alembic heads only when needed.
 
-    The existing Render service uses a dashboard-configured Gunicorn command.
-    Running Alembic from WSGI makes the protection independent of Render
-    Blueprint synchronization. A PostgreSQL advisory lock serializes multiple
-    Gunicorn workers so only one process performs migrations at a time.
-
-    The repository currently has multiple valid Alembic heads. Targeting
-    ``heads`` is intentional: targeting ``head`` fails with Multiple head
-    revisions and prevents the service from starting.
+    The dashboard-configured Gunicorn command imports this module in each
+    worker. A PostgreSQL advisory lock serializes startup checks; workers that
+    start after the first migration see the current heads and skip Alembic.
+    This keeps the existing deployment safe without requiring Blueprint sync.
     """
     with app.app_context():
+        migrate_extension = app.extensions.get("migrate")
+        if migrate_extension is None:
+            raise RuntimeError("Flask-Migrate is not initialized")
+
+        config = migrate_extension.get_config()
+        expected_heads = set(ScriptDirectory.from_config(config).get_heads())
         with db.engine.begin() as conn:
             conn.execute(text("SELECT pg_advisory_xact_lock(73184219)"))
-            print("[production] Running database migrations before serving", flush=True)
+            current_heads = set(MigrationContext.configure(conn).get_current_heads())
+            if current_heads == expected_heads:
+                print("[production] Database migrations already current; skipping", flush=True)
+                return
+
+            print(
+                f"[production] Applying database migrations "
+                f"(current={sorted(current_heads)}, expected={sorted(expected_heads)})",
+                flush=True,
+            )
             migrate_upgrade(revision="heads")
             print("[production] Database migrations completed", flush=True)
 

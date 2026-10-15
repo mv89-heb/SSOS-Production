@@ -535,8 +535,13 @@ def latest_inventory_count():
 @inventory_bp.route("/count/history", methods=["GET"])
 @login_required
 def inventory_count_history():
-    """Return distinct physical count sessions; collapse legacy duplicates safely."""
+    """Return one inventory-count record per Israel-local calendar day.
+
+    A day may contain multiple saves/session IDs. Merge them into one daily
+    snapshot and keep only the latest counted quantity for each product.
+    """
     from datetime import timedelta
+    from zoneinfo import ZoneInfo
 
     days = max(1, min(request.args.get("days", default=30, type=int), 365))
     cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
@@ -548,31 +553,39 @@ def inventory_count_history():
         ).order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
     ).all()
 
-    sessions = {}
+    israel_tz = ZoneInfo("Asia/Jerusalem")
+    daily_products = {}
     for movement in rows:
-        if movement.reference_type in ("inventory_count", "bulk_inventory_count") and movement.reference_id:
-            key = ("session", movement.reference_type, movement.reference_id)
+        occurred_at = movement.occurred_at
+        if occurred_at is None:
+            day_key = "unknown"
         else:
-            day = movement.occurred_at.date().isoformat() if movement.occurred_at else "unknown"
-            key = ("legacy-day", day)
-        sessions.setdefault(key, {})
-        previous = sessions[key].get(movement.product_id)
+            if occurred_at.tzinfo is None:
+                occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+            day_key = occurred_at.astimezone(israel_tz).date().isoformat()
+
+        daily_products.setdefault(day_key, {})
+        previous = daily_products[day_key].get(movement.product_id)
         if previous is None or (movement.occurred_at, movement.id) > (previous.occurred_at, previous.id):
-            sessions[key][movement.product_id] = movement
+            daily_products[day_key][movement.product_id] = movement
 
     history = []
-    for key, by_product in sessions.items():
-        movements = sorted(by_product.values(), key=lambda m: (m.occurred_at, m.id))
+    for day_key, by_product in daily_products.items():
+        movements = sorted(
+            by_product.values(),
+            key=lambda movement: (movement.occurred_at, movement.id),
+        )
         if not movements:
             continue
         latest = movements[-1]
         history.append({
-            "count_id": key[-1] if key[0] == "session" else f"legacy-day-{key[-1]}",
+            "count_id": f"daily-{day_key}",
             "counted_at": latest.occurred_at.isoformat() if latest.occurred_at else None,
+            "count_date": day_key,
             "counted": len(movements),
-            "note": next((m.note for m in movements if m.note), None),
-            "legacy_grouped_by_day": key[0] == "legacy-day",
-            "movements": [m.to_dict() for m in movements],
+            "note": next((movement.note for movement in movements if movement.note), None),
+            "daily_grouped": True,
+            "movements": [movement.to_dict() for movement in movements],
         })
-    history.sort(key=lambda item: item["counted_at"] or "", reverse=True)
+    history.sort(key=lambda item: item["count_date"] or "", reverse=True)
     return jsonify({"success": True, "days": days, "history": history})
