@@ -512,9 +512,15 @@ def latest_inventory_count():
         )
         count_id = f"legacy-day-{day_start.date().isoformat()}"
 
-    movements = db.session.scalars(
+    raw_movements = db.session.scalars(
         statement.order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
     ).all()
+    latest_by_product = {}
+    for movement in raw_movements:
+        previous = latest_by_product.get(movement.product_id)
+        if previous is None or (movement.occurred_at, movement.id) > (previous.occurred_at, previous.id):
+            latest_by_product[movement.product_id] = movement
+    movements = sorted(latest_by_product.values(), key=lambda m: (m.occurred_at, m.id))
     return jsonify({
         "success": True,
         "has_count": True,
@@ -529,8 +535,7 @@ def latest_inventory_count():
 @inventory_bp.route("/count/history", methods=["GET"])
 @login_required
 def inventory_count_history():
-    """Return physical-count history grouped by day, including legacy single-row saves."""
-    from collections import defaultdict
+    """Return distinct physical count sessions; collapse legacy duplicates safely."""
     from datetime import timedelta
 
     days = max(1, min(request.args.get("days", default=30, type=int), 365))
@@ -543,19 +548,31 @@ def inventory_count_history():
         ).order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
     ).all()
 
-    grouped = defaultdict(list)
+    sessions = {}
     for movement in rows:
-        day = movement.occurred_at.date().isoformat() if movement.occurred_at else "unknown"
-        grouped[day].append(movement)
+        if movement.reference_type in ("inventory_count", "bulk_inventory_count") and movement.reference_id:
+            key = ("session", movement.reference_type, movement.reference_id)
+        else:
+            day = movement.occurred_at.date().isoformat() if movement.occurred_at else "unknown"
+            key = ("legacy-day", day)
+        sessions.setdefault(key, {})
+        previous = sessions[key].get(movement.product_id)
+        if previous is None or (movement.occurred_at, movement.id) > (previous.occurred_at, previous.id):
+            sessions[key][movement.product_id] = movement
 
     history = []
-    for day, movements in sorted(grouped.items(), reverse=True):
+    for key, by_product in sessions.items():
+        movements = sorted(by_product.values(), key=lambda m: (m.occurred_at, m.id))
+        if not movements:
+            continue
+        latest = movements[-1]
         history.append({
-            "count_id": f"legacy-day-{day}",
-            "counted_at": movements[-1].occurred_at.isoformat() if movements[-1].occurred_at else None,
+            "count_id": key[-1] if key[0] == "session" else f"legacy-day-{key[-1]}",
+            "counted_at": latest.occurred_at.isoformat() if latest.occurred_at else None,
             "counted": len(movements),
             "note": next((m.note for m in movements if m.note), None),
+            "legacy_grouped_by_day": key[0] == "legacy-day",
             "movements": [m.to_dict() for m in movements],
         })
-
+    history.sort(key=lambda item: item["counted_at"] or "", reverse=True)
     return jsonify({"success": True, "days": days, "history": history})

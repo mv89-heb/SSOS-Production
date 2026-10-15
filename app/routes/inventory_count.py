@@ -45,7 +45,25 @@ def latest_count():
             .order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
         ).all()
     else:
-        movements = [latest]
+        # Legacy records have no session key. Return one latest row per product
+        # from that day, rather than only one product or repeated saves.
+        from datetime import timedelta
+        day_start = latest.occurred_at.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        raw_movements = db.session.scalars(
+            select(InventoryMovement).where(
+                InventoryMovement.tenant_id == current_user.tenant_id,
+                InventoryMovement.movement_type == "count",
+                InventoryMovement.occurred_at >= day_start,
+                InventoryMovement.occurred_at < day_end,
+            ).order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
+        ).all()
+        latest_by_product = {}
+        for movement in raw_movements:
+            previous = latest_by_product.get(movement.product_id)
+            if previous is None or (movement.occurred_at, movement.id) > (previous.occurred_at, previous.id):
+                latest_by_product[movement.product_id] = movement
+        movements = sorted(latest_by_product.values(), key=lambda m: (m.occurred_at, m.id))
 
     return jsonify({
         "success": True,

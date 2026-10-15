@@ -98,6 +98,15 @@ class InventoryCalendarService:
                 InventoryMovement.occurred_at >= since,
             ).order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
         ).all()
+        # Keep only the latest physical count for each calendar day.
+        # Multiple saves/retries on one day must not distort consumption rates.
+        daily_latest = {}
+        for movement in counts:
+            day_key = movement.occurred_at.date().isoformat()
+            previous = daily_latest.get(day_key)
+            if previous is None or (movement.occurred_at, movement.id) > (previous.occurred_at, previous.id):
+                daily_latest[day_key] = movement
+        counts = sorted(daily_latest.values(), key=lambda row: (row.occurred_at, row.id))
         if len(counts) < 2:
             return Decimal("0"), Decimal("0"), Decimal("0"), len(counts)
 
