@@ -21,6 +21,8 @@ export default function NewOrderPage() {
   const searchParams = useSearchParams();
   const preselectedSupplierId = searchParams.get("supplier_id");
   const preselectedDate = searchParams.get("planned_order_date");
+  const preselectedItems = searchParams.get("items");
+  const forecastSource = searchParams.get("source") === "inventory-forecast";
 
   const [supplierId, setSupplierId] = useState<number | "">(
     preselectedSupplierId ? Number(preselectedSupplierId) : ""
@@ -46,6 +48,21 @@ export default function NewOrderPage() {
       setSupplierId("");
     }
   }, [suppliers, supplierId]);
+
+  useEffect(() => {
+    if (!forecastSource || !preselectedItems || !products?.length) return;
+    const requested = preselectedItems.split(",").map((entry) => {
+      const [rawId, rawQuantity] = entry.split(":");
+      return { product_id: Number(rawId), quantity: Number(rawQuantity) };
+    }).filter((item) => Number.isInteger(item.product_id) && item.product_id > 0 && Number.isFinite(item.quantity) && item.quantity > 0);
+    const available = requested.filter((item) => products.some((product) => product.id === item.product_id));
+    if (available.length) {
+      setLines(available);
+      setNotes((current) => current || "טיוטה מוצעת לפי צריכה שבועית מחושבת מספירות מלאי פיזיות. יש לבדוק כמויות ומחירים לפני שליחה לאישור.");
+    } else {
+      setFormError("המוצר שחושב בתחזית אינו משויך לקטלוג של הספק שנבחר. בחר ספק מתאים והוסף את המוצר ידנית.");
+    }
+  }, [products, forecastSource, preselectedItems]);
 
   const createMutation = useMutation({
     mutationFn: orderService.createOrder,
