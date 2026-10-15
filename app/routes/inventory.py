@@ -512,9 +512,15 @@ def latest_inventory_count():
         )
         count_id = f"legacy-day-{day_start.date().isoformat()}"
 
-    movements = db.session.scalars(
+    raw_movements = db.session.scalars(
         statement.order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
     ).all()
+    latest_by_product = {}
+    for movement in raw_movements:
+        previous = latest_by_product.get(movement.product_id)
+        if previous is None or (movement.occurred_at, movement.id) > (previous.occurred_at, previous.id):
+            latest_by_product[movement.product_id] = movement
+    movements = sorted(latest_by_product.values(), key=lambda m: (m.occurred_at, m.id))
     return jsonify({
         "success": True,
         "has_count": True,
