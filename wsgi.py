@@ -22,8 +22,8 @@ def _run_startup_migrations(app):
         if migrate_extension is None:
             raise RuntimeError("Flask-Migrate is not initialized")
 
-        config = migrate_extension.get_config()
-        expected_heads = set(ScriptDirectory.from_config(config).get_heads())
+        script_directory = ScriptDirectory(migrate_extension.directory)
+        expected_heads = set(script_directory.get_heads())
         with db.engine.begin() as conn:
             conn.execute(text("SELECT pg_advisory_xact_lock(73184219)"))
             current_heads = set(MigrationContext.configure(conn).get_current_heads())
