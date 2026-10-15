@@ -46,10 +46,10 @@ class InventoryCalendarService:
         period = self._period_for_date(rows, target_date)
         return Decimal(str(period.consumption_multiplier or 1)) if period else Decimal("1")
 
-    def schedule_for_product(self, product, today=None, periods=None):
+    def schedule_for_product(self, product, today=None, periods=None, base_schedule=None):
         today = today or datetime.now(timezone.utc).date()
         periods = periods if periods is not None else self.periods(start=today, end=today + timedelta(days=180), active_only=True)
-        base_schedule = self.base._supplier_schedule(product)
+        base_schedule = base_schedule if base_schedule is not None else self.base._supplier_schedule(product)
         base_order_days = set(base_schedule.get("order_days") or [])
         base_delivery_days = set(base_schedule.get("delivery_days") or [])
 
