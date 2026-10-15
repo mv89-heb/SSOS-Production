@@ -43,6 +43,13 @@ export default function InventoryCountPage() {
     staleTime: 10_000,
   });
 
+  const countHistory = useQuery({
+    queryKey: ["inventory", "count-history", 30],
+    queryFn: () => inventoryService.getCountHistory(30),
+    staleTime: 10_000,
+  });
+  const [expandedHistoryDate, setExpandedHistoryDate] = useState<string | null>(null);
+
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["inventory", "summary"],
     queryFn: inventoryService.getSummary,
@@ -297,6 +304,60 @@ export default function InventoryCountPage() {
           )}
         </section>
       )}
+
+
+      <section id="count-history" className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex flex-col gap-2 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800">
+          <div>
+            <h2 className="text-lg font-black">היסטוריית ספירות — 30 הימים האחרונים</h2>
+            <p className="mt-1 text-sm text-slate-500">כל הרשומות שנשמרו מוצגות לפי יום, כולל ספירות ישנות שנשמרו מוצר-מוצר.</p>
+          </div>
+          <button onClick={() => countHistory.refetch()} className="min-h-10 rounded-xl bg-slate-100 px-4 text-sm font-bold dark:bg-slate-900">רענן היסטוריה</button>
+        </div>
+        {countHistory.isLoading ? (
+          <div className="p-5 text-sm text-slate-500">טוען ספירות שמורות…</div>
+        ) : countHistory.isError ? (
+          <div className="p-5 text-sm text-red-600">לא ניתן לטעון את היסטוריית הספירות כרגע.</div>
+        ) : !countHistory.data?.length ? (
+          <div className="p-5 text-sm text-slate-500">לא נמצאו ספירות בטווח הזה.</div>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {countHistory.data.map((entry: any, index: number) => {
+              const dateKey = entry.count_id || entry.counted_at || String(index);
+              const expanded = expandedHistoryDate === dateKey;
+              return <div key={dateKey}>
+                <button onClick={() => setExpandedHistoryDate(expanded ? null : dateKey)} className="flex w-full items-center justify-between gap-3 p-4 text-right hover:bg-slate-50 dark:hover:bg-slate-900/60">
+                  <div>
+                    <div className="font-black">{entry.counted_at ? new Intl.DateTimeFormat("he-IL", { dateStyle: "full" }).format(new Date(entry.counted_at)) : "תאריך לא ידוע"}</div>
+                    <div className="mt-1 text-xs text-slate-500">{entry.counted_at ? new Intl.DateTimeFormat("he-IL", { timeStyle: "short" }).format(new Date(entry.counted_at)) : ""} · {entry.counted} רשומות מוצר</div>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm font-bold text-indigo-600">{expanded ? "הסתר פרטים" : "הצג פרטים"} {expanded ? <ChevronUp size={17}/> : <ChevronDown size={17}/>}</div>
+                </button>
+                {expanded && (
+                  <div className="px-3 pb-4 sm:px-4">
+                    <div className="w-full max-w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                      <table className="w-full min-w-[580px] text-right text-sm">
+                        <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-3 py-3">מוצר</th><th className="px-3 py-3">מק״ט</th><th className="px-3 py-3">כמות שנספרה</th><th className="px-3 py-3">יחידה</th></tr></thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {(entry.movements || []).map((movement: any) => {
+                            const product = products.find((item) => item.id === movement.product_id);
+                            return <tr key={movement.id}>
+                              <td className="px-3 py-3 font-bold">{product?.name || `מוצר #${movement.product_id}`}</td>
+                              <td className="px-3 py-3 text-slate-500">{product?.sku || "—"}</td>
+                              <td className="px-3 py-3 font-black">{fmt(Number(movement.quantity))}</td>
+                              <td className="px-3 py-3 text-slate-500">{product ? productUnit(product) : "—"}</td>
+                            </tr>;
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>;
+            })}
+          </div>
+        )}
+      </section>
 
 
       <section className="sticky top-1 z-30 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
