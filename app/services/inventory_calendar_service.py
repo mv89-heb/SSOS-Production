@@ -8,6 +8,7 @@ from app.models.inventory_movement import InventoryMovement, MOVEMENT_COUNT, MOV
 from app.models.inventory_planning_period import InventoryPlanningPeriod
 from app.models.order import Order, STATUS_APPROVED, STATUS_SENT
 from app.models.product import Product
+from app.models.supplier import Supplier
 from app.services.inventory_planning_service import InventoryPlanningService
 
 
