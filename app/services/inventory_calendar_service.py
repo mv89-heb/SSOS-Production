@@ -234,13 +234,97 @@ class InventoryCalendarService:
         return row
 
     def recommendations(self, *, lookback_days=60, safety_days=2, limit=500):
+        """Calculate all product recommendations with bulk database reads."""
+        lookback_days = max(7, min(int(lookback_days), 365))
+        safety_days = max(0, min(int(safety_days), 90))
         products = db.session.scalars(
-            select(Product).where(Product.tenant_id == self.tenant_id, Product.active.is_(True)).order_by(Product.name.asc()).limit(max(1, min(int(limit), 500)))
+            select(Product).where(Product.tenant_id == self.tenant_id, Product.active.is_(True))
+            .order_by(Product.name.asc()).limit(max(1, min(int(limit), 500)))
         ).all()
+        if not products:
+            return []
+        ids = [p.id for p in products]
+        today = datetime.now(timezone.utc).date()
+        since = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+        count_rows = db.session.scalars(
+            select(InventoryMovement).where(InventoryMovement.tenant_id == self.tenant_id,
+                InventoryMovement.product_id.in_(ids), InventoryMovement.movement_type == MOVEMENT_COUNT,
+                InventoryMovement.occurred_at >= since)
+            .order_by(InventoryMovement.product_id, InventoryMovement.occurred_at, InventoryMovement.id)
+        ).all()
+        receipt_rows = db.session.scalars(
+            select(InventoryMovement).where(InventoryMovement.tenant_id == self.tenant_id,
+                InventoryMovement.product_id.in_(ids), InventoryMovement.movement_type == MOVEMENT_RECEIPT,
+                InventoryMovement.occurred_at >= since)
+            .order_by(InventoryMovement.product_id, InventoryMovement.occurred_at, InventoryMovement.id)
+        ).all()
+        counts_by_product, receipts_by_product = {}, {}
+        for m in count_rows:
+            counts_by_product.setdefault(m.product_id, []).append(m)
+        for m in receipt_rows:
+            receipts_by_product.setdefault(m.product_id, []).append(m)
+        supplier_ids = {p.supplier_id for p in products if p.supplier_id is not None}
+        suppliers = {}
+        if supplier_ids:
+            suppliers = {s.id: s for s in db.session.scalars(select(Supplier).where(
+                Supplier.tenant_id == self.tenant_id, Supplier.id.in_(supplier_ids), Supplier.active.is_(True)
+            )).all()}
         inbound = self._inbound_quantities()
-        rows = [self.recommendation(product.id, lookback_days=lookback_days, safety_days=safety_days, inbound_quantities=inbound) for product in products]
+        periods = self.periods(start=today, end=today + timedelta(days=180), active_only=True)
+        rows = []
+        for product in products:
+            daily = {}
+            for m in counts_by_product.get(product.id, []):
+                key = m.occurred_at.date()
+                if key not in daily or (m.occurred_at, m.id) > (daily[key].occurred_at, daily[key].id):
+                    daily[key] = m
+            counts = sorted(daily.values(), key=lambda m: (m.occurred_at, m.id))
+            supplier = suppliers.get(product.supplier_id)
+            base_schedule = self.base._supplier_schedule_from_supplier(product, supplier)
+            row = self.base._recommendation_from_product(product, base_schedule, counts,
+                lookback_days=lookback_days, safety_days=safety_days)
+            receipts = receipts_by_product.get(product.id, [])
+            used, elapsed, received_total = Decimal("0"), Decimal("0"), Decimal("0")
+            for previous, current in zip(counts, counts[1:]):
+                days = Decimal(str(max((current.occurred_at - previous.occurred_at).total_seconds() / 86400, 0)))
+                if days <= 0:
+                    continue
+                received = sum((Decimal(str(r.quantity or 0)) for r in receipts
+                    if previous.occurred_at < r.occurred_at <= current.occurred_at), Decimal("0"))
+                consumption = Decimal(str(previous.balance_after or 0)) + received - Decimal(str(current.balance_after or 0))
+                if consumption > 0:
+                    used += consumption
+                elapsed += days
+                received_total += received
+            rate = used / elapsed if elapsed > 0 else Decimal("0")
+            schedule = self.schedule_for_product(product, today=today, periods=periods, base_schedule=base_schedule)
+            delivery = date.fromisoformat(schedule["next_delivery_date"]) if schedule.get("next_delivery_date") else None
+            horizon = max(1, (delivery - today).days + safety_days) if delivery and delivery >= today else max(1, safety_days)
+            horizon_end = min(today + timedelta(days=horizon), today + timedelta(days=180))
+            demand = self._forecast_demand(rate, today, horizon_end, periods)
+            safety = rate * Decimal(safety_days)
+            stock = Decimal(str(product.current_stock or 0))
+            inbound_qty = inbound.get(product.id, Decimal("0"))
+            target = demand + safety
+            recommended = max(Decimal("0"), target - stock - inbound_qty)
+            coverage = stock / rate if rate > 0 else None
+            status = "insufficient_data" if len(counts) < 2 else ("urgent" if stock <= 0 else ("reorder" if stock <= target else "healthy"))
+            row.update({
+                "current_stock": float(stock), "stock_checks_in_period": len(counts),
+                "observed_days": round(float(elapsed), 1), "estimated_depletion": round(float(used), 3),
+                "average_daily_usage": round(float(rate), 3), "base_average_daily_usage": round(float(rate), 3),
+                "receipts_in_observation_period": round(float(received_total), 3),
+                "confirmed_inbound": float(inbound_qty), "holiday_adjusted_demand": round(float(demand), 3),
+                "holiday_adjusted_target_stock": round(float(target), 3), "safety_stock": round(float(safety), 3),
+                "reorder_point": round(float(target), 3), "recommended_order": round(float(recommended), 3),
+                "coverage_days": round(float(coverage), 1) if coverage is not None else None,
+                "planning_horizon_days": horizon, "status": status, "data_ready": len(counts) >= 2,
+                "supplier_schedule": schedule, "active_planning_periods": [p.to_dict() for p in periods if p.end_date >= today and p.start_date <= horizon_end],
+                "planning_notes": ["הצריכה מחושבת מספירות פיזיות ורכישות בין הספירות.", "ספירות חוזרות באותו יום מאוחדות ונשמרת האחרונה.", "התחזית מתחשבת בתקופות תכנון פעילות ובמלאי נכנס מאושר או שנשלח."]
+            })
+            rows.append(row)
         priority = {"urgent": 0, "reorder": 1, "healthy": 2, "insufficient_data": 3}
-        rows.sort(key=lambda row: (priority.get(row.get("status"), 4), -(row.get("recommended_order") or 0), row.get("product_name", "")))
+        rows.sort(key=lambda r: (priority.get(r.get("status"), 4), -(r.get("recommended_order") or 0), r.get("product_name", "")))
         return rows
 
     def count_status(self):
