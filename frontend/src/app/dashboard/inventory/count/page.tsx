@@ -33,6 +33,7 @@ export default function InventoryCountPage() {
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
   const [showReset, setShowReset] = useState(false);
+  const [showLatestReport, setShowLatestReport] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const scanTimer = useRef<number | null>(null);
 
@@ -266,15 +267,34 @@ export default function InventoryCountPage() {
                 <div className="mt-1 text-xs text-slate-500">{latestCount.data.counted_at ? new Intl.DateTimeFormat("he-IL", { dateStyle: "medium", timeStyle: "short" }).format(new Date(latestCount.data.counted_at)) : ""}</div>
               </div>
             </div>
-            <button onClick={() => setFilter("counted")} className="min-h-11 rounded-xl bg-indigo-600 px-4 text-sm font-black text-white">הצג את המוצרים שנספרו</button>
+            <button onClick={() => setShowLatestReport((current) => !current)} className="min-h-11 rounded-xl bg-indigo-600 px-4 text-sm font-black text-white">{showLatestReport ? "הסתר פירוט ספירה" : "הצג פירוט ספירה"}</button>
           </div>
-          <div className="border-t border-indigo-100 px-5 py-3 text-xs text-slate-500 dark:border-indigo-950">
-            {latestCount.data.movements.slice(0, 4).map((movement) => {
-              const product = products.find((item) => item.id === movement.product_id);
-              return <span key={movement.id} className="ml-3 inline-block font-bold">{product?.name || `מוצר #${movement.product_id}`}: {fmt(movement.quantity)}</span>;
-            })}
-            {latestCount.data.movements.length > 4 && <span>ועוד {latestCount.data.movements.length - 4}…</span>}
-          </div>
+          {showLatestReport && (
+            <div className="border-t border-indigo-100 p-4 dark:border-indigo-950">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-black">דוח ספירת המלאי האחרונה — כל המוצרים שנספרו</h3>
+                <span className="text-xs text-slate-500">תאריך הספירה: {latestCount.data.counted_at ? new Intl.DateTimeFormat("he-IL", { dateStyle: "medium", timeStyle: "short" }).format(new Date(latestCount.data.counted_at)) : "—"}</span>
+              </div>
+              <div className="w-full max-w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="w-full min-w-[620px] text-right text-sm">
+                  <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900">
+                    <tr><th className="px-3 py-3">מוצר</th><th className="px-3 py-3">מק״ט</th><th className="px-3 py-3">כמות שנספרה</th><th className="px-3 py-3">יחידת מלאי</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {latestCount.data.movements.map((movement) => {
+                      const product = products.find((item) => item.id === movement.product_id);
+                      return <tr key={movement.id}>
+                        <td className="px-3 py-3 font-bold">{product?.name || `מוצר #${movement.product_id}`}</td>
+                        <td className="px-3 py-3 text-slate-500">{product?.sku || "—"}</td>
+                        <td className="px-3 py-3 font-black">{fmt(movement.quantity)}</td>
+                        <td className="px-3 py-3 text-slate-500">{product ? productUnit(product) : "—"}</td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </section>
       )}
 
