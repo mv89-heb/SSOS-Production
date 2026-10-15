@@ -489,6 +489,7 @@ def latest_inventory_count():
         })
 
     if latest.reference_type == "inventory_count" and latest.reference_id:
+        # New-format counts share a session ID, so return that exact session.
         statement = select(InventoryMovement).where(
             InventoryMovement.tenant_id == current_user.tenant_id,
             InventoryMovement.movement_type == "count",
@@ -497,16 +498,22 @@ def latest_inventory_count():
         )
         count_id = latest.reference_id
     else:
-        # Legacy single-product counts have no session ID; still show the latest
-        # physical count rather than hiding the report entirely.
+        # Legacy records were written one product at a time, often without a
+        # session ID. Recover the complete day's count instead of showing one row.
+        counted_at = latest.occurred_at
+        day_start = counted_at.replace(hour=0, minute=0, second=0, microsecond=0)
+        from datetime import timedelta
+        day_end = day_start + timedelta(days=1)
         statement = select(InventoryMovement).where(
             InventoryMovement.tenant_id == current_user.tenant_id,
-            InventoryMovement.id == latest.id,
+            InventoryMovement.movement_type == "count",
+            InventoryMovement.occurred_at >= day_start,
+            InventoryMovement.occurred_at < day_end,
         )
-        count_id = str(latest.id)
+        count_id = f"legacy-day-{day_start.date().isoformat()}"
 
     movements = db.session.scalars(
-        statement.order_by(InventoryMovement.product_id.asc(), InventoryMovement.id.asc())
+        statement.order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
     ).all()
     return jsonify({
         "success": True,
@@ -517,3 +524,38 @@ def latest_inventory_count():
         "note": latest.note,
         "movements": [movement.to_dict() for movement in movements],
     })
+
+
+@inventory_bp.route("/count/history", methods=["GET"])
+@login_required
+def inventory_count_history():
+    """Return physical-count history grouped by day, including legacy single-row saves."""
+    from collections import defaultdict
+    from datetime import timedelta
+
+    days = max(1, min(request.args.get("days", default=30, type=int), 365))
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    rows = db.session.scalars(
+        select(InventoryMovement).where(
+            InventoryMovement.tenant_id == current_user.tenant_id,
+            InventoryMovement.movement_type == "count",
+            InventoryMovement.occurred_at >= cutoff,
+        ).order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
+    ).all()
+
+    grouped = defaultdict(list)
+    for movement in rows:
+        day = movement.occurred_at.date().isoformat() if movement.occurred_at else "unknown"
+        grouped[day].append(movement)
+
+    history = []
+    for day, movements in sorted(grouped.items(), reverse=True):
+        history.append({
+            "count_id": f"legacy-day-{day}",
+            "counted_at": movements[-1].occurred_at.isoformat() if movements[-1].occurred_at else None,
+            "counted": len(movements),
+            "note": next((m.note for m in movements if m.note), None),
+            "movements": [m.to_dict() for m in movements],
+        })
+
+    return jsonify({"success": True, "days": days, "history": history})
