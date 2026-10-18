@@ -164,7 +164,7 @@ class GeminiProvider:
         """Read complete item objects from a partial JSON stream without requiring valid outer JSON."""
         found: list[dict[str, Any]] = []
         seen: set[str] = set()
-        for match in re.finditer(r'"items"\\s*:\\s*\\[', text):
+        for match in re.finditer(r'"items"\s*:\s*\[', text):
             index = match.end()
             while index < len(text):
                 while index < len(text) and (text[index].isspace() or text[index] == ","):
@@ -182,7 +182,7 @@ class GeminiProvider:
                     if in_string:
                         if escaped:
                             escaped = False
-                        elif char == "\\\\":
+                        elif char == "\\":
                             escaped = True
                         elif char == '"':
                             in_string = False
