@@ -26,7 +26,7 @@ function escapePrintHtml(value: unknown) {
 }
 
 function printPurchaseOrder(order: import("@/types").Order) {
-  const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+  const printWindow = window.open("", "_blank", "width=900,height=700");
   if (!printWindow) {
     window.alert("הדפדפן חסם חלון הדפסה. אפשר לאפשר חלונות קופצים לאתר ולנסות שוב.");
     return;
