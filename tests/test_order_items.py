@@ -74,3 +74,7 @@ def test_update_draft_persists_planned_order_date(logged_in_client_a, make_order
 def test_create_order_rejects_invalid_planned_order_date(logged_in_client_a, make_order):
     response, _, _ = make_order(logged_in_client_a, planned_order_date="not-a-date")
     assert response.status_code == 400, response.get_json()
+
+def test_create_order_rejects_noncanonical_planned_order_date(logged_in_client_a, make_order):
+    response, _, _ = make_order(logged_in_client_a, planned_order_date="20261105")
+    assert response.status_code == 400, response.get_json()
