@@ -124,7 +124,12 @@ class DocumentIntelligenceService:
             eta = progress.get("eta_seconds")
             if eta is None and total and processed > 0 and processed < total:
                 eta = max(0, round((elapsed / processed) * (total - processed)))
-            row.extracted_data = {"processing": {"phase": progress.get("phase", "processing"), "percent": percent, "pages_total": total, "pages_processed": processed, "elapsed_seconds": round(elapsed, 1), "eta_seconds": eta}}
+            previous_data = row.extracted_data if isinstance(row.extracted_data, dict) else {}
+            partial_items = progress.get("partial_items")
+            if not isinstance(partial_items, list):
+                partial_items = previous_data.get("items") if isinstance(previous_data.get("items"), list) else []
+            progress_data = {"phase": progress.get("phase", "processing"), "percent": percent, "pages_total": total, "pages_processed": processed, "elapsed_seconds": round(elapsed, 1), "eta_seconds": eta}
+            row.extracted_data = {"processing": progress_data, "items": partial_items} if partial_items else {"processing": progress_data}
             db.session.commit()
 
         try:
@@ -279,7 +284,11 @@ class DocumentIntelligenceService:
     def apply(self, analysis_id: int, lines: list[dict]):
         """Apply only explicitly reviewed mappings; Gemini never mutates catalog state."""
         PermissionService.require_role_at_least("manager")
-        row = self._get(analysis_id)
+        # Serialize application attempts for the same document in PostgreSQL so
+        # concurrent requests cannot both pass the applied-line check.
+        row = DocumentAnalysis.query.filter_by(tenant_id=self.tenant_id, id=analysis_id).with_for_update().first()
+        if row is None:
+            raise NotFound("Document analysis not found")
         if row.status == "APPLIED":
             return row
         if row.status not in {"ANALYZED", "PARTIALLY_APPLIED"} or not isinstance(row.extracted_data, dict):

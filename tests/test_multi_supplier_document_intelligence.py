@@ -68,3 +68,14 @@ def test_single_supplier_legacy_shape_remains_supported():
     assert enriched["supplier_count"] == 1
     assert enriched["supplier"]["name"] == "ספק א"
     assert enriched["items"][0]["product_matching"]["best_match"]["product_id"] == 11
+
+
+def test_stream_parser_exposes_complete_product_rows_before_json_finishes():
+    partial = (
+        '{"supplier_sections":[{"supplier":{"name":"ספק א"},"items":['
+        '{"description":"חלב 3%","quantity":2,"unit_price":7.5},'
+        '{"description":"לחם","quantity":1,"unit_price":4},'
+        '{"description":"שורה שעדיין נכתבת'
+    )
+    items = GeminiProvider._extract_completed_json_items(partial)
+    assert [item["description"] for item in items] == ["חלב 3%", "לחם"]
