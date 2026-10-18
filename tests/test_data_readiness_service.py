@@ -8,6 +8,10 @@ def test_data_readiness_endpoint_reports_empty_tenant_without_fabrication(logged
     assert payload["supplier_offers"]["active"] == 0
     assert payload["price_intelligence"]["history_rows"] == 0
     assert payload["price_intelligence"]["observation_rows"] == 0
+    assert payload["price_intelligence"]["recent_observations_90d"] == 0
+    assert payload["price_intelligence"]["older_observations_90d"] == 0
+    assert payload["price_intelligence"]["offers_not_updated_90d"] == 0
+    assert payload["price_intelligence"]["offers_missing_unit"] == 0
     assert payload["orders"]["with_realized_value"] == 0
     assert payload["readiness"] == {
         "catalog": False,
