@@ -233,10 +233,15 @@ class OrderService:
     def _parse_planned_order_date(value):
         if value in (None, ""):
             return None
+        if not isinstance(value, str) or len(value) != 10:
+            raise BadRequest("planned_order_date must be a valid ISO date (YYYY-MM-DD)")
         try:
-            return date.fromisoformat(str(value))
+            parsed = date.fromisoformat(value)
         except (TypeError, ValueError):
             raise BadRequest("planned_order_date must be a valid ISO date (YYYY-MM-DD)")
+        if parsed.isoformat() != value:
+            raise BadRequest("planned_order_date must be a valid ISO date (YYYY-MM-DD)")
+        return parsed
 
     def _build_snapshot_items(self, input_items: list, order_supplier_id: int) -> list:
         if not all(isinstance(item, dict) for item in input_items):
