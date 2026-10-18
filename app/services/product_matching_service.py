@@ -177,39 +177,65 @@ class ProductMatchingService:
         return int(match.group(1)) if match else None
 
     @classmethod
-    def _variant_conflict(cls, extracted, product) -> bool:
-        """Return True when explicit line attributes contradict a catalog item.
+    def _variant_signatures(cls, tokens, groups):
+        return {
+            group_name: {attribute_map[token] for token in tokens if token in attribute_map}
+            for group_name, attribute_map in groups.items()
+        }
 
-        A conflicting variant is rejected before barcode/SKU shortcuts and before
-        fuzzy scoring. Missing catalog attributes are treated as unsafe too when
-        the document explicitly names the attribute (e.g. small vs unspecified).
-        """
+    @classmethod
+    def _variant_conflict(cls, extracted, product) -> bool:
+        """Reject explicit contradictions before identity shortcuts or fuzzy scoring."""
         source_tokens = cls.tokens(extracted.get("description"))
-        catalog_text = " ".join(
-            str(value or "") for value in (product.name, product.description)
-        )
-        catalog_tokens = cls.tokens(catalog_text)
+        catalog_tokens = cls.tokens(product.name)
 
         source_measure = cls._measure_signature(extracted.get("description"))
         catalog_measure = cls._measure_signature(product.name)
-        if source_measure is not None and source_measure != catalog_measure:
+        if source_measure is not None and catalog_measure is not None and source_measure != catalog_measure:
             return True
         source_percent = cls._percent_signature(extracted.get("description"))
         catalog_percent = cls._percent_signature(product.name)
-        if source_percent is not None and source_percent != catalog_percent:
+        if source_percent is not None and catalog_percent is not None and source_percent != catalog_percent:
             return True
         source_count = cls._package_count(extracted.get("description"))
         catalog_count = cls._package_count(product.name)
-        if source_count is not None and source_count != catalog_count:
+        if source_count is not None and catalog_count is not None and source_count != catalog_count:
+            return True
+
+        source_types = set()
+        catalog_types = set()
+        for group_name, attribute_map in cls.ITEM_TYPE_GROUPS.items():
+            source_types.update((group_name, attribute_map[token]) for token in source_tokens if token in attribute_map)
+            catalog_types.update((group_name, attribute_map[token]) for token in catalog_tokens if token in attribute_map)
+        if source_types and catalog_types and source_types.isdisjoint(catalog_types):
             return True
 
         for group in (cls.ITEM_TYPE_GROUPS, cls.VARIANT_GROUPS):
             for attribute_map in group.values():
                 source_values = {attribute_map[token] for token in source_tokens if token in attribute_map}
-                if not source_values:
-                    continue
                 catalog_values = {attribute_map[token] for token in catalog_tokens if token in attribute_map}
-                if source_values != catalog_values:
+                if source_values and catalog_values and source_values.isdisjoint(catalog_values):
+                    return True
+        return False
+
+    @classmethod
+    def _variant_unconfirmed(cls, extracted, product) -> bool:
+        """Flag a candidate for review when the line has attributes the catalog omits."""
+        source_tokens = cls.tokens(extracted.get("description"))
+        catalog_tokens = cls.tokens(product.name)
+        if cls._measure_signature(extracted.get("description")) is not None and cls._measure_signature(product.name) is None:
+            return True
+        if cls._percent_signature(extracted.get("description")) is not None and cls._percent_signature(product.name) is None:
+            return True
+        if cls._package_count(extracted.get("description")) is not None and cls._package_count(product.name) is None:
+            return True
+        for group in (cls.ITEM_TYPE_GROUPS, cls.VARIANT_GROUPS):
+            for attribute_map in group.values():
+                source_values = {attribute_map[token] for token in source_tokens if token in attribute_map}
+                catalog_values = {attribute_map[token] for token in catalog_tokens if token in attribute_map}
+                if source_values and not catalog_values:
+                    return True
+                if source_values and catalog_values and source_values != catalog_values:
                     return True
         return False
 
@@ -217,9 +243,12 @@ class ProductMatchingService:
     def _candidate_score(cls, extracted, product, supplier_id: int | None = None) -> tuple[float, str]:
         if cls._variant_conflict(extracted, product):
             return 0.0, "PRODUCT_VARIANT_MISMATCH"
+        unconfirmed_variant = cls._variant_unconfirmed(extracted, product)
         identity, method = cls._identity_score(extracted, product)
         if identity:
-            return identity, method
+            # Identity data is strong evidence, but an omitted explicit variant
+            # must keep the line in manual review rather than auto-select it.
+            return (min(identity, 0.89), "IDENTITY_VARIANT_UNCONFIRMED") if unconfirmed_variant else (identity, method)
         description = extracted.get("description") or ""
         score = max(cls._text_score(description, product.name), cls._text_score(description, product.description) * 0.92)
         extracted_unit = cls.normalize(extracted.get("unit"))
@@ -235,6 +264,8 @@ class ProductMatchingService:
                 pass
         if supplier_id is not None and product.supplier_id == supplier_id:
             score = min(1.0, score + 0.05)
+        if unconfirmed_variant:
+            score = min(score, 0.89)
         return round(score, 4), "NAME_SIMILARITY"
 
     def _load_catalog(self):
