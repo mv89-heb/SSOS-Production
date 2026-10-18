@@ -10,7 +10,15 @@ export interface OrderItem { product_id: number; product_name: string; sku: stri
 export interface Order { id: number; tenant_id: number; user_id: number; order_number: string; supplier_name: string; planned_order_date: string | null; supplier_contact: string | null; supplier_email: string | null; status: OrderStatus; reminder_state: ReminderState; reminder_rules_snapshot: Record<string, unknown> | null; next_reminder_at: string | null; subtotal: number; discount_total: number; tax_total: number; final_total: number; currency: string; items: OrderItem[]; snapshot: unknown | null; snapshot_taken_at: string | null; notes: string | null; created_at: string; updated_at: string; }
 export interface CreateOrderItemInput { product_id: number; quantity: number; }
 export interface CreateOrderInput { supplier_id: number; currency?: string; notes?: string; planned_order_date?: string | null; items: CreateOrderItemInput[]; }
-export interface Supplier { id: number; tenant_id: number; name: string; contact_name: string | null; email: string | null; phone: string | null; phone2?: string | null; customer_number?: string | null; delivery_days?: string | null; order_days?: string | null; active: boolean; created_at: string; }
+export interface Supplier {
+  id: number; tenant_id: number; name: string; contact_name: string | null; email: string | null;
+  phone: string | null; phone2?: string | null; mobile?: string | null; customer_number?: string | null;
+  delivery_days?: string | null; order_days?: string | null; address?: string | null; city?: string | null;
+  tax_id?: string | null; website?: string | null; supplier_category?: string | null; payment_terms?: string | null;
+  credit_days?: number | null; minimum_order_amount?: number | null; delivery_fee?: number | null;
+  lead_time_days?: number | null; order_cutoff_time?: string | null; certification_details?: string | null;
+  notes?: string | null; ordering_rules?: Record<string, unknown>; active: boolean; created_at: string;
+}
 export interface Product { id: number; supplier_id: number; sku: string | null; name: string; description: string | null; current_price: number | null; currency: string; active: boolean; created_at: string; image_url: string | null; barcode: string | null; category: string | null; category_source?: "USER" | "RULES" | "LEARNED" | string | null; category_confidence?: number | null; category_reviewed?: boolean; unit: string | null; stock_unit?: "ארגז" | "יחידה" | string | null; units_per_carton: number | null; supplier_sku: string | null; current_stock: number | null; min_stock: number | null; recommended_stock: number | null; }
 export interface AuditLogEntry { id: number; tenant_id: number; user_id: number | null; user_email: string | null; user_full_name: string | null; action: string; title: string | null; metadata: Record<string, unknown>; previous_hash: string; hash_chain: string; created_at: string; timestamp_iso: string; }
 export interface SupplierOffer { id: number; product_id: number; supplier_id: number; supplier_name: string | null; supplier_sku: string | null; price: number; currency: string; unit: string | null; units_per_carton: number | null; active: boolean; created_at: string; updated_at: string; }
