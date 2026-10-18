@@ -169,7 +169,7 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
   const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc");
   const [search, setSearch] = useState("");
   const [isEditing, setIsEditing] = useState(false);
-  const [form, setForm] = useState({ name: "", contact_name: "", email: "", phone: "", phone2: "", customer_number: "", order_days: [] as WeekDay[], delivery_days: [] as WeekDay[], active: true });
+  const [form, setForm] = useState({ name: "", contact_name: "", email: "", phone: "", phone2: "", mobile: "", customer_number: "", address: "", city: "", tax_id: "", website: "", supplier_category: "", payment_terms: "", credit_days: "", minimum_order_amount: "", delivery_fee: "", lead_time_days: "", order_cutoff_time: "", certification_details: "", notes: "", order_days: [] as WeekDay[], delivery_days: [] as WeekDay[], active: true });
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
@@ -186,7 +186,21 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
         email: supplier.email ?? "",
         phone: supplier.phone ?? "",
         phone2: supplier.phone2 ?? "",
+        mobile: supplier.mobile ?? "",
         customer_number: supplier.customer_number ?? "",
+        address: supplier.address ?? "",
+        city: supplier.city ?? "",
+        tax_id: supplier.tax_id ?? "",
+        website: supplier.website ?? "",
+        supplier_category: supplier.supplier_category ?? "",
+        payment_terms: supplier.payment_terms ?? "",
+        credit_days: supplier.credit_days == null ? "" : String(supplier.credit_days),
+        minimum_order_amount: supplier.minimum_order_amount == null ? "" : String(supplier.minimum_order_amount),
+        delivery_fee: supplier.delivery_fee == null ? "" : String(supplier.delivery_fee),
+        lead_time_days: supplier.lead_time_days == null ? "" : String(supplier.lead_time_days),
+        order_cutoff_time: supplier.order_cutoff_time ?? "",
+        certification_details: supplier.certification_details ?? "",
+        notes: supplier.notes ?? "",
         order_days: parseDays(supplier.order_days),
         delivery_days: parseDays(supplier.delivery_days),
         active: supplier.active,
@@ -204,7 +218,21 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
       email: form.email,
       phone: form.phone,
       phone2: form.phone2,
+      mobile: form.mobile,
       customer_number: form.customer_number,
+      address: form.address,
+      city: form.city,
+      tax_id: form.tax_id,
+      website: form.website,
+      supplier_category: form.supplier_category,
+      payment_terms: form.payment_terms,
+      credit_days: form.credit_days.trim() ? Number(form.credit_days) : null,
+      minimum_order_amount: form.minimum_order_amount.trim() ? Number(form.minimum_order_amount) : null,
+      delivery_fee: form.delivery_fee.trim() ? Number(form.delivery_fee) : null,
+      lead_time_days: form.lead_time_days.trim() ? Number(form.lead_time_days) : null,
+      order_cutoff_time: form.order_cutoff_time,
+      certification_details: form.certification_details,
+      notes: form.notes,
       order_days: serializeDays(form.order_days),
       delivery_days: serializeDays(form.delivery_days),
       active: form.active,
@@ -250,6 +278,20 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
                 <div><label className="mb-1.5 block text-sm font-semibold">טלפון נוסף</label><Input value={form.phone2} onChange={(e) => setForm((f) => ({ ...f, phone2: e.target.value }))} /></div>
                 <div><label className="mb-1.5 block text-sm font-semibold">מס׳ לקוח</label><Input value={form.customer_number} onChange={(e) => setForm((f) => ({ ...f, customer_number: e.target.value }))} /></div>
                 <div><label className="mb-1.5 block text-sm font-semibold">אימייל</label><Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-semibold">נייד</label><Input value={form.mobile} onChange={(e) => setForm((f) => ({ ...f, mobile: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-semibold">כתובת</label><Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-semibold">עיר</label><Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-semibold">ח.פ. / עוסק מורשה</label><Input value={form.tax_id} onChange={(e) => setForm((f) => ({ ...f, tax_id: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-semibold">אתר אינטרנט</label><Input value={form.website} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))} placeholder="https://..." /></div>
+                <div><label className="mb-1.5 block text-sm font-semibold">קטגוריית ספק</label><Input value={form.supplier_category} onChange={(e) => setForm((f) => ({ ...f, supplier_category: e.target.value }))} placeholder="למשל: מזון, ניקיון, ציוד" /></div>
+                <div><label className="mb-1.5 block text-sm font-semibold">תנאי תשלום</label><Input value={form.payment_terms} onChange={(e) => setForm((f) => ({ ...f, payment_terms: e.target.value }))} placeholder="למשל: שוטף + 30" /></div>
+                <div><label className="mb-1.5 block text-sm font-semibold">ימי אשראי</label><Input type="number" min="0" value={form.credit_days} onChange={(e) => setForm((f) => ({ ...f, credit_days: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-semibold">מינימום הזמנה (₪)</label><Input type="number" min="0" step="0.01" value={form.minimum_order_amount} onChange={(e) => setForm((f) => ({ ...f, minimum_order_amount: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-semibold">דמי משלוח (₪)</label><Input type="number" min="0" step="0.01" value={form.delivery_fee} onChange={(e) => setForm((f) => ({ ...f, delivery_fee: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-semibold">זמן אספקה משוער (ימים)</label><Input type="number" min="0" value={form.lead_time_days} onChange={(e) => setForm((f) => ({ ...f, lead_time_days: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-semibold">שעת סגירת הזמנות</label><Input type="time" value={form.order_cutoff_time} onChange={(e) => setForm((f) => ({ ...f, order_cutoff_time: e.target.value }))} /></div>
+                <div className="sm:col-span-2"><label className="mb-1.5 block text-sm font-semibold">כשרות / תעודות / תקנים</label><Input value={form.certification_details} onChange={(e) => setForm((f) => ({ ...f, certification_details: e.target.value }))} placeholder="פרטים כפי שאומתו מול הספק" /></div>
+                <div className="sm:col-span-2"><label className="mb-1.5 block text-sm font-semibold">הערות פנימיות</label><textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={3} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></div>
                 <div className="sm:col-span-2"><label className="mb-1.5 block text-sm font-semibold">סטטוס</label><label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700"><input type="checkbox" checked={form.active} onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))} className="h-4 w-4 accent-indigo-600" /><span className="text-sm font-medium">ספק פעיל</span></label></div>
               </CardContent>
             </Card>
@@ -273,7 +315,21 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
               <div><dt className="text-xs text-slate-500">איש קשר</dt><dd className="mt-1 font-medium">{supplier.contact_name || "—"}</dd></div>
               <div><dt className="text-xs text-slate-500">אימייל</dt><dd className="mt-1 font-medium">{supplier.email || "—"}</dd></div>
               <div><dt className="text-xs text-slate-500">טלפון</dt><dd className="mt-1 font-medium">{supplier.phone || "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">טלפון נוסף</dt><dd className="mt-1 font-medium">{supplier.phone2 || "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">נייד</dt><dd className="mt-1 font-medium">{supplier.mobile || "—"}</dd></div>
               <div><dt className="text-xs text-slate-500">מס׳ לקוח</dt><dd className="mt-1 font-medium">{supplier.customer_number || "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">כתובת</dt><dd className="mt-1 font-medium">{[supplier.address, supplier.city].filter(Boolean).join(", ") || "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">ח.פ. / עוסק מורשה</dt><dd className="mt-1 font-medium">{supplier.tax_id || "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">אתר אינטרנט</dt><dd className="mt-1 font-medium">{supplier.website ? <a href={supplier.website.startsWith("http://") || supplier.website.startsWith("https://") ? supplier.website : "https://" + supplier.website} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">{supplier.website}</a> : "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">קטגוריית ספק</dt><dd className="mt-1 font-medium">{supplier.supplier_category || "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">תנאי תשלום</dt><dd className="mt-1 font-medium">{supplier.payment_terms || "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">ימי אשראי</dt><dd className="mt-1 font-medium">{supplier.credit_days ?? "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">מינימום הזמנה</dt><dd className="mt-1 font-medium">{supplier.minimum_order_amount != null ? `₪${Number(supplier.minimum_order_amount).toLocaleString("he-IL", {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">דמי משלוח</dt><dd className="mt-1 font-medium">{supplier.delivery_fee != null ? `₪${Number(supplier.delivery_fee).toLocaleString("he-IL", {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">זמן אספקה משוער</dt><dd className="mt-1 font-medium">{supplier.lead_time_days != null ? `${supplier.lead_time_days} ימים` : "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">שעת סגירת הזמנות</dt><dd className="mt-1 font-medium">{supplier.order_cutoff_time || "—"}</dd></div>
+              <div className="sm:col-span-2 lg:col-span-4"><dt className="text-xs text-slate-500">כשרות / תעודות / תקנים</dt><dd className="mt-1 whitespace-pre-wrap font-medium">{supplier.certification_details || "לא הוזן מידע מאומת"}</dd></div>
+              <div className="sm:col-span-2 lg:col-span-4"><dt className="text-xs text-slate-500">הערות פנימיות</dt><dd className="mt-1 whitespace-pre-wrap font-medium">{supplier.notes || "—"}</dd></div>
               <div className="lg:col-span-2"><dt className="text-xs text-slate-500">ימי הזמנות</dt><dd className="mt-2 flex flex-wrap gap-1.5">{parseDays(supplier.order_days).map((day) => <span key={day} className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">{day}</span>)}{!parseDays(supplier.order_days).length && <span className="text-sm text-slate-400">לא הוגדרו</span>}</dd></div>
               <div className="lg:col-span-2"><dt className="text-xs text-slate-500">ימי אספקה</dt><dd className="mt-2 flex flex-wrap gap-1.5">{parseDays(supplier.delivery_days).map((day) => <span key={day} className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">{day}</span>)}{!parseDays(supplier.delivery_days).length && <span className="text-sm text-slate-400">לא הוגדרו</span>}</dd></div>
             </CardContent>

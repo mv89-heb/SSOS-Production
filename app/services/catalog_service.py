@@ -13,7 +13,13 @@ from app.utils.validators import validate_product_payload
 class CatalogService:
     """Tenant-scoped supplier/product catalog operations."""
 
-    SUPPLIER_FIELDS = ("name", "contact_name", "email", "phone", "phone2", "customer_number", "delivery_days", "order_days", "active")
+    SUPPLIER_FIELDS = (
+        "name", "contact_name", "email", "phone", "phone2", "mobile",
+        "customer_number", "delivery_days", "order_days", "active",
+        "address", "city", "tax_id", "website", "supplier_category",
+        "payment_terms", "credit_days", "minimum_order_amount", "delivery_fee",
+        "lead_time_days", "order_cutoff_time", "certification_details", "notes",
+    )
     PRODUCT_FIELDS = ("name", "sku", "description", "current_price", "currency", "active", "image_url", "barcode", "category", "unit", "units_per_carton", "supplier_sku", "current_stock", "min_stock", "recommended_stock")
     OFFER_FIELDS = ("supplier_sku", "price", "currency", "unit", "units_per_carton", "active")
     WEEK_DAYS = ("ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת")
@@ -62,6 +68,37 @@ class CatalogService:
             fields["order_days"] = cls._normalize_days(fields["order_days"])
         if "delivery_days" in fields:
             fields["delivery_days"] = cls._normalize_days(fields["delivery_days"])
+        for field in ("credit_days", "lead_time_days"):
+            if field in fields:
+                value = fields[field]
+                if value is None or str(value).strip() == "":
+                    fields[field] = None
+                else:
+                    try:
+                        parsed = int(value)
+                    except (TypeError, ValueError):
+                        raise BadRequest(f"{field} must be a whole number")
+                    if parsed < 0:
+                        raise BadRequest(f"{field} cannot be negative")
+                    fields[field] = parsed
+        for field in ("minimum_order_amount", "delivery_fee"):
+            if field in fields:
+                value = fields[field]
+                if value is None or str(value).strip() == "":
+                    fields[field] = None
+                else:
+                    try:
+                        parsed = float(value)
+                    except (TypeError, ValueError):
+                        raise BadRequest(f"{field} must be a valid amount")
+                    if not math.isfinite(parsed) or parsed < 0:
+                        raise BadRequest(f"{field} cannot be negative or non-finite")
+                    fields[field] = parsed
+        for field in ("name", "contact_name", "email", "phone", "phone2", "mobile", "customer_number",
+                      "address", "city", "tax_id", "website", "supplier_category", "payment_terms",
+                      "order_cutoff_time", "certification_details", "notes"):
+            if field in fields and fields[field] is not None:
+                fields[field] = str(fields[field]).strip() or None
         return fields
 
     def list_suppliers(self, active_only=False): return self.supplier_repo.get_active() if active_only else self.supplier_repo.list_all()
