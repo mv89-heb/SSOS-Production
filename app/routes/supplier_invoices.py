@@ -1,10 +1,13 @@
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from io import BytesIO
+import os
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_login import current_user, login_required
 from sqlalchemy import select
 from werkzeug.exceptions import BadRequest, Conflict, NotFound, HTTPException
+from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.models.order import Order
@@ -135,3 +138,75 @@ def record_invoice_payment(invoice_id):
     except Exception:
         db.session.rollback()
         raise
+
+
+_ALLOWED_ATTACHMENTS = {
+    ".pdf": ("application/pdf", lambda data: data.startswith(b"%PDF-")),
+    ".jpg": ("image/jpeg", lambda data: data.startswith(b"\\xff\\xd8\\xff")),
+    ".jpeg": ("image/jpeg", lambda data: data.startswith(b"\\xff\\xd8\\xff")),
+    ".png": ("image/png", lambda data: data.startswith(b"\\x89PNG\\r\\n\\x1a\\n")),
+}
+
+
+def _invoice_for_tenant(invoice_id):
+    invoice = db.session.scalar(select(SupplierInvoice).where(
+        SupplierInvoice.id == invoice_id,
+        SupplierInvoice.tenant_id == current_user.tenant_id,
+    ))
+    if invoice is None:
+        raise NotFound("Supplier invoice not found")
+    return invoice
+
+
+@supplier_invoices_bp.route("/supplier-invoices/<int:invoice_id>/attachment", methods=["POST"])
+@login_required
+def upload_supplier_invoice_attachment(invoice_id):
+    try:
+        PermissionService.require_role_at_least("employee")
+        invoice = _invoice_for_tenant(invoice_id)
+        upload = request.files.get("file")
+        if upload is None or not upload.filename:
+            raise BadRequest("file is required")
+        filename = secure_filename(os.path.basename(upload.filename))[:255]
+        extension = os.path.splitext(filename)[1].lower()
+        spec = _ALLOWED_ATTACHMENTS.get(extension)
+        if not filename or spec is None:
+            raise BadRequest("Only PDF, JPG, JPEG and PNG invoice files are supported")
+        data = upload.stream.read(10 * 1024 * 1024 + 1)
+        if not data:
+            raise BadRequest("Uploaded file is empty")
+        if len(data) > 10 * 1024 * 1024:
+            raise BadRequest("Invoice attachment must not exceed 10 MB")
+        mime_type, validate_signature = spec
+        if not validate_signature(data):
+            raise BadRequest("The file content does not match its extension")
+        invoice.attachment_filename = filename
+        invoice.attachment_mime_type = mime_type
+        invoice.attachment_size = len(data)
+        invoice.attachment_data = data
+        db.session.commit()
+        return jsonify({"success": True, "invoice": invoice.to_dict()}), 200
+    except HTTPException as exc:
+        db.session.rollback()
+        return _error(exc)
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+@supplier_invoices_bp.route("/supplier-invoices/<int:invoice_id>/attachment", methods=["GET"])
+@login_required
+def download_supplier_invoice_attachment(invoice_id):
+    try:
+        invoice = _invoice_for_tenant(invoice_id)
+        if not invoice.attachment_data or not invoice.attachment_filename or not invoice.attachment_mime_type:
+            raise NotFound("No attachment is stored for this invoice")
+        return send_file(
+            BytesIO(invoice.attachment_data),
+            mimetype=invoice.attachment_mime_type,
+            as_attachment=True,
+            download_name=invoice.attachment_filename,
+            max_age=0,
+        )
+    except HTTPException as exc:
+        return _error(exc)
