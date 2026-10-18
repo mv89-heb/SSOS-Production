@@ -17,7 +17,20 @@ export const documentIntelligenceService = {
   uploadAndAnalyze: async (file: File, onUploadProgress?: (percent: number) => void, onAnalysisStatus?: (analysis: DocumentAnalysis) => void) => {
     const uploaded = await documentIntelligenceService.upload(file, onUploadProgress);
     onAnalysisStatus?.(uploaded);
-    const analyzePromise = documentIntelligenceService.analyze(uploaded.id);
+    // Capture failures immediately. Previously a rejected /analyze request could
+    // leave the status-polling loop running forever on an UPLOADED record.
+    let analyzeError: unknown = null;
+    let analyzeFinished = false;
+    const analyzePromise = documentIntelligenceService.analyze(uploaded.id)
+      .then((result) => {
+        analyzeFinished = true;
+        return result;
+      })
+      .catch((error: unknown) => {
+        analyzeError = error;
+        analyzeFinished = true;
+        return null;
+      });
     let active = true;
     while (active) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -26,9 +39,22 @@ export const documentIntelligenceService = {
         onAnalysisStatus?.(current);
         active = !["ANALYZED", "PARTIALLY_APPLIED", "FAILED", "AI_UNAVAILABLE", "APPLIED"].includes(current.status);
       } catch { /* The analyze request remains authoritative. */ }
+      if (analyzeError) throw analyzeError;
+      if (analyzeFinished && active) {
+        const result = await analyzePromise;
+        if (result) {
+          onAnalysisStatus?.(result);
+          return result;
+        }
+        throw new Error("בקשת הניתוח הסתיימה ללא תוצאה");
+      }
       if (!active) break;
     }
-    const result = await analyzePromise; onAnalysisStatus?.(result); return result;
+    const result = await analyzePromise;
+    if (analyzeError) throw analyzeError;
+    if (!result) throw new Error("בקשת הניתוח הסתיימה ללא תוצאה");
+    onAnalysisStatus?.(result);
+    return result;
   },
   uploadManyAndAnalyze: async (files: File[], onFileStatus?: (file: File, analysis: DocumentAnalysis | null, stage: "uploading" | "uploaded" | "processing" | "done", percent: number) => void) => {
     const results: DocumentAnalysis[] = [];
