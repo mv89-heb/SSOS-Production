@@ -101,6 +101,20 @@ def analyze_document(analysis_id):
         return _internal_error(exc, "analysis")
 
 
+@document_intelligence_bp.route("/<int:analysis_id>/rematch", methods=["POST"])
+@login_required
+def rematch_document(analysis_id):
+    try:
+        row = DocumentIntelligenceService(current_user.tenant_id, current_user.id).rematch(analysis_id)
+        return jsonify({"success": True, "analysis": row.to_dict()}), 200
+    except HTTPException as exc:
+        return _handle(exc)
+    except ValueError as exc:
+        return jsonify({"success": False, "error": "validation_error", "message": str(exc)}), 400
+    except Exception as exc:
+        return _internal_error(exc, "rematch")
+
+
 @document_intelligence_bp.route("/<int:analysis_id>/apply", methods=["POST"])
 @login_required
 def apply_document(analysis_id):

@@ -164,6 +164,22 @@ class DocumentIntelligenceService:
             db.session.commit()
             raise
 
+    def rematch(self, analysis_id: int):
+        """Refresh deterministic catalog matches for saved extraction without calling Gemini."""
+        PermissionService.require_role_at_least("manager")
+        row = self._get(analysis_id)
+        if row.status not in {"ANALYZED", "PARTIALLY_APPLIED"} or not isinstance(row.extracted_data, dict):
+            raise BadRequest("Document must be successfully analyzed before refreshing product matches")
+        if not isinstance(row.extracted_data.get("items"), list):
+            raise BadRequest("Document has no extracted item lines to rematch")
+
+        # Work from the saved extraction. The original temporary upload is already
+        # deleted after analysis, and re-running Gemini would spend API credits.
+        refreshed_data = ProductMatchingService(self.tenant_id).enrich_document(dict(row.extracted_data))
+        row.extracted_data = refreshed_data
+        db.session.commit()
+        return row
+
     def create_product_from_line(self, analysis_id: int, line_index: int, data: dict | None = None):
         """Create a catalog product from one extracted line and apply that line atomically."""
         PermissionService.require_role_at_least("manager")
