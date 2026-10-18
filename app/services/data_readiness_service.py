@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import func, select
 
 from app.extensions import db
@@ -65,6 +67,34 @@ class ProcurementDataReadinessService:
         price_observations = db.session.scalar(
             select(func.count()).select_from(PriceObservation).where(PriceObservation.tenant_id == tenant_id)
         ) or 0
+
+        # A non-zero current price is not evidence that the offer is fresh.
+        # Report age separately so consumers can distinguish missing from old data.
+        freshness_cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=90)
+        recent_observations_90d = db.session.scalar(
+            select(func.count()).select_from(PriceObservation).where(
+                PriceObservation.tenant_id == tenant_id,
+                PriceObservation.observed_at >= freshness_cutoff,
+            )
+        ) or 0
+        older_observations_90d = db.session.scalar(
+            select(func.count()).select_from(PriceObservation).where(
+                PriceObservation.tenant_id == tenant_id,
+                PriceObservation.observed_at < freshness_cutoff,
+            )
+        ) or 0
+        offers_not_updated_90d = db.session.scalar(
+            select(func.count()).select_from(SupplierProductOffer).where(
+                *active_offer_filter,
+                SupplierProductOffer.updated_at < freshness_cutoff,
+            )
+        ) or 0
+        offers_missing_unit = db.session.scalar(
+            select(func.count()).select_from(SupplierProductOffer).where(
+                *active_offer_filter,
+                (SupplierProductOffer.unit.is_(None) | (func.trim(SupplierProductOffer.unit) == "")),
+            )
+        ) or 0
         document_analyses = db.session.scalar(
             select(func.count()).select_from(DocumentAnalysis).where(DocumentAnalysis.tenant_id == tenant_id)
         ) or 0
@@ -95,7 +125,14 @@ class ProcurementDataReadinessService:
                 "suppliers_covered": int(covered_suppliers),
             },
             "suppliers": {"active": int(suppliers)},
-            "price_intelligence": {"history_rows": int(price_history), "observation_rows": int(price_observations)},
+            "price_intelligence": {
+                "history_rows": int(price_history),
+                "observation_rows": int(price_observations),
+                "recent_observations_90d": int(recent_observations_90d),
+                "older_observations_90d": int(older_observations_90d),
+                "offers_not_updated_90d": int(offers_not_updated_90d),
+                "offers_missing_unit": int(offers_missing_unit),
+            },
             "documents": {"analyses": int(document_analyses)},
             "orders": {"total": int(orders), "with_realized_value": int(priced_orders)},
             "readiness": readiness,
