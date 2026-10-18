@@ -66,6 +66,71 @@ def upgrade():
                 )
             )
 
+    # The committed master file is the authoritative source for legacy
+    # contact names and phone numbers. Never replace a non-empty live value.
+    from pathlib import Path
+    import re
+    import unicodedata
+    from openpyxl import load_workbook
+
+    def normalize_name(value):
+        value = unicodedata.normalize("NFKC", str(value or "")).strip().casefold()
+        value = value.replace("בן אן ג'ריס", "בן אנד ג'רי").replace("בן ג'ריס", "בן אנד ג'רי").replace("בנז'ריס", "בן אנד ג'רי")
+        return re.sub(r"[\\W_]+", "", value, flags=re.UNICODE)
+
+    workbook_path = Path(__file__).resolve().parents[2] / "Fixed_Suppliers_Master.xlsx"
+    if workbook_path.exists():
+        workbook = load_workbook(workbook_path, read_only=True, data_only=True)
+        sheet = workbook.active
+        rows = sheet.iter_rows(values_only=True)
+        headers = [str(value or "").strip() for value in next(rows, ())]
+        index = {header: position for position, header in enumerate(headers)}
+        required_headers = {"שם ספק", "טלפון ראשי", "טלפון נוסף", "נייד", "איש קשר"}
+        if required_headers.issubset(index):
+            contact_table = sa.table(
+                "suppliers",
+                sa.column("id", sa.Integer),
+                sa.column("name", sa.String),
+                sa.column("contact_name", sa.String),
+                sa.column("phone", sa.String),
+                sa.column("phone2", sa.String),
+                sa.column("mobile", sa.String),
+            )
+            existing_rows = bind.execute(sa.select(contact_table)).mappings().all()
+            by_name = {}
+            for existing in existing_rows:
+                by_name.setdefault(normalize_name(existing["name"]), []).append(existing)
+            for values in rows:
+                source_name = str(values[index["שם ספק"]] or "").strip()
+                if not source_name:
+                    continue
+                matches = by_name.get(normalize_name(source_name), [])
+                # Ambiguous normalized names are skipped rather than guessed.
+                if len(matches) != 1:
+                    continue
+                existing = matches[0]
+                def source_value(header):
+                    value = values[index[header]] if index[header] < len(values) else None
+                    text = str(value).strip() if value is not None else ""
+                    return text if text and text.casefold() != "nan" else None
+                updates = {}
+                for source_header, target_column in (
+                    ("איש קשר", "contact_name"),
+                    ("טלפון ראשי", "phone"),
+                    ("טלפון נוסף", "phone2"),
+                    ("נייד", "mobile"),
+                ):
+                    value = source_value(source_header)
+                    if value and not str(existing[target_column] or "").strip():
+                        updates[target_column] = value
+                if updates:
+                    bind.execute(
+                        contact_table.update()
+                        .where(contact_table.c.id == existing["id"])
+                        .values(**updates)
+                    )
+        workbook.close()
+
 
 def downgrade():
     # The schedule backfill intentionally remains: deleting newly learned
