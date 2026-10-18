@@ -1,7 +1,13 @@
+from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from itertools import combinations
 
+from sqlalchemy import select
+
 from app.extensions import db
+from app.models.price_observation import PriceObservation
+from app.models.supplier import Supplier
+from app.models.supplier_offer import SupplierProductOffer
 from app.repositories.product_repository import ProductRepository
 from app.repositories.price_history_repository import PriceHistoryRepository
 from app.repositories.price_observation_repository import PriceObservationRepository
@@ -97,13 +103,90 @@ class PriceIntelligenceService:
             return "יחידת השוואה שונה — לא ניתן להשוות מחיר ישירות"
         return None
 
+    def _build_batch_comparison_context(self, products):
+        """Load comparison data in a few tenant-scoped queries instead of N+1 lookups."""
+        product_by_id = {product.id: product for product in products}
+        product_ids = list(product_by_id)
+        if not product_ids:
+            return {"products": {}, "offers": {}, "observations": {}, "suppliers": {}}
+
+        offers_by_product = defaultdict(list)
+        offers = db.session.scalars(
+            select(SupplierProductOffer)
+            .where(
+                SupplierProductOffer.tenant_id == self.tenant_id,
+                SupplierProductOffer.product_id.in_(product_ids),
+                SupplierProductOffer.active.is_(True),
+            )
+            .order_by(SupplierProductOffer.product_id.asc(), SupplierProductOffer.price.asc(), SupplierProductOffer.id.asc())
+        ).all()
+        for offer in offers:
+            offers_by_product[offer.product_id].append(offer)
+
+        # Only the latest positive observation per product/supplier is used as a
+        # comparison source. Ordering lets Python select that row in one pass.
+        observations_by_product = defaultdict(list)
+        seen_observation_suppliers = set()
+        observations = db.session.scalars(
+            select(PriceObservation)
+            .where(
+                PriceObservation.tenant_id == self.tenant_id,
+                PriceObservation.product_id.in_(product_ids),
+                PriceObservation.observed_price > 0,
+            )
+            .order_by(
+                PriceObservation.product_id.asc(),
+                PriceObservation.supplier_id.asc(),
+                PriceObservation.observed_at.desc(),
+                PriceObservation.id.desc(),
+            )
+        ).all()
+        for observation in observations:
+            key = (observation.product_id, observation.supplier_id)
+            if key in seen_observation_suppliers:
+                continue
+            seen_observation_suppliers.add(key)
+            observations_by_product[observation.product_id].append(observation)
+
+        supplier_ids = {
+            product.supplier_id for product in products if product.supplier_id is not None
+        }
+        supplier_ids.update(offer.supplier_id for offer in offers if offer.supplier_id is not None)
+        supplier_ids.update(row.supplier_id for row in observations if row.supplier_id is not None)
+        suppliers = {}
+        if supplier_ids:
+            suppliers = {
+                supplier.id: supplier
+                for supplier in db.session.scalars(
+                    select(Supplier).where(
+                        Supplier.tenant_id == self.tenant_id,
+                        Supplier.id.in_(supplier_ids),
+                    )
+                ).all()
+            }
+        return {
+            "products": product_by_id,
+            "offers": offers_by_product,
+            "observations": observations_by_product,
+            "suppliers": suppliers,
+        }
+
     def compare_product(self, product_id: int):
-        product = self.product_repo.get_by_id_or_404(product_id)
+        context = getattr(self, "_comparison_context", None)
+        if context is not None and product_id in context["products"]:
+            product = context["products"][product_id]
+        else:
+            product = self.product_repo.get_by_id_or_404(product_id)
         default_unit = self.normalize_unit(product.unit)
         by_supplier = {}
 
+        def supplier_for(supplier_id):
+            if context is not None:
+                return context["suppliers"].get(supplier_id)
+            return self.supplier_repo.get_by_id(supplier_id)
+
         if product.current_price is not None and self._decimal(product.current_price) > 0:
-            primary_supplier = self.supplier_repo.get_by_id(product.supplier_id)
+            primary_supplier = supplier_for(product.supplier_id)
             by_supplier[product.supplier_id] = self._price_payload(
                 product.supplier_id,
                 primary_supplier.name if primary_supplier else None,
@@ -114,13 +197,16 @@ class PriceIntelligenceService:
                 primary=True,
             )
 
-        # Product.supplier_offers is not tenant-filtered at relationship level.
-        # Read through the tenant-scoped repository so malformed cross-tenant rows
-        # can never leak into the comparison result.
-        for offer in self.offer_repo.get_by_product(product_id):
+        # Tenant-scoped offers are batch-loaded for portfolio endpoints; individual
+        # product comparisons retain the same repository-backed fallback.
+        if context is not None:
+            product_offers = context["offers"].get(product_id, [])
+        else:
+            product_offers = self.offer_repo.get_by_product(product_id)
+        for offer in product_offers:
             if not offer.active or self._decimal(offer.price) <= 0 or offer.supplier_id == product.supplier_id:
                 continue
-            supplier = self.supplier_repo.get_by_id(offer.supplier_id)
+            supplier = supplier_for(offer.supplier_id)
             if supplier is None:
                 continue
             by_supplier[offer.supplier_id] = self._price_payload(
@@ -133,15 +219,16 @@ class PriceIntelligenceService:
             )
 
         # Invoice/delivery-document observations are also real supplier price
-        # evidence. Use the latest observation per supplier to fill comparison
-        # gaps when no explicit active catalog offer exists. Explicit offers and
-        # the catalog's primary price always take precedence.
-        observation_repo = getattr(self, "observation_repo", None)
-        observations = observation_repo.get_latest_by_product(product_id) if observation_repo is not None else []
+        # evidence. Portfolio endpoints batch-load the latest observations.
+        if context is not None:
+            observations = context["observations"].get(product_id, [])
+        else:
+            observation_repo = getattr(self, "observation_repo", None)
+            observations = observation_repo.get_latest_by_product(product_id) if observation_repo is not None else []
         for observation in observations:
             if observation.supplier_id in by_supplier:
                 continue
-            supplier = self.supplier_repo.get_by_id(observation.supplier_id)
+            supplier = supplier_for(observation.supplier_id)
             if supplier is None:
                 continue
             unit = observation.unit or observation.comparison_unit or product.unit or default_unit
@@ -177,8 +264,6 @@ class PriceIntelligenceService:
                 else:
                     incomparable.append({**row, "incomparable_reason": reason})
         elif offers:
-            # In an incomplete catalog there may be no current price. Still compare
-            # alternate offers against each other so the screen remains useful.
             anchor = offers[0]
             for row in offers:
                 reason = self._incomparable_reason(anchor, row)
