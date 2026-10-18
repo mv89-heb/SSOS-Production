@@ -158,6 +158,67 @@ class GeminiProvider:
             merged["supplier"] = aggregate_supplier
         return merged
 
+
+    @staticmethod
+    def _extract_completed_json_items(text: str) -> list[dict[str, Any]]:
+        """Read complete item objects from a partial JSON stream without requiring valid outer JSON."""
+        found: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for match in re.finditer(r'"items"\\s*:\\s*\\[', text):
+            index = match.end()
+            while index < len(text):
+                while index < len(text) and (text[index].isspace() or text[index] == ","):
+                    index += 1
+                if index >= len(text) or text[index] == "]":
+                    break
+                if text[index] != "{":
+                    break
+                start = index
+                depth = 0
+                in_string = False
+                escaped = False
+                while index < len(text):
+                    char = text[index]
+                    if in_string:
+                        if escaped:
+                            escaped = False
+                        elif char == "\\\\":
+                            escaped = True
+                        elif char == '"':
+                            in_string = False
+                    else:
+                        if char == '"':
+                            in_string = True
+                        elif char == "{":
+                            depth += 1
+                        elif char == "}":
+                            depth -= 1
+                            if depth == 0:
+                                raw = text[start:index + 1]
+                                try:
+                                    item = json.loads(raw)
+                                except (json.JSONDecodeError, TypeError):
+                                    item = None
+                                if isinstance(item, dict):
+                                    identity = json.dumps({
+                                        "description": item.get("description"),
+                                        "supplier_sku": item.get("supplier_sku"),
+                                        "barcode": item.get("barcode"),
+                                        "page_number": item.get("page_number"),
+                                        "quantity": item.get("quantity"),
+                                        "unit_price": item.get("unit_price"),
+                                        "supplier": (item.get("supplier_context") or {}).get("name"),
+                                    }, ensure_ascii=False, sort_keys=True)
+                                    if identity not in seen:
+                                        seen.add(identity)
+                                        found.append(item)
+                                index += 1
+                                break
+                    index += 1
+                else:
+                    break
+        return found
+
     @staticmethod
     def _is_retryable_error(exc: Exception) -> bool:
         """Identify transient Gemini/network failures that are safe to retry."""
@@ -248,7 +309,11 @@ class GeminiProvider:
             if system_instruction:
                 config_kwargs["system_instruction"] = system_instruction
 
-            def run_with_model_fallback(contents: Any, request_config: dict[str, Any] | None = None) -> tuple[str, str]:
+            def run_with_model_fallback(
+                contents: Any,
+                request_config: dict[str, Any] | None = None,
+                partial_callback: Callable[[str, str], None] | None = None,
+            ) -> tuple[str, str]:
                 request_config = request_config or config_kwargs
                 models_to_try = [self.model]
                 if self.fallback_model:
@@ -258,12 +323,24 @@ class GeminiProvider:
                 for model_index, model_name in enumerate(models_to_try):
                     for attempt in range(1, 3):
                         try:
-                            response = self._client.models.generate_content(
-                                model=model_name,
-                                contents=contents,
-                                config=types.GenerateContentConfig(**request_config),
-                            )
-                            text = (response.text or "").strip()
+                            generation_config = types.GenerateContentConfig(**request_config)
+                            if partial_callback and hasattr(self._client.models, "generate_content_stream"):
+                                chunks: list[str] = []
+                                for chunk in self._client.models.generate_content_stream(
+                                    model=model_name, contents=contents, config=generation_config
+                                ):
+                                    piece = getattr(chunk, "text", None) or ""
+                                    if piece:
+                                        chunks.append(piece)
+                                        partial_callback("".join(chunks), model_name)
+                                text = "".join(chunks).strip()
+                            else:
+                                response = self._client.models.generate_content(
+                                    model=model_name,
+                                    contents=contents,
+                                    config=generation_config,
+                                )
+                                text = (response.text or "").strip()
                             if not text:
                                 raise ValueError("Gemini returned an empty response")
                             return text, model_name
@@ -369,7 +446,28 @@ class GeminiProvider:
                             types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
                         ]
 
-                    text, used_model = run_with_model_fallback(contents, request_config)
+                    last_partial_count = 0
+
+                    def on_partial_json(partial_text: str, model_name: str) -> None:
+                        nonlocal last_partial_count
+                        if not progress_callback:
+                            return
+                        partial_items = self._extract_completed_json_items(partial_text)
+                        if len(partial_items) <= last_partial_count:
+                            return
+                        last_partial_count = len(partial_items)
+                        progress_callback({
+                            "phase": "extracting_rows",
+                            "percent": min(95, 5 + round(90 * min(1, last_partial_count / max(1, page_count * 12)))),
+                            "pages_total": page_count,
+                            "pages_processed": 0,
+                            "partial_items": partial_items,
+                            "extracted_rows": last_partial_count,
+                        })
+
+                    text, used_model = run_with_model_fallback(
+                        contents, request_config, partial_callback=on_partial_json if progress_callback else None
+                    )
                     data = json.loads(text)
                     if not isinstance(data, dict):
                         raise ValueError("Gemini returned structured data in an unexpected format")
