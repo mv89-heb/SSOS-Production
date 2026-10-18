@@ -9,6 +9,7 @@ import {
   BarChart3,
   BrainCircuit,
   CheckCircle2,
+  Clock3,
   ClipboardCheck,
   PackageSearch,
   RefreshCw,
@@ -344,6 +345,8 @@ export default function ProcurementIntelligencePage() {
         <StatCard label="נתוני מלאי חסרים" value={number(insufficientInventoryData)} hint="נדרשות לפחות שתי ספירות כדי לחשב צריכה" icon={<XCircle className="text-amber-500" size={18} />} tone="amber" />
         <StatCard label="מוצרים פעילים" value={number(readinessData?.products.active)} hint={`${number(readinessData?.products.categorized)} עם קטגוריה`} icon={<PackageSearch className="text-blue-500" size={18} />} tone="blue" />
         <StatCard label="מוצרים עם מחיר" value={number(readinessData?.products.priced)} hint={`${number((readinessData?.products.active ?? 0) - (readinessData?.products.priced ?? 0))} ללא מחיר`} icon={<WalletCards className="text-emerald-500" size={18} />} tone="emerald" />
+        <StatCard label="הצעות שלא עודכנו 90 יום" value={number(readinessData?.price_intelligence.offers_not_updated_90d)} hint="הצעות פעילות שלא עודכנו; נדרש אימות לפני הסתמכות עליהן" icon={<Clock3 className="text-amber-500" size={18} />} tone="amber" />
+        <StatCard label="תצפיות מחיר עדכניות" value={number(readinessData?.price_intelligence.recent_observations_90d)} hint={`${number(readinessData?.price_intelligence.older_observations_90d)} תצפיות בנות יותר מ־90 יום · מקור ותאריך אינם מבטיחים מחיר נוכחי`} icon={<RefreshCw className="text-blue-500" size={18} />} tone="blue" />
         <StatCard label="ספקים פעילים" value={number(readinessData?.suppliers.active)} hint={`${number(readinessData?.supplier_offers.suppliers_covered)} משתתפים בהשוואת מחירים`} icon={<Truck className="text-violet-500" size={18} />} tone="violet" />
         <StatCard label="מוצרי אב מאוחדים" value={number(masterProductRows.length)} hint="קטלוג ללא שכפול לפי ספק" icon={<PackageSearch className="text-indigo-500" size={18} />} tone="blue" />
         <StatCard label="מוצרים עם כמה ספקים" value={number(masterProductsWithMultipleSuppliers)} hint={`${number(masterProductsWithPrice)} מוצרי אב עם מחיר תקף`} icon={<BarChart3 className="text-emerald-500" size={18} />} tone="emerald" />
