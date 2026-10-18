@@ -65,3 +65,15 @@ def test_stage9_migration_fails_before_constraints_when_existing_data_is_invalid
 def test_idempotency_migration_follows_procurement_foundation():
     text = Path("migrations/versions/20260917_idempotency_keys.py").read_text(encoding="utf-8")
     assert 'down_revision = "20260917_procurement_foundation"' in text
+
+def test_mainline_merge_revision_joins_both_heads():
+    merge = Path("migrations/versions/20261020_merge_procurement_heads.py").read_text(encoding="utf-8")
+    assert 'down_revision = ("20261019_product_image_metadata", "20260917_db_integrity")' in merge
+    for column in ("phone2", "customer_number", "order_days", "delivery_days", "ordering_rules"):
+        assert f'sa.Column("{column}"' in merge
+
+
+def test_supplier_profile_migration_adds_columns_before_backfill():
+    migration = Path("migrations/versions/20261018_supplier_profile.py").read_text(encoding="utf-8")
+    for column in ("phone2", "customer_number", "order_days", "delivery_days", "ordering_rules"):
+        assert f'sa.Column("{column}"' in migration
