@@ -489,6 +489,7 @@ class PriceIntelligenceService:
     def get_supplier_price_scores(self, product_limit: int = 2000, limit: int = 10):
         """Score suppliers on price competitiveness and coverage only; no invented quality metrics."""
         products = self.product_repo.get_all_for_matching()[:max(1, int(product_limit))]
+        self._comparison_context = self._build_batch_comparison_context(products)
         stats = {}
         analyzed = 0
         for product in products:
@@ -518,7 +519,9 @@ class PriceIntelligenceService:
             score = round((coverage * 50) + (win_rate * 50), 1)
             results.append({**entry, "coverage_percent": round(coverage * 100, 1), "win_rate_percent": round(win_rate * 100, 1), "score": score})
         results.sort(key=lambda row: (-row["score"], -row["wins"], row["supplier_name"] or ""))
-        return {"products_analyzed": analyzed, "suppliers": results[:max(1, int(limit))]}
+        result = {"products_analyzed": analyzed, "suppliers": results[:max(1, int(limit))]}
+        self._comparison_context = None
+        return result
 
     def get_price_history(self, product_id: int, supplier_id: int | None = None, limit: int = 100):
         self.product_repo.get_by_id_or_404(product_id)
