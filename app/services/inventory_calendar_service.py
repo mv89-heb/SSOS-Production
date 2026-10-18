@@ -234,6 +234,8 @@ class InventoryCalendarService:
             )).all()}
         inbound = self._inbound_quantities()
         periods = self.periods(start=today, end=today + timedelta(days=180), active_only=True)
+        from app.services.inventory_consumption_planning_service import InventoryConsumptionPlanningService
+        consumption_metrics = InventoryConsumptionPlanningService(self.tenant_id)._consumption_batch(ids, since)
         rows = []
         for product in products:
             daily = {}
@@ -246,19 +248,11 @@ class InventoryCalendarService:
             base_schedule = self.base._supplier_schedule_from_supplier(product, supplier)
             row = self.base._recommendation_from_product(product, base_schedule, counts,
                 lookback_days=lookback_days, safety_days=safety_days)
-            receipts = receipts_by_product.get(product.id, [])
-            used, elapsed, received_total = Decimal("0"), Decimal("0"), Decimal("0")
-            for previous, current in zip(counts, counts[1:]):
-                days = Decimal(str(max((current.occurred_at - previous.occurred_at).total_seconds() / 86400, 0)))
-                if days <= 0:
-                    continue
-                received = sum((Decimal(str(r.quantity or 0)) for r in receipts
-                    if previous.occurred_at < r.occurred_at <= current.occurred_at), Decimal("0"))
-                consumption = Decimal(str(previous.balance_after or 0)) + received - Decimal(str(current.balance_after or 0))
-                if consumption > 0:
-                    used += consumption
-                elapsed += days
-                received_total += received
+            metric = consumption_metrics.get(product.id, {})
+            used = Decimal(str(metric.get("consumption", 0)))
+            elapsed = Decimal(str(metric.get("observed_days", 0)))
+            received_total = Decimal(str(metric.get("receipts", 0)))
+            adjustment_delta = Decimal(str(metric.get("adjustment_delta", 0)))
             rate = used / elapsed if elapsed > 0 else Decimal("0")
             schedule = self.schedule_for_product(product, today=today, periods=periods, base_schedule=base_schedule)
             delivery = date.fromisoformat(schedule["next_delivery_date"]) if schedule.get("next_delivery_date") else None
@@ -277,6 +271,7 @@ class InventoryCalendarService:
                 "observed_days": round(float(elapsed), 1), "estimated_depletion": round(float(used), 3),
                 "average_daily_usage": round(float(rate), 3), "base_average_daily_usage": round(float(rate), 3),
                 "receipts_in_observation_period": round(float(received_total), 3),
+                "adjustment_delta_in_observation_period": round(float(adjustment_delta), 3),
                 "confirmed_inbound": float(inbound_qty), "holiday_adjusted_demand": round(float(demand), 3),
                 "holiday_adjusted_target_stock": round(float(target), 3), "safety_stock": round(float(safety), 3),
                 "reorder_point": round(float(target), 3), "recommended_order": round(float(recommended), 3),
