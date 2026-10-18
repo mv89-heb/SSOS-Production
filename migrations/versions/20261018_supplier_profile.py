@@ -131,6 +131,41 @@ def upgrade():
                     )
         workbook.close()
 
+    # Public company identity details are taken from the suppliers' own sites.
+    # Generic public details are added only when the corresponding field is blank.
+    public_profiles = [
+        (("אוסם",), "https://www.osem-nestle.co.il", "קריית אסם", "שוהם", None),
+        (("תנובה",), "https://www.tnuva.co.il", "יגיע כפיים 21", "פתח תקווה", None),
+        (("גידרון",), "https://www.gidron.co.il", None, "חולון", "03-557-0200"),
+        (("יפאורה", "יפאורה תבורי"), "https://www.jafora.co.il", "אלי הורוביץ 4, בית מיקה", "רחובות", "08-9346858"),
+        (("שטראוס",), "https://www.strauss-group.co.il", None, None, None),
+        (("אנג'ל",), "https://www.angel.co.il", None, None, None),
+    ]
+    public_table = sa.table(
+        "suppliers",
+        sa.column("name", sa.String),
+        sa.column("website", sa.String),
+        sa.column("address", sa.String),
+        sa.column("city", sa.String),
+        sa.column("phone", sa.String),
+    )
+    for names, website, address, city, phone in public_profiles:
+        for name in names:
+            values = {
+                "website": sa.func.coalesce(sa.func.nullif(sa.func.trim(public_table.c.website), ""), website),
+            }
+            if address:
+                values["address"] = sa.func.coalesce(sa.func.nullif(sa.func.trim(public_table.c.address), ""), address)
+            if city:
+                values["city"] = sa.func.coalesce(sa.func.nullif(sa.func.trim(public_table.c.city), ""), city)
+            if phone:
+                values["phone"] = sa.func.coalesce(sa.func.nullif(sa.func.trim(public_table.c.phone), ""), phone)
+            bind.execute(
+                public_table.update()
+                .where(sa.func.lower(sa.func.trim(public_table.c.name)) == name.lower())
+                .values(**values)
+            )
+
 
 def downgrade():
     # The schedule backfill intentionally remains: deleting newly learned
