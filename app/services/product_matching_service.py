@@ -329,6 +329,16 @@ class ProductMatchingService:
             )
             if offer is not None and method == "NAME_SIMILARITY":
                 score = min(1.0, score + 0.05)
+            # When the invoice provides an identifier, an unrelated catalog row
+            # must not outrank the exact identifier match just because its name
+            # is generic or identical. Keep fuzzy candidates available for review,
+            # but below exact barcode/SKU identities.
+            has_extracted_identity = bool(
+                self.compact(extracted.get("barcode"))
+                or self.compact(extracted.get("supplier_sku"))
+            )
+            if has_extracted_identity and method == "NAME_SIMILARITY":
+                score = min(score, 0.98)
             if score >= 0.45:
                 scored.append((score, method, product, offer))
         scored.sort(key=lambda row: (-row[0], row[2].id))
