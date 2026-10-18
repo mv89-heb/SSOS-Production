@@ -433,11 +433,10 @@ class PriceIntelligenceService:
                 "supplier_count": len(grouped), "suppliers": list(grouped.values())}
 
     def get_portfolio_summary(self, product_limit: int = 2000, opportunity_limit: int = 10):
-        """Build a tenant-scoped executive snapshot from deterministic price facts."""
+        """Build a tenant-scoped executive snapshot without adding unlike currencies."""
         products = self.product_repo.get_all_for_matching()[:max(1, int(product_limit))]
         self._prepare_batch_comparison_context(products)
-        total_current = Decimal("0")
-        total_best = Decimal("0")
+        totals_by_currency = {}
         opportunity_count = 0
         comparable_products = 0
         opportunities = []
@@ -451,21 +450,30 @@ class PriceIntelligenceService:
             best = comparison.get("best_offer")
             if not current:
                 continue
+            currency = str(current.get("currency") or "ILS").upper()
+            bucket = totals_by_currency.setdefault(currency, {
+                "current_unit_total": Decimal("0"),
+                "best_unit_total": Decimal("0"),
+                "potential_savings": Decimal("0"),
+                "opportunity_products": 0,
+            })
             alternatives = [
                 offer for offer in (comparison.get("offers") or [])
                 if offer.get("supplier_id") != current.get("supplier_id")
             ]
             current_price = self._decimal(current["normalized_price"])
-            total_current += current_price
             best_price = current_price
             if alternatives:
                 comparable_products += 1
                 if best:
                     best_price = min(current_price, self._decimal(best["normalized_price"]))
-            total_best += best_price
             savings = max(Decimal("0"), current_price - best_price)
+            bucket["current_unit_total"] += current_price
+            bucket["best_unit_total"] += best_price
+            bucket["potential_savings"] += savings
             if savings > 0:
                 opportunity_count += 1
+                bucket["opportunity_products"] += 1
                 opportunities.append({
                     "product_id": product.id,
                     "product_name": product.name,
@@ -476,20 +484,46 @@ class PriceIntelligenceService:
                     "best_price": float(best_price),
                     "savings_per_unit": round(float(savings), 6),
                     "savings_percent": round(float(savings / current_price * Decimal("100")), 4) if current_price else 0.0,
-                    "currency": current.get("currency", "ILS"),
+                    "currency": currency,
                 })
             analyzed.append(product)
         opportunities.sort(key=lambda row: row["savings_per_unit"], reverse=True)
-        potential_savings = max(Decimal("0"), total_current - total_best)
-        savings_percent = potential_savings / total_current * Decimal("100") if total_current > 0 else Decimal("0")
+        currency_totals = {}
+        for currency, bucket in totals_by_currency.items():
+            current_total = bucket["current_unit_total"]
+            best_total = bucket["best_unit_total"]
+            potential = max(Decimal("0"), bucket["potential_savings"])
+            percent = potential / current_total * Decimal("100") if current_total > 0 else Decimal("0")
+            currency_totals[currency] = {
+                "current_unit_total": round(float(current_total), 2),
+                "best_unit_total": round(float(best_total), 2),
+                "potential_savings": round(float(potential), 2),
+                "potential_savings_percent": round(float(percent), 4),
+                "opportunity_products": bucket["opportunity_products"],
+            }
+
+        # Legacy scalar fields are safe only for a single currency. When the
+        # catalog contains multiple currencies, consumers must use currency_totals.
+        if len(currency_totals) == 1:
+            only_totals = next(iter(currency_totals.values()))
+            current_unit_total = only_totals["current_unit_total"]
+            best_unit_total = only_totals["best_unit_total"]
+            potential_savings = only_totals["potential_savings"]
+            potential_savings_percent = only_totals["potential_savings_percent"]
+        elif not currency_totals:
+            current_unit_total = best_unit_total = potential_savings = potential_savings_percent = 0
+        else:
+            current_unit_total = best_unit_total = potential_savings = potential_savings_percent = None
+
         result = {
             "products_analyzed": len(analyzed),
             "products_with_comparable_alternatives": comparable_products,
             "opportunity_products": opportunity_count,
-            "current_unit_total": round(float(total_current), 2),
-            "best_unit_total": round(float(total_best), 2),
-            "potential_savings": round(float(potential_savings), 2),
-            "potential_savings_percent": round(float(savings_percent), 4),
+            "currency_totals": currency_totals,
+            "current_unit_total": current_unit_total,
+            "best_unit_total": best_unit_total,
+            "potential_savings": potential_savings,
+            "potential_savings_percent": potential_savings_percent,
             "top_opportunities": opportunities[:max(1, int(opportunity_limit))],
             "recent_changes": [row.to_dict() for row in self.history_repo.list_all(limit=50)],
         }
