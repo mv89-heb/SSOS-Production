@@ -30,8 +30,6 @@ def upgrade():
         sa.Column("minimum_order_amount", sa.Numeric(12, 2), nullable=True),
         sa.Column("delivery_fee", sa.Numeric(12, 2), nullable=True),
         sa.Column("lead_time_days", sa.Integer(), nullable=True),
-        sa.Column("order_days", sa.String(100), nullable=True),
-        sa.Column("delivery_days", sa.String(100), nullable=True),
         sa.Column("order_cutoff_time", sa.String(20), nullable=True),
         sa.Column("certification_details", sa.Text(), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
