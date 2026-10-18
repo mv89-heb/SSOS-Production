@@ -51,3 +51,26 @@ def test_order_rejects_product_from_different_supplier(logged_in_client_a, make_
         json={"supplier_id": supplier_a, "items": [{"product_id": product_b, "quantity": 1}]},
     )
     assert response.status_code == 409
+
+def test_create_order_persists_planned_order_date(logged_in_client_a, make_order):
+    response, _, _ = make_order(logged_in_client_a, planned_order_date="2026-11-05")
+    assert response.status_code == 201, response.get_json()
+    assert response.get_json()["order"]["planned_order_date"] == "2026-11-05"
+
+
+def test_update_draft_persists_planned_order_date(logged_in_client_a, make_order):
+    response, _, _ = make_order(logged_in_client_a)
+    assert response.status_code == 201, response.get_json()
+    order_id = response.get_json()["order"]["id"]
+
+    updated = logged_in_client_a.put(
+        f"/api/orders/{order_id}",
+        json={"planned_order_date": "2026-11-12"},
+    )
+    assert updated.status_code == 200, updated.get_json()
+    assert updated.get_json()["order"]["planned_order_date"] == "2026-11-12"
+
+
+def test_create_order_rejects_invalid_planned_order_date(logged_in_client_a, make_order):
+    response, _, _ = make_order(logged_in_client_a, planned_order_date="not-a-date")
+    assert response.status_code == 400, response.get_json()
