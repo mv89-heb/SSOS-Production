@@ -53,7 +53,7 @@ export default function SupplierOverviewPage() {
   const [sortBy, setSortBy] = useState<"savings" | "name" | "price" | "percent">("savings");
   // Strip common natural-language intent words before searching catalog fields.
   const searchTerm = useMemo(() => {
-    const intentWords = new Set(["איפה", "כדאי", "לקנות", "לרכוש", "מומלץ", "תראה", "הצג", "מצא", "חפש", "השווה", "השוואה", "המלץ", "המלצה", "הכי", "זול", "זולים", "זולות", "מחיר", "מחירים", "ספק", "ספקים", "לפי", "קטגוריה", "קטגוריית", "מוצר", "מוצרים", "מוצרי", "רכישה", "לרכישה", "מה", "של", "את", "עם", "בין", "בקטגוריה", "בקטגוריית"]);
+    const intentWords = new Set(["איפה", "כדאי", "לי", "בבקשה", "לקנות", "לרכוש", "מומלץ", "תראה", "הצג", "מצא", "חפש", "השווה", "השוואה", "המלץ", "המלצה", "הכי", "זול", "זולים", "זולות", "מחיר", "מחירים", "ספק", "ספקים", "לפי", "קטגוריה", "קטגוריית", "מוצר", "מוצרים", "מוצרי", "רכישה", "לרכישה", "מה", "של", "את", "עם", "בין", "בקטגוריה", "בקטגוריית"]);
     return search.replace(/[.,?!]/g, " ").split(/\s+/).filter((word) => word && !intentWords.has(word.toLowerCase())).join(" ").trim();
   }, [search]);
   const deferredSearch = useDeferredValue(searchTerm);
@@ -93,7 +93,7 @@ export default function SupplierOverviewPage() {
     });
     return [...counts.values()].sort((a, b) => b.wins - a.wins || b.savings - a.savings)[0] ?? null;
   }, [visibleRows]);
-  const chartRows = visibleRows.filter((row) => row.savings_per_unit > 0).slice(0, 6);
+  const chartRows = [...visibleRows].filter((row) => row.savings_per_unit > 0).sort((a, b) => b.savings_per_unit - a.savings_per_unit).slice(0, 6);
   const maxSaving = Math.max(1, ...chartRows.map((row) => row.savings_per_unit));
 
   return (
