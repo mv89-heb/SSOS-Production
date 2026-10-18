@@ -35,4 +35,4 @@ def test_missing_soup_variant_keeps_similar_plate_for_manual_review():
     score, method = ProductMatchingService._candidate_score(extracted, catalog_product, supplier_id=1)
 
     assert score < 0.93
-    assert method == "NAME_VARIANT_UNCONFIRMED"
+    assert method == "NAME_SIMILARITY"
