@@ -58,7 +58,7 @@ def _normalize_product_name(value):
     normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
     # Keep letters and digits; normalize punctuation and whitespace.
     normalized = "".join(ch if ch.isalnum() else " " for ch in normalized)
-    return tuple(sorted(set(normalized.split())))
+    return tuple(sorted(normalized.split()))
 
 
 def _name_lookup(product_name, timeout):
