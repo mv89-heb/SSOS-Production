@@ -27,6 +27,7 @@ class SupplierInvoice(db.Model):
     attachment_mime_type = db.Column(db.String(100), nullable=True)
     attachment_size = db.Column(db.Integer, nullable=True)
     attachment_data = db.Column(db.LargeBinary, nullable=True)
+    line_comparison = db.Column(db.JSON, nullable=False, default=list)
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
@@ -50,7 +51,7 @@ class SupplierInvoice(db.Model):
             "due_date": self.due_date.isoformat() if self.due_date else None,
             "amount": amount, "paid_amount": paid, "balance": round(amount - paid, 2),
             "currency": self.currency, "status": "paid" if paid >= amount else ("partially_paid" if paid > 0 else "unpaid"),
-            "notes": self.notes, "attachment_filename": self.attachment_filename, "attachment_mime_type": self.attachment_mime_type, "attachment_size": self.attachment_size, "created_at": self.created_at.isoformat() if self.created_at else None,
+            "notes": self.notes, "attachment_filename": self.attachment_filename, "attachment_mime_type": self.attachment_mime_type, "attachment_size": self.attachment_size, "line_comparison": self.line_comparison or [], "created_at": self.created_at.isoformat() if self.created_at else None,
             "payments": [payment.to_dict() for payment in self.payments],
         }
 
