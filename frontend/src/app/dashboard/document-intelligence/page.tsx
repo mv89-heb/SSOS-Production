@@ -71,10 +71,9 @@ export default function DocumentIntelligencePage() {
       if (appliedIndexes.has(index) || previouslyAutoSelected.has(index)) return;
       const product = item.product_matching?.best_match;
       const supplier = item.supplier_matching;
-      const confidentProduct = Boolean(product && (
-        product.decision === "AUTO_MATCH" ||
-        ((product.confidence || 0) >= 0.75 && product.decision !== "LOW_CONFIDENCE")
-      ));
+      // The matcher uses 0.75 for REVIEW and 0.93 for AUTO_MATCH.
+      // Only the explicit AUTO_MATCH decision is safe for automatic selection.
+      const confidentProduct = Boolean(product && product.decision === "AUTO_MATCH" && (product.confidence || 0) >= 0.93);
       if (confidentProduct && supplier?.decision === "AUTO_MATCH" && product?.product_id && supplier.supplier_id) {
         autoIndexesToAdd.push(index);
         previouslyAutoSelected.add(index);
