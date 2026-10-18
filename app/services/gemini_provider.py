@@ -368,6 +368,25 @@ class GeminiProvider:
                             raise
                 raise last_error or RuntimeError("Gemini document analysis failed")
 
+            streamed_row_count = 0
+
+            def notify_partial_rows(partial_text: str, model_name: str, page_count: int | None = None) -> None:
+                nonlocal streamed_row_count
+                if not progress_callback:
+                    return
+                partial_items = self._extract_completed_json_items(partial_text)
+                if len(partial_items) <= streamed_row_count:
+                    return
+                streamed_row_count = len(partial_items)
+                progress_callback({
+                    "phase": "extracting_rows",
+                    "percent": min(95, 10 + streamed_row_count * 3),
+                    "pages_total": page_count,
+                    "pages_processed": 0,
+                    "partial_items": partial_items,
+                    "extracted_rows": streamed_row_count,
+                })
+
             extension = os.path.splitext(file_path)[1].lower()
 
             if extension == ".svg":
@@ -382,7 +401,7 @@ class GeminiProvider:
                     "its text/XML content. Do not invent missing values. Separate all distinct supplier sections.\n\n"
                     "SVG/XML:\n" + svg_text
                 )
-                text, used_model = run_with_model_fallback(prompt)
+                text, used_model = run_with_model_fallback(prompt, partial_callback=lambda partial, model: notify_partial_rows(partial, model))
                 data = json.loads(text)
                 if progress_callback:
                     progress_callback({"phase": "completed", "percent": 100, "pages_total": None, "pages_processed": None, "eta_seconds": 0})
@@ -509,10 +528,13 @@ class GeminiProvider:
                         )
                     )
                     if progress_callback:
+                        partial_data = self._merge_page_results(page_results, page_count)
                         progress_callback({
                             "phase": "processing",
                             "percent": round(page_index / page_count * 100),
                             "pages_total": page_count, "pages_processed": page_index,
+                            "partial_items": partial_data.get("items", []),
+                            "extracted_rows": len(partial_data.get("items", [])),
                         })
                 data = self._merge_page_results(page_results, page_count)
                 text = json.dumps(data, ensure_ascii=False)
@@ -529,7 +551,7 @@ class GeminiProvider:
             if progress_callback:
                 progress_callback({"phase": "processing", "percent": 10, "pages_total": None, "pages_processed": None, "eta_seconds": None})
             uploaded = self._client.files.upload(file=file_path)
-            text, used_model = run_with_model_fallback([uploaded])
+            text, used_model = run_with_model_fallback([uploaded], partial_callback=lambda partial, model: notify_partial_rows(partial, model))
             data = json.loads(text)
             if progress_callback:
                 progress_callback({"phase": "completed", "percent": 100, "pages_total": None, "pages_processed": None, "eta_seconds": 0})
