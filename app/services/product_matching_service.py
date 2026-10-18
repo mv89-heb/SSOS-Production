@@ -177,13 +177,6 @@ class ProductMatchingService:
         return int(match.group(1)) if match else None
 
     @classmethod
-    def _variant_signatures(cls, tokens, groups):
-        return {
-            group_name: {attribute_map[token] for token in tokens if token in attribute_map}
-            for group_name, attribute_map in groups.items()
-        }
-
-    @classmethod
     def _variant_conflict(cls, extracted, product) -> bool:
         """Reject explicit contradictions before identity shortcuts or fuzzy scoring."""
         source_tokens = cls.tokens(extracted.get("description"))
