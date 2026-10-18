@@ -5,7 +5,7 @@ services:
   - type: web
     name: ssos-backend
     env: python
-    plan: starter
+    plan: free
     pythonVersion: "3.11.9"
     healthCheckPath: /health
     buildCommand: "pip install -r requirements.txt"
@@ -100,7 +100,7 @@ services:
   - type: web
     name: ssos-frontend
     env: node
-    plan: starter
+    plan: free
     rootDir: frontend
     healthCheckPath: /login
     buildCommand: "npm ci && npm run build"
