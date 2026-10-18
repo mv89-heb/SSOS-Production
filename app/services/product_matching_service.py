@@ -389,6 +389,21 @@ class ProductMatchingService:
                     section["page_numbers"] = list(raw["page_numbers"])
                 sections.append(section)
         if sections:
+            # Gemini may return the supplier correctly at document level while
+            # leaving the single supplier_sections entry empty. Preserve the
+            # document-level identity instead of silently discarding it.
+            if len(sections) == 1:
+                top_supplier = data.get("supplier") if isinstance(data.get("supplier"), dict) else {}
+                section_supplier = sections[0].get("supplier") or {}
+                has_section_identity = bool(
+                    self.normalize(section_supplier.get("name"))
+                    or self.compact(section_supplier.get("customer_number"))
+                )
+                if not has_section_identity and (
+                    self.normalize(top_supplier.get("name"))
+                    or self.compact(top_supplier.get("customer_number"))
+                ):
+                    sections[0]["supplier"] = dict(top_supplier)
             return sections
         supplier = data.get("supplier") if isinstance(data.get("supplier"), dict) else {}
         items = data.get("items") if isinstance(data.get("items"), list) else []
