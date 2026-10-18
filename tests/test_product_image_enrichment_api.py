@@ -35,7 +35,7 @@ def test_image_enrichment_fills_missing_image_and_records_source(logged_in_clien
     assert product.image_checked_at is not None
 
 
-def test_image_enrichment_never_overwrites_existing_custom_image(logged_in_client_a):
+def test_image_enrichment_never_overwrites_existing_custom_image(logged_in_client_a, db):
     product_id = _make_product(
         logged_in_client_a, "Custom Image Supplier", "Custom product", "IMG-CUSTOM",
         "1234567890124", "https://example.com/custom-image.jpg",
