@@ -27,7 +27,7 @@ def test_image_enrichment_fills_missing_image_and_records_source(logged_in_clien
     assert response.status_code == 200, response.get_json()
     body = response.get_json()
     assert body["matched"] == 1
-    lookup.assert_called_once_with("1234567890123")
+    lookup.assert_called_once_with("1234567890123", "Milk 1L")
     product = db.session.get(Product, product_id)
     assert product.image_url == candidate["image_url"]
     assert product.image_source == "Open Food Facts"
