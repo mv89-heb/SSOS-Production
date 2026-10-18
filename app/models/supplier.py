@@ -12,6 +12,20 @@ class Supplier(db.Model):
     email = db.Column(db.String(255))
     phone = db.Column(db.String(50))
     phone2 = db.Column(db.String(50))
+    mobile = db.Column(db.String(50))
+    address = db.Column(db.String(255))
+    city = db.Column(db.String(120))
+    tax_id = db.Column(db.String(100))
+    website = db.Column(db.String(255))
+    supplier_category = db.Column(db.String(120))
+    payment_terms = db.Column(db.String(255))
+    credit_days = db.Column(db.Integer)
+    minimum_order_amount = db.Column(db.Numeric(12, 2))
+    delivery_fee = db.Column(db.Numeric(12, 2))
+    lead_time_days = db.Column(db.Integer)
+    order_cutoff_time = db.Column(db.String(20))
+    certification_details = db.Column(db.Text)
+    notes = db.Column(db.Text)
     customer_number = db.Column(db.String(100))
     delivery_days = db.Column(db.String(100))
     order_days = db.Column(db.String(100))
@@ -33,6 +47,20 @@ class Supplier(db.Model):
             "email": self.email,
             "phone": self.phone,
             "phone2": self.phone2,
+            "mobile": self.mobile,
+            "address": self.address,
+            "city": self.city,
+            "tax_id": self.tax_id,
+            "website": self.website,
+            "supplier_category": self.supplier_category,
+            "payment_terms": self.payment_terms,
+            "credit_days": self.credit_days,
+            "minimum_order_amount": float(self.minimum_order_amount) if self.minimum_order_amount is not None else None,
+            "delivery_fee": float(self.delivery_fee) if self.delivery_fee is not None else None,
+            "lead_time_days": self.lead_time_days,
+            "order_cutoff_time": self.order_cutoff_time,
+            "certification_details": self.certification_details,
+            "notes": self.notes,
             "customer_number": self.customer_number,
             "delivery_days": self.delivery_days,
             "order_days": self.order_days,
