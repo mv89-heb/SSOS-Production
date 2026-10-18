@@ -69,3 +69,57 @@ def test_analyze_deletes_temporary_document(logged_in_client_a, db, monkeypatch)
     row = db.session.get(DocumentAnalysis, analysis_id)
     assert row.storage_path is None
     assert not __import__("os").path.exists(temp_path)
+
+
+
+def test_rematch_refreshes_saved_analysis_without_calling_gemini(logged_in_client_a, db, monkeypatch):
+    calls = {"generate": 0}
+
+    class FakeAI:
+        @staticmethod
+        def is_available():
+            return True
+
+        @staticmethod
+        def generate_structured_from_file(path, schema, system_instruction=None, progress_callback=None):
+            calls["generate"] += 1
+            return SimpleNamespace(
+                success=True,
+                data={
+                    "document_type": "PRICE_LIST",
+                    "supplier": {"name": "Test supplier"},
+                    "items": [{"description": "צלחות קטן קרם", "unit_price": 7.5}],
+                },
+                provider="test",
+                model="test-model",
+                error=None,
+            )
+
+    monkeypatch.setattr(
+        "app.services.document_intelligence_service.AIService.from_config",
+        lambda config: FakeAI(),
+    )
+
+    upload_response = logged_in_client_a.post(
+        "/api/document-intelligence/upload",
+        data={"file": (BytesIO(b"fake pdf contents"), "price-list.pdf")},
+        content_type="multipart/form-data",
+    )
+    assert upload_response.status_code == 201, upload_response.get_json()
+    analysis_id = upload_response.get_json()["analysis"]["id"]
+
+    analyze_response = logged_in_client_a.post(f"/api/document-intelligence/{analysis_id}/analyze")
+    assert analyze_response.status_code == 200, analyze_response.get_json()
+    assert analyze_response.get_json()["analysis"]["status"] == "ANALYZED"
+    assert calls["generate"] == 1
+
+    db.session.expire_all()
+    row = db.session.get(DocumentAnalysis, analysis_id)
+    assert row.storage_path is None
+
+    rematch_response = logged_in_client_a.post(f"/api/document-intelligence/{analysis_id}/rematch")
+    assert rematch_response.status_code == 200, rematch_response.get_json()
+    refreshed = rematch_response.get_json()["analysis"]
+    assert refreshed["status"] == "ANALYZED"
+    assert refreshed["extracted_data"]["matching_version"] == "deterministic-v2-multi-supplier"
+    assert calls["generate"] == 1
