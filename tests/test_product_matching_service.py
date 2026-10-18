@@ -308,3 +308,29 @@ def test_match_line_includes_products_available_from_supplier_as_alternate_offer
     assert result["best_match"]["supplier_name"] == "ר. שמאי"
     assert result["best_match"]["decision"] == "AUTO_MATCH"
 
+
+
+def test_single_supplier_section_inherits_document_level_supplier_when_section_is_empty():
+    service = ProductMatchingService(1)
+    data = {
+        "supplier": {"name": "גידרון תעשיות בע\"מ", "customer_number": "12345"},
+        "supplier_sections": [{"supplier": {"name": "", "customer_number": ""}, "items": [{"description": "שניצל קפוא"}]}],
+    }
+
+    sections = service._build_supplier_sections(data)
+
+    assert len(sections) == 1
+    assert sections[0]["supplier"]["name"] == "גידרון תעשיות בע\"מ"
+    assert sections[0]["supplier"]["customer_number"] == "12345"
+
+
+def test_supplier_section_identity_is_not_overwritten_by_document_level_supplier():
+    service = ProductMatchingService(1)
+    data = {
+        "supplier": {"name": "ספק כללי"},
+        "supplier_sections": [{"supplier": {"name": "ר. שמאי"}, "items": []}],
+    }
+
+    sections = service._build_supplier_sections(data)
+
+    assert sections[0]["supplier"]["name"] == "ר. שמאי"
