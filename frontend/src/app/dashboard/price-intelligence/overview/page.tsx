@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { Fragment, useDeferredValue, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Award, BarChart3, Search, TrendingDown, Sparkles, ArrowUpDown, Download, ChevronDown, ChevronUp } from "lucide-react";
 import { apiClient } from "@/services/api-client";
@@ -301,7 +301,8 @@ export default function SupplierOverviewPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {visibleRows.map((row) => (
-                    <tr key={row.product_id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                    <Fragment key={rowKey(row)}>
+                    <tr> className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
                       <td className="px-4 py-4">
                         <Link href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="font-black hover:text-violet-600">
                           {row.product_name}
@@ -379,6 +380,7 @@ export default function SupplierOverviewPage() {
                         </td>
                       </tr>
                     )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
