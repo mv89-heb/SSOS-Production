@@ -215,17 +215,9 @@ class InventoryCalendarService:
                 InventoryMovement.occurred_at >= since)
             .order_by(InventoryMovement.product_id, InventoryMovement.occurred_at, InventoryMovement.id)
         ).all()
-        receipt_rows = db.session.scalars(
-            select(InventoryMovement).where(InventoryMovement.tenant_id == self.tenant_id,
-                InventoryMovement.product_id.in_(ids), InventoryMovement.movement_type == MOVEMENT_RECEIPT,
-                InventoryMovement.occurred_at >= since)
-            .order_by(InventoryMovement.product_id, InventoryMovement.occurred_at, InventoryMovement.id)
-        ).all()
-        counts_by_product, receipts_by_product = {}, {}
+        counts_by_product = {}
         for m in count_rows:
             counts_by_product.setdefault(m.product_id, []).append(m)
-        for m in receipt_rows:
-            receipts_by_product.setdefault(m.product_id, []).append(m)
         supplier_ids = {p.supplier_id for p in products if p.supplier_id is not None}
         suppliers = {}
         if supplier_ids:
