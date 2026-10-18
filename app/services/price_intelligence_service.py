@@ -171,6 +171,16 @@ class PriceIntelligenceService:
             "suppliers": suppliers,
         }
 
+    def _prepare_batch_comparison_context(self, products):
+        # Keep lightweight test doubles and partial service objects on the
+        # repository-backed path; production instances have all four repositories.
+        if not all(hasattr(self, name) for name in (
+            "tenant_id", "product_repo", "offer_repo", "observation_repo", "supplier_repo"
+        )):
+            self._comparison_context = None
+            return
+        self._prepare_batch_comparison_context(products)
+
     def compare_product(self, product_id: int):
         context = getattr(self, "_comparison_context", None)
         if context is not None and product_id in context["products"]:
