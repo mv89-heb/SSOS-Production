@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
-  BookOpen, CheckCircle2, ChevronDown, HelpCircle, MessageCircle, Package,
-  Settings, ShoppingCart, Upload, Users, BarChart3, BrainCircuit, FileSearch,
+  BookOpen, CheckCircle2, ChevronDown, HelpCircle, Package,
+  Settings, ShoppingCart, Users, BarChart3, BrainCircuit, FileSearch,
   Warehouse, CalendarDays, History, ShieldCheck, Lightbulb, ArrowLeft,
 } from "lucide-react";
 
