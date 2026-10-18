@@ -487,7 +487,8 @@ class PriceIntelligenceService:
                     "currency": currency,
                 })
             analyzed.append(product)
-        opportunities.sort(key=lambda row: row["savings_per_unit"], reverse=True)
+        # Percentages can be ranked across currencies; absolute per-unit amounts cannot.
+        opportunities.sort(key=lambda row: row["savings_percent"], reverse=True)
         currency_totals = {}
         for currency, bucket in totals_by_currency.items():
             current_total = bucket["current_unit_total"]
