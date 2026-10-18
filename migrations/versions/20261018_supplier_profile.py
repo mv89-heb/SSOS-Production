@@ -180,6 +180,54 @@ def upgrade():
                 .values(**values)
             )
 
+    # Tempo appears in the maintained order/delivery schedule but was absent
+    # from this tenant's supplier directory. Create it only for the matching
+    # SSOS tenant, and only if no matching supplier already exists.
+    tenants = sa.table("tenants", sa.column("id", sa.Integer), sa.column("name", sa.String))
+    supplier_seed = sa.table(
+        "suppliers",
+        sa.column("id", sa.Integer),
+        sa.column("tenant_id", sa.Integer),
+        sa.column("name", sa.String),
+        sa.column("phone", sa.String),
+        sa.column("email", sa.String),
+        sa.column("website", sa.String),
+        sa.column("address", sa.String),
+        sa.column("city", sa.String),
+        sa.column("supplier_category", sa.String),
+        sa.column("order_days", sa.String),
+        sa.column("delivery_days", sa.String),
+        sa.column("active", sa.Boolean),
+        sa.column("created_at", sa.DateTime),
+    )
+    ssos_tenants = bind.execute(
+        sa.select(tenants.c.id).where(sa.func.lower(sa.func.trim(tenants.c.name)) == "ssos")
+    ).scalars().all()
+    for tenant_id in ssos_tenants:
+        existing_tempo = bind.execute(
+            sa.select(supplier_seed.c.id)
+            .where(supplier_seed.c.tenant_id == tenant_id)
+            .where(sa.func.lower(sa.func.trim(supplier_seed.c.name)).in_(("טמפו", "tempo")))
+            .limit(1)
+        ).first()
+        if not existing_tempo:
+            bind.execute(
+                supplier_seed.insert().values(
+                    tenant_id=tenant_id,
+                    name="טמפו",
+                    phone="3979*",
+                    email="info@tempo.co.il",
+                    website="https://www.tempo.co.il",
+                    address="גיבורי ישראל 2, אזור תעשייה פולג",
+                    city="נתניה",
+                    supplier_category="משקאות",
+                    order_days="שני",
+                    delivery_days="שלישי",
+                    active=True,
+                    created_at=sa.func.now(),
+                )
+            )
+
 
 def downgrade():
     # The schedule backfill intentionally remains: deleting newly learned
