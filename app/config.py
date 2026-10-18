@@ -112,8 +112,17 @@ class ProductionConfig(BaseConfig):
         app.config["SQLALCHEMY_DATABASE_URI"] = database_url
         app.config["CORS_ORIGINS"] = cors_origins
         app.config["RATELIMIT_STORAGE_URI"] = ratelimit_storage
+        # The free Render instance has a tight memory budget and Neon can
+        # recycle idle connections. Keep each worker's pool deliberately small,
+        # validate connections before reuse, and recycle them before provider idle limits.
         app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-            "connect_args": {"sslmode": "require"}, "pool_pre_ping": True, "pool_recycle": 300,
+            "connect_args": {"sslmode": "require"},
+            "pool_pre_ping": True,
+            "pool_recycle": 180,
+            "pool_size": 2,
+            "max_overflow": 0,
+            "pool_timeout": 30,
+            "pool_use_lifo": True,
         }
         app.config["SESSION_COOKIE_SECURE"] = True
         app.config["SESSION_COOKIE_SAMESITE"] = "None"
