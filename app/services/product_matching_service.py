@@ -24,6 +24,43 @@ class ProductMatchingService:
         "שיווק", "מסחר", "מסחרית",
     }
 
+    # Attributes that distinguish catalog identities. A fuzzy score must never
+    # override a conflict in one of these explicit attributes.
+    ITEM_TYPE_GROUPS = {
+        "utensil": {
+            "כף": "spoon", "כפות": "spoon", "כפית": "teaspoon", "כפיות": "teaspoon",
+            "מזלג": "fork", "מזלגות": "fork", "סכין": "knife", "סכינים": "knife",
+        },
+        "dishware": {
+            "צלחת": "plate", "צלחות": "plate", "קערה": "bowl", "קעריות": "bowl",
+            "קערית": "bowl", "קעריות": "bowl", "מגש": "tray", "מגשים": "tray",
+            "כוס": "cup", "כוסות": "cup", "ספל": "mug", "ספלים": "mug",
+        },
+        "paper_goods": {
+            "מפית": "napkin", "מפיות": "napkin", "מגבת": "towel", "מגבות": "towel",
+            "טואלט": "toilet_paper", "נייר": "paper",
+        },
+    }
+    VARIANT_GROUPS = {
+        "size": {
+            "גדול": "large", "גדולה": "large", "גדולים": "large", "גדולות": "large",
+            "קטן": "small", "קטנה": "small", "קטנים": "small", "קטנות": "small",
+            "ענק": "giant", "ענקית": "giant", "בינוני": "medium", "בינונית": "medium",
+        },
+        "color": {
+            "לבן": "white", "לבנה": "white", "לבנים": "white", "לבנות": "white",
+            "שחור": "black", "שחורה": "black", "שחורים": "black", "שחורות": "black",
+            "שקוף": "transparent", "שקופה": "transparent", "שקופים": "transparent", "שקופות": "transparent",
+            "קרם": "cream", "זהב": "gold", "זהובה": "gold", "כסף": "silver",
+            "כסופה": "silver", "כחול": "blue", "כחולה": "blue", "אדום": "red", "אדומה": "red",
+            "ירוק": "green", "ירוקה": "green",
+        },
+        "use": {
+            "מרק": "soup", "סלטיות": "salad_bowls", "סלטיה": "salad_bowl",
+            "חלונות": "windows", "אסלות": "toilet", "רצפות": "floor",
+        },
+    }
+
     def __init__(self, tenant_id: int):
         self.tenant_id = tenant_id
         self._products: list[Product] | None = None
@@ -97,10 +134,114 @@ class ProductMatchingService:
         return 0.0, None
 
     @classmethod
+    def _measure_signature(cls, value) -> tuple[str, float] | None:
+        raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
+        raw = raw.replace("\u05f4", '"').replace("\u05f3", "'")
+        match = re.search(
+            r"(?<!\d)(\d+(?:[.,]\d+)?)\s*(millilit(?:er|re)s?|ml|מיליליטר|מ[\"']?ל|"
+            r"lit(?:er|re)s?|l|ליטרים?|ליטר|kg|kgs?|ק\s*ג|קילו(?:גרם)?|g|גרם|"
+            r"cm|סמ|ס\s*מ|mm|ממ|מ\s*מ|מטרים?|מטר)(?!\w)",
+            raw,
+        )
+        if not match:
+            return None
+        amount = float(match.group(1).replace(",", "."))
+        unit = re.sub(r"\s+", "", match.group(2))
+        if unit in {"l", "liter", "liters", "litre", "litres", "ליטר", "ליטרים"}:
+            return "volume_ml", amount * 1000
+        if unit in {"ml", "milliliter", "milliliters", "millilitre", "millilitres", "מיליליטר", 'מל', 'מ"ל'}:
+            return "volume_ml", amount
+        if unit in {"kg", "kgs", "קג", "קילו", "קילוגרם"}:
+            return "mass_g", amount * 1000
+        if unit in {"g", "גרם"}:
+            return "mass_g", amount
+        if unit in {"cm", "סמ"}:
+            return "length_mm", amount * 10
+        if unit in {"mm", "ממ"}:
+            return "length_mm", amount
+        if unit in {"מטר", "מטרים"}:
+            return "length_mm", amount * 1000
+        return None
+
+    @classmethod
+    def _percent_signature(cls, value) -> float | None:
+        raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
+        raw = raw.replace("\u05f4", '"').replace("\u05f3", "'")
+        match = re.search(r"(?<!\d)(\d+(?:[.,]\d+)?)\s*(?:%|אחוז(?:ים)?)(?!\w)", raw)
+        return float(match.group(1).replace(",", ".")) if match else None
+
+    @classmethod
+    def _package_count(cls, value) -> int | None:
+        raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
+        match = re.search(r"(?<!\d)(\d+)\s*(?:יח(?:ידות|ידה|י|׳|')?|pcs?|pieces)(?!\w)", raw)
+        return int(match.group(1)) if match else None
+
+    @classmethod
+    def _variant_conflict(cls, extracted, product) -> bool:
+        """Reject explicit contradictions before identity shortcuts or fuzzy scoring."""
+        source_tokens = cls.tokens(extracted.get("description"))
+        catalog_tokens = cls.tokens(product.name)
+
+        source_measure = cls._measure_signature(extracted.get("description"))
+        catalog_measure = cls._measure_signature(product.name)
+        if source_measure is not None and catalog_measure is not None and source_measure != catalog_measure:
+            return True
+        source_percent = cls._percent_signature(extracted.get("description"))
+        catalog_percent = cls._percent_signature(product.name)
+        if source_percent is not None and catalog_percent is not None and source_percent != catalog_percent:
+            return True
+        source_count = cls._package_count(extracted.get("description"))
+        catalog_count = cls._package_count(product.name)
+        if source_count is not None and catalog_count is not None and source_count != catalog_count:
+            return True
+
+        source_types = set()
+        catalog_types = set()
+        for group_name, attribute_map in cls.ITEM_TYPE_GROUPS.items():
+            source_types.update((group_name, attribute_map[token]) for token in source_tokens if token in attribute_map)
+            catalog_types.update((group_name, attribute_map[token]) for token in catalog_tokens if token in attribute_map)
+        if source_types and catalog_types and source_types.isdisjoint(catalog_types):
+            return True
+
+        for group in (cls.ITEM_TYPE_GROUPS, cls.VARIANT_GROUPS):
+            for attribute_map in group.values():
+                source_values = {attribute_map[token] for token in source_tokens if token in attribute_map}
+                catalog_values = {attribute_map[token] for token in catalog_tokens if token in attribute_map}
+                if source_values and catalog_values and source_values.isdisjoint(catalog_values):
+                    return True
+        return False
+
+    @classmethod
+    def _variant_unconfirmed(cls, extracted, product) -> bool:
+        """Flag a candidate for review when the line has attributes the catalog omits."""
+        source_tokens = cls.tokens(extracted.get("description"))
+        catalog_tokens = cls.tokens(product.name)
+        if cls._measure_signature(extracted.get("description")) is not None and cls._measure_signature(product.name) is None:
+            return True
+        if cls._percent_signature(extracted.get("description")) is not None and cls._percent_signature(product.name) is None:
+            return True
+        if cls._package_count(extracted.get("description")) is not None and cls._package_count(product.name) is None:
+            return True
+        for group in (cls.ITEM_TYPE_GROUPS, cls.VARIANT_GROUPS):
+            for attribute_map in group.values():
+                source_values = {attribute_map[token] for token in source_tokens if token in attribute_map}
+                catalog_values = {attribute_map[token] for token in catalog_tokens if token in attribute_map}
+                if source_values and not catalog_values:
+                    return True
+                if source_values and catalog_values and source_values != catalog_values:
+                    return True
+        return False
+
+    @classmethod
     def _candidate_score(cls, extracted, product, supplier_id: int | None = None) -> tuple[float, str]:
+        if cls._variant_conflict(extracted, product):
+            return 0.0, "PRODUCT_VARIANT_MISMATCH"
+        unconfirmed_variant = cls._variant_unconfirmed(extracted, product)
         identity, method = cls._identity_score(extracted, product)
         if identity:
-            return identity, method
+            # Identity data is strong evidence, but an omitted explicit variant
+            # must keep the line in manual review rather than auto-select it.
+            return (max(0.0, identity - 0.10), "IDENTITY_VARIANT_UNCONFIRMED") if unconfirmed_variant else (identity, method)
         description = extracted.get("description") or ""
         score = max(cls._text_score(description, product.name), cls._text_score(description, product.description) * 0.92)
         extracted_unit = cls.normalize(extracted.get("unit"))
@@ -116,6 +257,10 @@ class ProductMatchingService:
                 pass
         if supplier_id is not None and product.supplier_id == supplier_id:
             score = min(1.0, score + 0.05)
+        if unconfirmed_variant:
+            # Penalize missing variant evidence while preserving meaningful ranking.
+            # This keeps the candidate in review and still lets supplier context rank it.
+            score = max(0.0, score - 0.10)
         return round(score, 4), "NAME_SIMILARITY"
 
     def _load_catalog(self):

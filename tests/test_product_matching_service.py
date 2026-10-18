@@ -131,3 +131,103 @@ def test_synthetic_barcode_never_becomes_authoritative_match():
     )
     assert method == "NAME_SIMILARITY"
     assert score < 1.0
+
+
+
+def test_explicit_small_vs_large_variant_is_rejected_even_with_similar_name():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "צלחות קטן Classic קרם"},
+        product(name="צלחות גדול Classic קרם", description="", barcode="", supplier_sku=None),
+    )
+    assert score == 0
+    assert method == "PRODUCT_VARIANT_MISMATCH"
+
+
+def test_explicit_soup_plate_stays_in_review_against_regular_plate():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "צלחות מרק Classic קרם"},
+        product(name="צלחות גדול Classic קרם", description="", barcode="", supplier_sku=None),
+    )
+    assert 0 < score < 0.93
+    assert method == "NAME_SIMILARITY"
+
+
+def test_cutlery_types_are_never_interchangeable():
+    service = ProductMatchingService(1)
+    cases = [
+        ("כפות קרם ארוז 50 יח", "סכין קרם ארוז 50 יח"),
+        ("מזלג קרם ארוז 50 יח", "סכין קרם ארוז 50 יח"),
+        ("מפיות לבנות 100 יח", "כפות קרם ארוז 50 יח"),
+    ]
+    for source, catalog_name in cases:
+        score, method = service._candidate_score(
+            {"description": source},
+            product(name=catalog_name, description="", barcode="", supplier_sku=None),
+        )
+        assert score == 0, (source, catalog_name, score, method)
+        assert method == "PRODUCT_VARIANT_MISMATCH"
+
+
+def test_exact_barcode_does_not_override_explicit_variant_conflict():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "צלחות קטן קרם", "barcode": "7290000000012"},
+        product(name="צלחות גדול קרם", description="", barcode="7290000000012"),
+    )
+    assert score == 0
+    assert method == "PRODUCT_VARIANT_MISMATCH"
+
+
+def test_same_explicit_variant_can_still_use_exact_identity():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "צלחות קטן קרם", "barcode": "7290000000012"},
+        product(name="צלחות קטן קרם", description="", barcode="7290000000012"),
+    )
+    assert score == 1.0
+    assert method == "BARCODE"
+
+
+
+def test_explicit_package_volume_and_fat_percentage_conflicts_are_rejected():
+    service = ProductMatchingService(1)
+    cases = [
+        ("חלב תנובה 3% 1 ליטר", "חלב תנובה 3% 2 ליטר"),
+        ("חלב תנובה 3% 1 ליטר", "חלב תנובה 1.5% 1 ליטר"),
+    ]
+    for source, catalog_name in cases:
+        score, method = service._candidate_score(
+            {"description": source},
+            product(name=catalog_name, description="", barcode="", supplier_sku=None),
+        )
+        assert score == 0, (source, catalog_name, score, method)
+        assert method == "PRODUCT_VARIANT_MISMATCH"
+
+
+def test_explicit_pack_count_conflict_is_rejected():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "כפות קרם ארוז 50 יח"},
+        product(name="כפות קרם ארוז 100 יח", description="", barcode="", supplier_sku=None),
+    )
+    assert score == 0
+    assert method == "PRODUCT_VARIANT_MISMATCH"
+
+
+def test_candidate_missing_explicit_variant_cannot_be_auto_selected():
+    service = ProductMatchingService(1)
+    service._suppliers = []
+    service._products = [
+        product(
+            id=101,
+            name="צלחות קרם Classic",
+            description="",
+            barcode="",
+            supplier_sku=None,
+        ),
+    ]
+    result = service.match_line({"description": "צלחות קטן קרם Classic"})
+    assert result["decision"] == "REVIEW"
+    assert result["best_match"]["product_id"] == 101
