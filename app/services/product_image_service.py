@@ -107,23 +107,25 @@ def lookup_product_image(barcode, product_name=None, timeout=4):
     """Return a safe image candidate, preferring barcode and requiring exact fallback names."""
     normalized = _digits(barcode)
     usable_barcode = bool(normalized and not _is_synthetic_barcode(normalized))
+    barcode_reason = "missing_or_synthetic_barcode"
     if usable_barcode:
         endpoint = f"{SOURCE_BASE}/api/v2/product/{quote(normalized, safe='')}.json?fields=code,product_name,brands,quantity,image_front_url,selected_images"
         payload = _request_json(endpoint, timeout)
+        barcode_reason = "source_unavailable" if payload is None else "product_not_found"
         if isinstance(payload, dict) and payload.get("status") == 1 and isinstance(payload.get("product"), dict):
             product = payload["product"]
             returned_code = _digits(product.get("code"))
-            if returned_code.lstrip("0") == normalized.lstrip("0"):
-                image_url = _image_from_product(product)
-                if image_url:
-                    return {
-                        "image_url": image_url, "reason": "matched", "source": SOURCE_NAME,
-                        "source_url": f"{SOURCE_BASE}/product/{normalized}",
-                        "product_name": str(product.get("product_name") or "").strip() or None,
-                        "match_method": "exact_barcode",
-                    }
-            else:
+            if returned_code.lstrip("0") != normalized.lstrip("0"):
                 return {"image_url": None, "reason": "barcode_mismatch"}
+            image_url = _image_from_product(product)
+            if image_url:
+                return {
+                    "image_url": image_url, "reason": "matched", "source": SOURCE_NAME,
+                    "source_url": f"{SOURCE_BASE}/product/{normalized}",
+                    "product_name": str(product.get("product_name") or "").strip() or None,
+                    "match_method": "exact_barcode",
+                }
+            barcode_reason = "image_not_available"
     if product_name:
         return _name_lookup(product_name, timeout)
-    return {"image_url": None, "reason": "missing_or_synthetic_barcode"}
+    return {"image_url": None, "reason": barcode_reason}
