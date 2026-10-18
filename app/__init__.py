@@ -163,6 +163,13 @@ def _register_error_handlers(app):
     @app.errorhandler(Exception)
     def handle_unexpected_exception(e):
         request_id = getattr(g, "request_id", "unknown")
+        # Database disconnects leave the current SQLAlchemy transaction failed.
+        # Roll it back before Flask finalizes the request so teardown/error handling
+        # cannot cascade into PendingRollbackError and obscure the original failure.
+        try:
+            db.session.rollback()
+        except Exception:
+            logger.exception("Database session rollback failed request_id=%s", request_id)
         logger.exception("Unhandled exception request_id=%s method=%s path=%s", request_id, request.method, request.path)
         return jsonify({
             "success": False,
