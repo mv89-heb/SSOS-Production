@@ -134,12 +134,16 @@ def upgrade():
     # Public company identity details are taken from the suppliers' own sites.
     # Generic public details are added only when the corresponding field is blank.
     public_profiles = [
-        (("אוסם",), "https://www.osem-nestle.co.il", "קריית אסם", "שוהם", None),
-        (("תנובה",), "https://www.tnuva.co.il", "יגיע כפיים 21", "פתח תקווה", None),
-        (("גידרון",), "https://www.gidron.co.il", None, "חולון", "03-557-0200"),
-        (("יפאורה", "יפאורה תבורי"), "https://www.jafora.co.il", "אלי הורוביץ 4, בית מיקה", "רחובות", "08-9346858"),
-        (("שטראוס",), "https://www.strauss-group.co.il", None, None, None),
-        (("אנג'ל",), "https://www.angel.co.il", None, None, None),
+        # name aliases, official website, address, city, general phone, general email, tax id, category
+        (("אוסם",), "https://www.osem-nestle.co.il", "קריית אסם", "שוהם", None, None, None, "יבש וקפוא"),
+        (("תנובה",), "https://www.tnuva.co.il", "יגיע כפיים 21", "פתח תקווה", None, None, None, "מוצרי חלב"),
+        (("גידרון",), "https://www.gidron.co.il", None, "חולון", "03-557-0200", None, "510894587", "קפואים"),
+        (("יפאורה", "יפאורה תבורי"), "https://www.jafora.co.il", "אלי הורוביץ 4, בית מיקה", "רחובות", "08-9346858", None, None, "משקאות"),
+        (("שטראוס",), "https://www.strauss-group.co.il", None, None, None, None, None, "מוצרי מזון"),
+        (("אנג'ל",), "https://www.angel.co.il", None, None, None, None, None, "מאפה"),
+        (("ווגשל",), "https://www.vagshal.com", "עצמונה 11, מישור אדומים", "מישור אדומים", "02-590-2055", "office@vagshal.com", None, "מזון"),
+        (("פעמית.ח",), "https://www.peamitpro.co.il", None, None, "077-9971610", "peamit@peamit.co.il", None, "חד פעמי וציוד מוסדי"),
+        (("ר. שמאי",), "https://www.rshamay.co.il", "היצירה 10, אזור התעשייה ברוש", "בית שמש", "02-642-9452", "office@rshamay.co.il", "514212596", "חד פעמי וניקיון"),
     ]
     public_table = sa.table(
         "suppliers",
@@ -148,18 +152,28 @@ def upgrade():
         sa.column("address", sa.String),
         sa.column("city", sa.String),
         sa.column("phone", sa.String),
+        sa.column("email", sa.String),
+        sa.column("tax_id", sa.String),
+        sa.column("supplier_category", sa.String),
     )
-    for names, website, address, city, phone in public_profiles:
+    for names, website, address, city, phone, email, tax_id, category in public_profiles:
         for name in names:
             values = {
                 "website": sa.func.coalesce(sa.func.nullif(sa.func.trim(public_table.c.website), ""), website),
             }
-            if address:
-                values["address"] = sa.func.coalesce(sa.func.nullif(sa.func.trim(public_table.c.address), ""), address)
-            if city:
-                values["city"] = sa.func.coalesce(sa.func.nullif(sa.func.trim(public_table.c.city), ""), city)
-            if phone:
-                values["phone"] = sa.func.coalesce(sa.func.nullif(sa.func.trim(public_table.c.phone), ""), phone)
+            for column, value in (
+                ("address", address),
+                ("city", city),
+                ("phone", phone),
+                ("email", email),
+                ("tax_id", tax_id),
+                ("supplier_category", category),
+            ):
+                if value:
+                    values[column] = sa.func.coalesce(
+                        sa.func.nullif(sa.func.trim(getattr(public_table.c, column)), ""),
+                        value,
+                    )
             bind.execute(
                 public_table.update()
                 .where(sa.func.lower(sa.func.trim(public_table.c.name)) == name.lower())
