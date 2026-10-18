@@ -102,8 +102,17 @@ export default function SupplierOverviewPage() {
     const parsed = Number(quantities[rowKey(row)] ?? "1");
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   };
-  const basketSavings = visibleRows.reduce((sum, row) => sum + (row.supplier_count >= 2 ? Math.max(0, row.savings_per_unit) * quantityFor(row) : 0), 0);
-  const basketRowsWithQuantity = visibleRows.filter((row) => quantityFor(row) > 0);
+  const sumByCurrency = (rows: Row[], amountFor: (row: Row) => number) => rows.reduce<Record<string, number>>((totals, row) => {
+    totals[row.currency || "ILS"] = (totals[row.currency || "ILS"] || 0) + amountFor(row);
+    return totals;
+  }, {});
+  const formatCurrencyTotals = (totals: Record<string, number>) => {
+    const entries = Object.entries(totals).filter(([, value]) => value > 0.000001);
+    return entries.length ? entries.map(([currency, value]) => money(value, currency)).join(" + ") : money(0);
+  };
+  const basketSavingsByCurrency = sumByCurrency(visibleRows, (row) => row.supplier_count >= 2 ? Math.max(0, row.savings_per_unit) * quantityFor(row) : 0);
+  const unitGapsByCurrency = sumByCurrency(visibleRows, (row) => row.supplier_count >= 2 ? Math.max(0, row.savings_per_unit) : 0);
+  const basketRowsWithQuantity = visibleRows.filter((row) => row.supplier_count >= 2 && quantityFor(row) > 0);
   const splitSuppliers = new Set(basketRowsWithQuantity.map((row) => row.best_supplier).filter((name): name is string => Boolean(name)));
   const exportCsv = () => {
     const headers = ["מוצר", "קטגוריה", "יחידת השוואה", "מטבע", "ספק במחיר הגבוה", "מחיר גבוה", "ספק זול", "מחיר זול", "פער ליחידה", "כמות לתכנון", "חיסכון משוער לפי הכמות", "מספר ספקים"];
@@ -149,11 +158,11 @@ export default function SupplierOverviewPage() {
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         {[
-          ["מוצרים / קבוצות מחיר", data?.summary?.products_analyzed ?? 0],
-          ["עם חלופות תואמות", data?.summary?.products_with_comparable_alternatives ?? 0],
-          ["הזדמנויות חיסכון", data?.summary?.opportunity_products ?? 0],
-          ["סכום פערים ליחידה", money(data?.summary?.potential_savings)],
-          ["חיסכון משוער לפי הכמויות", money(basketSavings)],
+          ["מוצרים / קבוצות מחיר", visibleRows.length],
+          ["עם חלופות תואמות", visibleRows.filter((row) => row.supplier_count >= 2).length],
+          ["הזדמנויות חיסכון", visibleRows.filter((row) => row.supplier_count >= 2 && row.savings_per_unit > 0).length],
+          ["סכום פערים ליחידה", formatCurrencyTotals(unitGapsByCurrency)],
+          ["חיסכון משוער לפי הכמויות", formatCurrencyTotals(basketSavingsByCurrency)],
           ["ספקים בסל מפוצל", splitSuppliers.size],
         ].map(([label, value]) => (
           <div
@@ -166,7 +175,7 @@ export default function SupplierOverviewPage() {
         ))}
       </section>
       <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
-        חשוב: "סכום פערים ליחידה" הוא סכום פערי המחיר ליחידה בין ההצעה הגבוהה לנמוכה בכל קבוצת השוואה — לא חיסכון כולל בפועל. אומדן הכמויות מחושב לפי הכמויות שהזנת לכל שורה; הוא עדיין אינו כולל משלוח, מינימום הזמנה, זמינות או תנאי תשלום.
+        חשוב: אומדן הכמויות מחושב בנפרד לכל מטבע, לפי הכמות שהזנת בכל שורה. בקטלוג האחיד הפער הוא בין ההצעה הגבוהה לנמוכה; בקטלוג המוצרים הוא עשוי להיות ביחס למחיר הנוכחי. האומדן אינו כולל משלוח, מינימום הזמנה, זמינות או תנאי תשלום, ואינו מבטיח שספק יחיד יכול לספק את כל הסל.
       </p>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
@@ -349,7 +358,7 @@ export default function SupplierOverviewPage() {
                     </tr>
                     {expandedRows[rowKey(row)] && (
                       <tr className="bg-violet-50/60 dark:bg-violet-950/20">
-                        <td colSpan={12} className="px-4 py-4">
+                        <td colSpan={11} className="px-4 py-4">
                           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                             <div className="font-black">כל הצעות המחיר — {row.product_name}</div>
                             <div className="text-xs text-slate-500">השוואה: {row.comparison_unit || "יחידה"} · {row.currency}</div>
