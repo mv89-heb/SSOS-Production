@@ -76,7 +76,7 @@ def upgrade():
     def normalize_name(value):
         value = unicodedata.normalize("NFKC", str(value or "")).strip().casefold()
         value = value.replace("בן אן ג'ריס", "בן אנד ג'רי").replace("בן ג'ריס", "בן אנד ג'רי").replace("בנז'ריס", "בן אנד ג'רי")
-        return re.sub(r"[\\W_]+", "", value, flags=re.UNICODE)
+        return re.sub(r"[\W_]+", "", value, flags=re.UNICODE)
 
     workbook_path = Path(__file__).resolve().parents[2] / "Fixed_Suppliers_Master.xlsx"
     if workbook_path.exists():
