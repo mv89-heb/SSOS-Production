@@ -264,7 +264,7 @@ class ProductMatchingService:
             # even when the normalized name is highly similar. Keep the candidate visible
             # for a human to confirm, and preserve supplier context for ranking.
             score = max(0.0, score - 0.10)
-        return round(score, 4), "NAME_VARIANT_UNCONFIRMED" if unconfirmed_variant else "NAME_SIMILARITY"
+        return round(score, 4), "NAME_SIMILARITY"
 
     def _load_catalog(self):
         if self._products is None:
