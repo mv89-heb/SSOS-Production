@@ -32,9 +32,23 @@ export interface UpdateSupplierInput {
   email?: string;
   phone?: string;
   phone2?: string;
+  mobile?: string;
   customer_number?: string;
   delivery_days?: string;
   order_days?: string;
+  address?: string;
+  city?: string;
+  tax_id?: string;
+  website?: string;
+  supplier_category?: string;
+  payment_terms?: string;
+  credit_days?: number | null;
+  minimum_order_amount?: number | null;
+  delivery_fee?: number | null;
+  lead_time_days?: number | null;
+  order_cutoff_time?: string;
+  certification_details?: string;
+  notes?: string;
   active?: boolean;
 }
 
