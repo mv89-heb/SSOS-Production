@@ -302,7 +302,7 @@ export default function SupplierOverviewPage() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {visibleRows.map((row) => (
                     <Fragment key={rowKey(row)}>
-                    <tr> className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                    <tr className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
                       <td className="px-4 py-4">
                         <Link href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="font-black hover:text-violet-600">
                           {row.product_name}
