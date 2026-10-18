@@ -179,7 +179,7 @@ class PriceIntelligenceService:
         )):
             self._comparison_context = None
             return
-        self._prepare_batch_comparison_context(products)
+        self._comparison_context = self._build_batch_comparison_context(products)
 
     def compare_product(self, product_id: int):
         context = getattr(self, "_comparison_context", None)
