@@ -5,11 +5,10 @@ services:
   - type: web
     name: ssos-backend
     env: python
-    plan: starter
+    plan: free
     pythonVersion: "3.11.9"
     healthCheckPath: /health
     buildCommand: "pip install -r requirements.txt"
-    preDeployCommand: "python -m flask --app app:create_app() db upgrade heads"
     startCommand: "python scripts/start_production.py"
     envVars:
       - key: FLASK_ENV
@@ -35,6 +34,8 @@ services:
         value: "3.11.9"
       - key: WEB_CONCURRENCY
         value: "1"
+      - key: RUN_MIGRATIONS_ON_START
+        value: "true"
       - key: AI_ENABLED
         value: "true"
       - key: AI_PROVIDER
@@ -100,7 +101,7 @@ services:
   - type: web
     name: ssos-frontend
     env: node
-    plan: starter
+    plan: free
     rootDir: frontend
     healthCheckPath: /login
     buildCommand: "npm ci && npm run build"

@@ -103,3 +103,31 @@ def test_invalid_reminder_execution_window_fails_fast(monkeypatch):
     with pytest.raises(ValueError, match="REMINDER_EXECUTION_WINDOW_MINUTES"):
         from app.config import _env_int
         _env_int("REMINDER_EXECUTION_WINDOW_MINUTES", 5, minimum=0)
+
+
+def test_production_entrypoint_runs_migrations_once_before_gunicorn(monkeypatch):
+    from scripts import start_production
+
+    events = []
+
+    def fake_run(command, check):
+        events.append(("migrate", command, check))
+
+    def fake_execvp(program, args):
+        events.append(("exec", program, args))
+        raise SystemExit(0)
+
+    monkeypatch.setenv("RUN_MIGRATIONS_ON_START", "true")
+    monkeypatch.setenv("PORT", "10000")
+    monkeypatch.setenv("WEB_CONCURRENCY", "1")
+    monkeypatch.setattr(start_production.subprocess, "run", fake_run)
+    monkeypatch.setattr(start_production.os, "execvp", fake_execvp)
+
+    with pytest.raises(SystemExit):
+        start_production.main()
+
+    assert events[0][0] == "migrate"
+    assert events[0][1][1:5] == ["-m", "flask", "--app", "app:create_app()"]
+    assert events[0][2] is True
+    assert events[1][0] == "exec"
+    assert events[1][2][1:3] == ["-w", "1"]
