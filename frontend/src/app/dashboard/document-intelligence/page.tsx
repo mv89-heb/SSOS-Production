@@ -51,8 +51,44 @@ export default function DocumentIntelligencePage() {
   const supplierOptions = useMemo(() => [...suppliers].sort((a, b) => a.name.localeCompare(b.name, "he")).map((s) => ({ id: s.id, name: s.name, extra: s.customer_number })), [suppliers]);
   const items = useMemo<ExtractedItem[]>(() => Array.isArray(data?.items) ? data.items : [], [data]);
   const sections = useMemo<SupplierSection[]>(() => Array.isArray(data?.supplier_sections) ? data.supplier_sections : [], [data]);
-  const appliedIndexes = useMemo(() => new Set<number>((Array.isArray(data?.applied_line_indexes) ? data.applied_line_indexes : []).map(Number)), [data]);  const selectableIndexes = useMemo(() => items.map((_, index) => index).filter((index) => !appliedIndexes.has(index)), [items, appliedIndexes]);
+  const autoSelectedIndexesRef = useRef<Record<number, Set<number>>>({});
+  const selectionAnalysisIdRef = useRef<number | null>(null);
+  const appliedIndexes = useMemo(() => new Set<number>((Array.isArray(data?.applied_line_indexes) ? data.applied_line_indexes : []).map(Number)), [data]);
+  const selectableIndexes = useMemo(() => items.map((_, index) => index).filter((index) => !appliedIndexes.has(index)), [items, appliedIndexes]);
   const allSelected = selectableIndexes.length > 0 && selectableIndexes.every((index) => selectedLines.has(index));
+  useEffect(() => {
+    if (!analysis) {
+      selectionAnalysisIdRef.current = null;
+      setSelectedLines(new Set());
+      return;
+    }
+    const isNewAnalysis = selectionAnalysisIdRef.current !== analysis.id;
+    selectionAnalysisIdRef.current = analysis.id;
+    const previouslyAutoSelected = autoSelectedIndexesRef.current[analysis.id] ?? new Set<number>();
+    autoSelectedIndexesRef.current[analysis.id] = previouslyAutoSelected;
+    const autoIndexesToAdd: number[] = [];
+    items.forEach((item, index) => {
+      if (appliedIndexes.has(index) || previouslyAutoSelected.has(index)) return;
+      const product = item.product_matching?.best_match;
+      const supplier = item.supplier_matching;
+      const confidentProduct = Boolean(product && (
+        product.decision === "AUTO_MATCH" ||
+        ((product.confidence || 0) >= 0.75 && product.decision !== "LOW_CONFIDENCE")
+      ));
+      if (confidentProduct && supplier?.decision === "AUTO_MATCH" && product?.product_id && supplier.supplier_id) {
+        autoIndexesToAdd.push(index);
+        previouslyAutoSelected.add(index);
+      }
+    });
+    setSelectedLines((current) => {
+      const next = isNewAnalysis ? new Set<number>() : new Set([...current].filter((index) => !appliedIndexes.has(index)));
+      // High-confidence matches are preselected once; uncertain lines remain unchecked.
+      // Later progress refreshes never override a user's explicit deselection.
+      autoIndexesToAdd.forEach((index) => next.add(index));
+      if (next.size === current.size && [...next].every((index) => current.has(index))) return current;
+      return next;
+    });
+  }, [analysis?.id, items, appliedIndexes]);
   const toggleAllLines = () => setSelectedLines((current) => { const next = new Set(current); if (allSelected) selectableIndexes.forEach((index) => next.delete(index)); else selectableIndexes.forEach((index) => next.add(index)); return next; });
   const toggleLine = (index: number) => setSelectedLines((current) => { const next = new Set(current); if (next.has(index)) next.delete(index); else next.add(index); return next; });
   const productOptionsForItem = (item: ExtractedItem) => {

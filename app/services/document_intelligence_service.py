@@ -188,7 +188,14 @@ class DocumentIntelligenceService:
     def create_product_from_line(self, analysis_id: int, line_index: int, data: dict | None = None):
         """Create a catalog product from one extracted line and apply that line atomically."""
         PermissionService.require_role_at_least("manager")
-        row = self._get(analysis_id)
+        # Lock the analysis before checking the applied-line marker. This prevents
+        # two concurrent create-product requests for the same line from creating
+        # duplicate catalog products before either request records the line as applied.
+        row = DocumentAnalysis.query.filter_by(
+            tenant_id=self.tenant_id, id=analysis_id
+        ).with_for_update().first()
+        if row is None:
+            raise NotFound("Document analysis not found")
         if row.status not in {"ANALYZED", "PARTIALLY_APPLIED"} or not isinstance(row.extracted_data, dict):
             raise BadRequest("Document must be successfully analyzed before creating a catalog product")
         extracted_items = row.extracted_data.get("items") if isinstance(row.extracted_data.get("items"), list) else []

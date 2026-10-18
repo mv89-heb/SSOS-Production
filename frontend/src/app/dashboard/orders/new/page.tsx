@@ -86,16 +86,25 @@ export default function NewOrderPage() {
       .slice(0, 6);
   }, [products, selectedProductIds]);
 
-  const estimatedTotal = useMemo(() => {
-    if (!products) return 0;
-    return lines.reduce((sum, line) => {
-      if (line.product_id === "" || line.quantity <= 0) return sum;
-      const product = products.find((p) => p.id === line.product_id);
-      return product && product.current_price != null && product.current_price > 0 ? sum + product.current_price * line.quantity : sum;
-    }, 0);
+  // An order has one supplier and must not present a mixed-currency amount as one total.
+  // Keep the estimate grouped by the actual selected product currencies.
+  const estimatedTotalsByCurrency = useMemo(() => {
+    const totals: Record<string, number> = {};
+    if (!products) return totals;
+    for (const line of lines) {
+      if (line.product_id === "" || line.quantity <= 0) continue;
+      const product = products.find((candidate) => candidate.id === line.product_id);
+      if (!product || product.current_price == null || product.current_price <= 0) continue;
+      const currency = (product.currency || "ILS").toUpperCase();
+      totals[currency] = (totals[currency] || 0) + product.current_price * line.quantity;
+    }
+    return totals;
   }, [lines, products]);
-
-  const currency = products?.[0]?.currency ?? "ILS";
+  const selectedCurrencies = Object.keys(estimatedTotalsByCurrency);
+  const hasMixedCurrencies = selectedCurrencies.length > 1;
+  const formatEstimatedTotals = () => Object.entries(estimatedTotalsByCurrency)
+    .map(([currencyCode, total]) => `${currencyCode} ${total.toLocaleString("he-IL", { maximumFractionDigits: 2 })}`)
+    .join(" · ");
   const hasSelectedLines = lines.some((line) => line.product_id !== "");
   const selectedCount = lines.filter((line) => line.product_id !== "").length;
 
@@ -134,6 +143,10 @@ export default function NewOrderPage() {
       const product = products?.find((candidate) => candidate.id === line.product_id);
       return !product || product.current_price == null || product.current_price <= 0;
     });
+    if (hasMixedCurrencies) {
+      setFormError("נבחרו מוצרים במטבעות שונים. יש לפצל להזמנות נפרדות לפי מטבע כדי למנוע סכום שגוי.");
+      return;
+    }
     if (missingPrice) {
       setFormError("אי אפשר ליצור הזמנה עם מוצר שאין לו מחיר רכישה תקין. השלם את המחיר בקטלוג לפני ההזמנה.");
       return;
@@ -307,10 +320,11 @@ export default function NewOrderPage() {
           {hasSelectedLines && (
             <div className="mt-4 flex flex-col gap-2 rounded-2xl bg-slate-950 p-4 text-white sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-semibold text-slate-400">סכום משוער</p>
+                <p className="text-xs font-semibold text-slate-400">סכום משוער לפי מטבע</p>
                 <p className="text-sm text-slate-300">הסכום הסופי מחושב ומאומת בצד השרת בעת יצירת ההזמנה.</p>
+                {hasMixedCurrencies && <p role="alert" className="mt-2 text-sm font-bold text-amber-300">נבחרו מטבעות שונים — יש לפצל להזמנות נפרדות.</p>}
               </div>
-              <p className="text-2xl font-black">{currency} {estimatedTotal.toLocaleString("he-IL")}</p>
+              <p className="text-2xl font-black">{formatEstimatedTotals() || "—"}</p>
             </div>
           )}
         </CardContent>
