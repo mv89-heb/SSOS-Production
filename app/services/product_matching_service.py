@@ -6,6 +6,7 @@ from difflib import SequenceMatcher
 
 from app.models.product import Product
 from app.models.supplier import Supplier
+from app.models.supplier_offer import SupplierProductOffer
 
 
 class ProductMatchingService:
@@ -65,6 +66,7 @@ class ProductMatchingService:
         self.tenant_id = tenant_id
         self._products: list[Product] | None = None
         self._suppliers: list[Supplier] | None = None
+        self._supplier_offers: list[SupplierProductOffer] | None = None
 
     @classmethod
     def normalize(cls, value) -> str:
@@ -233,11 +235,15 @@ class ProductMatchingService:
         return False
 
     @classmethod
-    def _candidate_score(cls, extracted, product, supplier_id: int | None = None) -> tuple[float, str]:
+    def _candidate_score(cls, extracted, product, supplier_id: int | None = None, supplier_offer=None) -> tuple[float, str]:
         if cls._variant_conflict(extracted, product):
             return 0.0, "PRODUCT_VARIANT_MISMATCH"
         unconfirmed_variant = cls._variant_unconfirmed(extracted, product)
         identity, method = cls._identity_score(extracted, product)
+        extracted_supplier_sku = cls.compact(extracted.get("supplier_sku"))
+        offer_supplier_sku = cls.compact(getattr(supplier_offer, "supplier_sku", None)) if supplier_offer is not None else ""
+        if extracted_supplier_sku and offer_supplier_sku and extracted_supplier_sku == offer_supplier_sku:
+            identity, method = 0.99, "SUPPLIER_OFFER_SKU"
         if identity:
             # Identity data is strong evidence, but an omitted explicit variant
             # must keep the line in manual review rather than auto-select it.
@@ -264,10 +270,17 @@ class ProductMatchingService:
         return round(score, 4), "NAME_SIMILARITY"
 
     def _load_catalog(self):
+        loading_from_database = self._products is None
         if self._products is None:
             self._products = list(Product.query.filter_by(tenant_id=self.tenant_id, active=True).all())
         if self._suppliers is None:
             self._suppliers = list(Supplier.query.filter_by(tenant_id=self.tenant_id, active=True).all())
+        # Load cross-supplier offers only with the real database catalog. Tests
+        # can inject an in-memory product list without needing a DB app context.
+        if self._supplier_offers is None and loading_from_database:
+            self._supplier_offers = list(
+                SupplierProductOffer.query.filter_by(tenant_id=self.tenant_id, active=True).all()
+            )
 
     def match_supplier(self, supplier_data: dict | None):
         self._load_catalog()
@@ -301,17 +314,34 @@ class ProductMatchingService:
         self._load_catalog()
         scored = []
         catalog = self._products or []
-        if supplier_id is not None:
-            supplier_catalog = [product for product in catalog if product.supplier_id == supplier_id]
-            catalog = supplier_catalog or catalog
+        offers_by_product = {
+            offer.product_id: offer
+            for offer in (self._supplier_offers or [])
+            if supplier_id is not None and offer.supplier_id == supplier_id and offer.active
+        }
+        # Do not restrict matching to products whose primary supplier is the
+        # invoice supplier. The same catalog product may be sold by this
+        # supplier through SupplierProductOffer instead.
         for product in catalog:
-            score, method = self._candidate_score(extracted, product, supplier_id=supplier_id)
+            offer = offers_by_product.get(product.id)
+            score, method = self._candidate_score(
+                extracted, product, supplier_id=supplier_id, supplier_offer=offer
+            )
+            if offer is not None and method == "NAME_SIMILARITY":
+                score = min(1.0, score + 0.05)
             if score >= 0.45:
-                scored.append((score, method, product))
+                scored.append((score, method, product, offer))
         scored.sort(key=lambda row: (-row[0], row[2].id))
         suggestions = [
-            {"product_id": product.id, "product_name": product.name, "supplier_id": product.supplier_id, "supplier_name": product.supplier.name if product.supplier else None, "confidence": round(score, 4), "method": method}
-            for score, method, product in scored[: max(1, limit)]
+            {
+                "product_id": product.id,
+                "product_name": product.name,
+                "supplier_id": offer.supplier_id if offer is not None else product.supplier_id,
+                "supplier_name": (offer.supplier.name if offer is not None and offer.supplier else (product.supplier.name if product.supplier else None)),
+                "confidence": round(score, 4),
+                "method": method,
+            }
+            for score, method, product, offer in scored[: max(1, limit)]
         ]
         candidate = suggestions[0] if suggestions else None
         if candidate is None:
