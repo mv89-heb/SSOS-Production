@@ -11,7 +11,7 @@ import os
 
 def main() -> None:
     port = os.environ.get("PORT", "10000")
-    workers = os.environ.get("WEB_CONCURRENCY", "4")
+    workers = os.environ.get("WEB_CONCURRENCY", "1")
     print(f"[production] Starting Gunicorn on port {port} with {workers} workers", flush=True)
     os.execvp(
         "gunicorn",

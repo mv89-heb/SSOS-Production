@@ -61,6 +61,11 @@ def test_production_init_app_populates_runtime_config(monkeypatch):
     assert app.config["SESSION_COOKIE_SECURE"] is True
     assert app.config["SESSION_COOKIE_SAMESITE"] == "None"
     assert app.config["REMINDER_EXECUTION_WINDOW_MINUTES"] == 4
+    assert app.config["SQLALCHEMY_ENGINE_OPTIONS"]["pool_pre_ping"] is True
+    assert app.config["SQLALCHEMY_ENGINE_OPTIONS"]["pool_recycle"] == 180
+    assert app.config["SQLALCHEMY_ENGINE_OPTIONS"]["pool_size"] == 2
+    assert app.config["SQLALCHEMY_ENGINE_OPTIONS"]["max_overflow"] == 0
+    assert app.config["SQLALCHEMY_ENGINE_OPTIONS"]["pool_timeout"] == 30
 
 
 def test_production_init_app_rejects_memory_rate_limit_storage(monkeypatch):
