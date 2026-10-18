@@ -251,3 +251,60 @@ def test_soup_bowls_are_not_equivalent_to_regular_plates():
     )
     assert score == 0
     assert method == "PRODUCT_VARIANT_MISMATCH"
+
+def test_supplier_offer_sku_is_exact_identity_but_keeps_variant_guard():
+    service = ProductMatchingService(1)
+    offer = SimpleNamespace(supplier_sku="48090/2")
+    score, method = service._candidate_score(
+        {"description": "אשפתון 80/90 שחור 400 יח", "supplier_sku": "48090/2"},
+        product(name="אשפתון 80/90 שחור 400 יח", barcode="", supplier_sku=None),
+        supplier_id=10,
+        supplier_offer=offer,
+    )
+    assert score == 0.99
+    assert method == "SUPPLIER_OFFER_SKU"
+
+    score, method = service._candidate_score(
+        {"description": "צלחות קטן קרם", "supplier_sku": "48090/2"},
+        product(name="צלחות גדול קרם", barcode="", supplier_sku=None),
+        supplier_id=10,
+        supplier_offer=offer,
+    )
+    assert score == 0
+    assert method == "PRODUCT_VARIANT_MISMATCH"
+
+
+def test_match_line_includes_products_available_from_supplier_as_alternate_offer():
+    service = ProductMatchingService(1)
+    service._suppliers = []
+    service._products = [
+        product(
+            id=1678,
+            name="אשפתון רול אנד באג 50*70",
+            description="",
+            barcode="",
+            supplier_sku=None,
+            supplier_id=20,
+            supplier=SimpleNamespace(id=20, name="ספק ראשי אחר"),
+        ),
+    ]
+    service._supplier_offers = [
+        SimpleNamespace(
+            product_id=1678,
+            supplier_id=10,
+            supplier_sku=None,
+            active=True,
+            supplier=SimpleNamespace(id=10, name="ר. שמאי"),
+        ),
+    ]
+
+    result = service.match_line(
+        {"description": "אשפתון רול אנד באג 50*70"},
+        supplier_id=10,
+    )
+
+    assert result["best_match"]["product_id"] == 1678
+    assert result["best_match"]["supplier_id"] == 10
+    assert result["best_match"]["supplier_name"] == "ר. שמאי"
+    assert result["best_match"]["decision"] == "AUTO_MATCH"
+
