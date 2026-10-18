@@ -10,6 +10,10 @@ from app.models.price_observation import PriceObservation
 from app.models.document_analysis import DocumentAnalysis
 from app.models.product_classification_feedback import ProductClassificationFeedback
 from app.models.order import Order
+from app.models.order_item import OrderItem
+from app.models.receipt import Receipt
+from app.models.receipt_item import ReceiptItem
+from app.models.idempotency_key import IdempotencyKey
 from app.models.audit import AuditLog
 from app.models.notification import Notification
 from app.models.google_calendar import GoogleCalendarConnection
@@ -19,7 +23,7 @@ from app.models.inventory_planning_period import InventoryPlanningPeriod
 __all__ = [
     "Tenant", "User", "Supplier", "Product", "SupplierProductOffer",
     "MasterProduct", "SupplierProduct", "PriceHistory", "PriceObservation",
-    "DocumentAnalysis", "ProductClassificationFeedback", "Order", "AuditLog",
+    "DocumentAnalysis", "ProductClassificationFeedback", "Order", "OrderItem", "Receipt", "ReceiptItem", "IdempotencyKey", "AuditLog",
     "Notification", "GoogleCalendarConnection", "InventoryMovement",
     "InventoryPlanningPeriod",
 ]
