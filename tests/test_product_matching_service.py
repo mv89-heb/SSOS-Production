@@ -131,3 +131,60 @@ def test_synthetic_barcode_never_becomes_authoritative_match():
     )
     assert method == "NAME_SIMILARITY"
     assert score < 1.0
+
+
+
+def test_explicit_small_vs_large_variant_is_rejected_even_with_similar_name():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "צלחות קטן Classic קרם"},
+        product(name="צלחות גדול Classic קרם", description="", barcode="", supplier_sku=None),
+    )
+    assert score == 0
+    assert method == "PRODUCT_VARIANT_MISMATCH"
+
+
+def test_explicit_soup_plate_is_not_matched_to_regular_large_plate():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "צלחות מרק Classic קרם"},
+        product(name="צלחות גדול Classic קרם", description="", barcode="", supplier_sku=None),
+    )
+    assert score == 0
+    assert method == "PRODUCT_VARIANT_MISMATCH"
+
+
+def test_cutlery_types_are_never_interchangeable():
+    service = ProductMatchingService(1)
+    cases = [
+        ("כפות קרם ארוז 50 יח", "סכין קרם ארוז 50 יח"),
+        ("מזלג קרם ארוז 50 יח", "סכין קרם ארוז 50 יח"),
+        ("מפיות לבנות 100 יח", "כפות קרם ארוז 50 יח"),
+    ]
+    for source, catalog_name in cases:
+        score, method = service._candidate_score(
+            {"description": source},
+            product(name=catalog_name, description="", barcode="", supplier_sku=None),
+        )
+        assert score == 0, (source, catalog_name, score, method)
+        assert method == "PRODUCT_VARIANT_MISMATCH"
+
+
+def test_exact_barcode_does_not_override_explicit_variant_conflict():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "צלחות קטן קרם", "barcode": "7290000000012"},
+        product(name="צלחות גדול קרם", description="", barcode="7290000000012"),
+    )
+    assert score == 0
+    assert method == "PRODUCT_VARIANT_MISMATCH"
+
+
+def test_same_explicit_variant_can_still_use_exact_identity():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "צלחות קטן קרם", "barcode": "7290000000012"},
+        product(name="צלחות קטן קרם", description="", barcode="7290000000012"),
+    )
+    assert score == 1.0
+    assert method == "BARCODE"
