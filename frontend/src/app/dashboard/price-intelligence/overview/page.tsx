@@ -325,6 +325,9 @@ export default function SupplierOverviewPage() {
                       <strong className="block">{s.win_rate_percent}%</strong>
                     </div>
                   </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" aria-label={`שיעור זכייה במחיר הנמוך: ${s.win_rate_percent}%`}>
+                    <div className="h-full rounded-full bg-violet-500" style={{ width: String(Math.min(100, Math.max(0, s.win_rate_percent))) + "%" }} />
+                  </div>
                 </div>
               ))}
             </div>
