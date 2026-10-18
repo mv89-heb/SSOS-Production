@@ -33,7 +33,7 @@ class ProductMatchingService:
         },
         "dishware": {
             "צלחת": "plate", "צלחות": "plate", "קערה": "bowl", "קעריות": "bowl",
-            "קערית": "bowl", "קעריות": "bowl", "מגש": "tray", "מגשים": "tray",
+            "קערית": "bowl", "קעריות": "bowl", "לפתנית": "small_dish", "לפתניות": "small_dish", "מרקיה": "soup_bowl", "מרקיות": "soup_bowl", "מגש": "tray", "מגשים": "tray",
             "כוס": "cup", "כוסות": "cup", "ספל": "mug", "ספלים": "mug",
         },
         "paper_goods": {
