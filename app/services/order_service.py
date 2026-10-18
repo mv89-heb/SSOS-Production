@@ -1,3 +1,5 @@
+from datetime import date
+
 from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound
 from sqlalchemy import select
 
@@ -41,6 +43,7 @@ class OrderService:
         if not isinstance(supplier_id, int) or isinstance(supplier_id, bool) or supplier_id <= 0:
             raise BadRequest("A valid supplier_id is required")
         supplier = self.supplier_repo.get_by_id_or_404(supplier_id)
+        planned_order_date = self._parse_planned_order_date(payload.get("planned_order_date"))
         input_items = payload.get("items", [])
         if not isinstance(input_items, list) or not input_items:
             raise BadRequest("Order must have items")
@@ -59,6 +62,7 @@ class OrderService:
             items=enriched_items,
             currency=payload.get("currency", "ILS"),
             notes=payload.get("notes"),
+            planned_order_date=planned_order_date,
             **totals,
         )
         self._replace_order_items(order, enriched_items)
@@ -98,6 +102,8 @@ class OrderService:
 
         if "notes" in payload:
             order.notes = payload.get("notes")
+        if "planned_order_date" in payload:
+            order.planned_order_date = self._parse_planned_order_date(payload.get("planned_order_date"))
         if "items" in payload:
             input_items = payload.get("items")
             if not isinstance(input_items, list) or not input_items:
@@ -222,6 +228,15 @@ class OrderService:
         order.next_reminder_at = None
         AuditService.log_event(self.tenant_id, user.id, "order.completed", f"Order {order.order_number} completed", {"order_id": order.id})
         return order
+
+    @staticmethod
+    def _parse_planned_order_date(value):
+        if value in (None, ""):
+            return None
+        try:
+            return date.fromisoformat(str(value))
+        except (TypeError, ValueError):
+            raise BadRequest("planned_order_date must be a valid ISO date (YYYY-MM-DD)")
 
     def _build_snapshot_items(self, input_items: list, order_supplier_id: int) -> list:
         if not all(isinstance(item, dict) for item in input_items):
