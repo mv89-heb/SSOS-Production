@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Award, BarChart3, Search, TrendingDown } from "lucide-react";
+import { ArrowLeft, Award, BarChart3, Search, TrendingDown, Sparkles, ArrowUpDown } from "lucide-react";
 import { apiClient } from "@/services/api-client";
 
 const money = (value: number | null | undefined, currency = "ILS") =>
@@ -49,7 +49,14 @@ export default function SupplierOverviewPage() {
   const [search, setSearch] = useState("");
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const [opportunities, setOpportunities] = useState(false);
-  const deferredSearch = useDeferredValue(search);
+  const [category, setCategory] = useState("all");
+  const [sortBy, setSortBy] = useState<"savings" | "name" | "price" | "percent">("savings");
+  // Strip common natural-language intent words before searching catalog fields.
+  const searchTerm = useMemo(() => search
+    .replace(/איפה\\s+(כדאי\\s+)?(לקנות|לרכוש|מומלץ\\s+לקנות)/gi, " ")
+    .replace(/(תראה|הצג|מצא|חפש|השווה|השוואה|המלץ|המלצה|מומלץ|כדאי|לקנות|לרכוש|הכי|זול|זולים|זולות|מחיר|מחירים|ספק|ספקים|לפי|קטגוריה|קטגוריית|מוצר|מוצרים|רכישה|לרכישה|איפה|מה|של|את|עם|בין|בקטגוריה|בקטגוריית)/gi, " ")
+    .replace(/\\s+/g, " ").trim(), [search]);
+  const deferredSearch = useDeferredValue(searchTerm);
 
   const query = useQuery({
     queryKey: ["supplier-overview", deferredSearch, opportunities],
@@ -64,7 +71,30 @@ export default function SupplierOverviewPage() {
 
   const data = query.data;
   const rows = data?.products ?? [];
+  const categories = useMemo(() => Array.from(new Set(rows.map((row) => row.category?.trim()).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b, "he")), [rows]);
+  const visibleRows = useMemo(() => {
+    const filtered = rows.filter((row) => category === "all" || row.category === category);
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "name") return a.product_name.localeCompare(b.product_name, "he");
+      if (sortBy === "price") return (a.best_price ?? Number.POSITIVE_INFINITY) - (b.best_price ?? Number.POSITIVE_INFINITY);
+      if (sortBy === "percent") return b.savings_percent - a.savings_percent;
+      return b.savings_per_unit - a.savings_per_unit;
+    });
+  }, [rows, category, sortBy]);
   const suppliers = useMemo(() => data?.supplier_scores?.suppliers ?? [], [data]);
+  const recommendedSupplier = useMemo(() => {
+    const counts = new Map<string, { name: string; wins: number; savings: number }>();
+    visibleRows.forEach((row) => {
+      if (!row.best_supplier) return;
+      const current = counts.get(row.best_supplier) ?? { name: row.best_supplier, wins: 0, savings: 0 };
+      current.wins += 1;
+      current.savings += Math.max(0, row.savings_per_unit);
+      counts.set(row.best_supplier, current);
+    });
+    return [...counts.values()].sort((a, b) => b.wins - a.wins || b.savings - a.savings)[0] ?? null;
+  }, [visibleRows]);
+  const chartRows = visibleRows.filter((row) => row.savings_per_unit > 0).slice(0, 6);
+  const maxSaving = Math.max(1, ...chartRows.map((row) => row.savings_per_unit));
 
   return (
     <div dir="rtl" className="space-y-5 pb-12">
@@ -118,6 +148,22 @@ export default function SupplierOverviewPage() {
               className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-10 pl-3 outline-none focus:border-violet-500 dark:border-slate-700 dark:bg-slate-900"
             />
           </label>
+          <label className="flex min-w-48 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700">
+            <span className="shrink-0 text-xs font-bold text-slate-500">קטגוריה</span>
+            <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="סינון לפי קטגוריה" className="min-w-0 flex-1 bg-transparent py-1 text-sm outline-none">
+              <option value="all">כל הקטגוריות</option>
+              {categories.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+          <label className="flex min-w-48 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700">
+            <ArrowUpDown size={16} className="text-slate-400" />
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)} aria-label="מיון תוצאות" className="min-w-0 flex-1 bg-transparent py-1 text-sm outline-none">
+              <option value="savings">מיון לפי פער חיסכון</option>
+              <option value="percent">מיון לפי אחוז חיסכון</option>
+              <option value="price">מיון לפי המחיר הנמוך</option>
+              <option value="name">מיון לפי שם מוצר</option>
+            </select>
+          </label>
           <button
             onClick={() => setOpportunities((v) => !v)}
             className={
@@ -134,7 +180,31 @@ export default function SupplierOverviewPage() {
           <span>
             {search !== deferredSearch ? "מעדכן תוצאות..." : query.isFetching ? "מרענן תוצאות..." : "החיפוש כולל את כל שדות המוצר והספק"}
           </span>
-          <span>{data?.returned ?? 0} תוצאות</span>
+          <span>{visibleRows.length} תוצאות לאחר סינון</span>
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-3xl border border-violet-200 bg-white p-5 shadow-sm dark:border-violet-900 dark:bg-slate-950">
+          <div className="flex items-center gap-2"><Sparkles size={19} className="text-violet-600" /><h2 className="font-black">המלצת רכש לפי התוצאות</h2></div>
+          {recommendedSupplier ? <>
+            <div className="mt-3 text-xl font-black text-violet-700 dark:text-violet-300">{recommendedSupplier.name}</div>
+            <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              הספק מופיע כהצעה הזולה ביותר ב-{recommendedSupplier.wins} מתוך {visibleRows.length} המוצרים המסוננים.
+              זו המלצה לפי מספר זכיות במחיר הנמוך, ולא לפי סל משוקלל בכמויות או עלויות משלוח.
+            </p>
+            <div className="mt-3 text-xs text-slate-500">סכום פערי המחיר ליחידה במוצרים הרלוונטיים: {money(recommendedSupplier.savings)}</div>
+          </> : <p className="mt-3 text-sm text-slate-500">אין מספיק הצעות תואמות כדי להמליץ על ספק. נסה להסיר סינון או להשלים הצעות מחיר.</p>}
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex items-center gap-2"><BarChart3 size={19} className="text-indigo-600" /><h2 className="font-black">פערי החיסכון הבולטים</h2></div>
+          {chartRows.length ? <div className="mt-4 space-y-3">
+            {chartRows.map((row) => <div key={row.product_id}>
+              <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="truncate font-bold">{row.product_name}</span><span className="shrink-0 font-black text-emerald-700">{money(row.savings_per_unit, row.currency)}</span></div>
+              <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-emerald-500" style={{ width: String(Math.min(100, Math.max(0, row.savings_per_unit / maxSaving * 100))) + "%" }} /></div>
+              <div className="mt-1 text-[11px] text-slate-400">{row.best_supplier ? "הספק הזול: " + row.best_supplier : "אין ספק מומלץ"}</div>
+            </div>)}
+          </div> : <p className="mt-3 text-sm text-slate-500">לא נמצאו פערי מחיר חיוביים בתוצאות המסוננות.</p>}
         </div>
       </section>
 
@@ -181,7 +251,7 @@ export default function SupplierOverviewPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {rows.map((row) => (
+                  {visibleRows.map((row) => (
                     <tr key={row.product_id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
                       <td className="px-4 py-4">
                         <Link href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="font-black hover:text-violet-600">
@@ -219,7 +289,7 @@ export default function SupplierOverviewPage() {
                   ))}
                 </tbody>
               </table>
-              {!rows.length && !query.isLoading && (
+              {!visibleRows.length && !query.isLoading && (
                 <div className="p-10 text-center text-sm text-slate-500">
                   לא נמצאו מחירים תואמים להשוואה. ודא שמוצרי הספקים משויכים לאותו מוצר בקטלוג האחיד.
                 </div>
