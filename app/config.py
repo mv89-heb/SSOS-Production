@@ -116,7 +116,7 @@ class ProductionConfig(BaseConfig):
         # recycle idle connections. Keep each worker's pool deliberately small,
         # validate connections before reuse, and recycle them before provider idle limits.
         app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-            "connect_args": {"sslmode": "require"},
+            "connect_args": {"sslmode": os.environ.get("DATABASE_SSLMODE", "require")},
             "pool_pre_ping": True,
             "pool_recycle": 180,
             "pool_size": 2,
@@ -156,7 +156,7 @@ class DevelopmentConfig(BaseConfig):
         db_url = _normalize_db_url(db_url)
         app.config["SQLALCHEMY_DATABASE_URI"] = db_url
         if db_url.startswith("postgresql"):
-            app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"connect_args": {"sslmode": "require"}, "pool_pre_ping": True}
+            app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"connect_args": {"sslmode": os.environ.get("DATABASE_SSLMODE", "require")}, "pool_pre_ping": True}
 
 
 class TestingConfig(BaseConfig):

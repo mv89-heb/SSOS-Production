@@ -15,6 +15,11 @@ depends_on = None
 def upgrade():
     columns = [
         sa.Column("mobile", sa.String(50), nullable=True),
+        sa.Column("phone2", sa.String(50), nullable=True),
+        sa.Column("customer_number", sa.String(100), nullable=True),
+        sa.Column("order_days", sa.String(100), nullable=True),
+        sa.Column("delivery_days", sa.String(100), nullable=True),
+        sa.Column("ordering_rules", sa.JSON(), nullable=True),
         sa.Column("address", sa.String(255), nullable=True),
         sa.Column("city", sa.String(120), nullable=True),
         sa.Column("tax_id", sa.String(100), nullable=True),

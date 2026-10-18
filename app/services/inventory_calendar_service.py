@@ -89,71 +89,33 @@ class InventoryCalendarService:
         }
 
     def _consumption_metrics(self, product_id: int, lookback_days=60):
-        now = datetime.now(timezone.utc)
-        since = now - timedelta(days=max(7, min(int(lookback_days), 365)))
-        counts = db.session.scalars(
-            select(InventoryMovement).where(
-                InventoryMovement.tenant_id == self.tenant_id,
-                InventoryMovement.product_id == product_id,
-                InventoryMovement.movement_type == MOVEMENT_COUNT,
-                InventoryMovement.occurred_at >= since,
-            ).order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
-        ).all()
-        # Keep only the latest physical count for each calendar day.
-        # Multiple saves/retries on one day must not distort consumption rates.
-        daily_latest = {}
-        for movement in counts:
-            day_key = movement.occurred_at.date().isoformat()
-            previous = daily_latest.get(day_key)
-            if previous is None or (movement.occurred_at, movement.id) > (previous.occurred_at, previous.id):
-                daily_latest[day_key] = movement
-        counts = sorted(daily_latest.values(), key=lambda row: (row.occurred_at, row.id))
-        if len(counts) < 2:
-            return Decimal("0"), Decimal("0"), Decimal("0"), len(counts)
+        since = datetime.now(timezone.utc) - timedelta(days=max(7, min(int(lookback_days), 365)))
+        from app.services.inventory_consumption_planning_service import InventoryConsumptionPlanningService
 
-        receipts = db.session.scalars(
-            select(InventoryMovement).where(
-                InventoryMovement.tenant_id == self.tenant_id,
-                InventoryMovement.product_id == product_id,
-                InventoryMovement.movement_type == MOVEMENT_RECEIPT,
-                InventoryMovement.occurred_at >= since,
-            ).order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
-        ).all()
-        estimated_consumption = Decimal("0")
-        observed_days = Decimal("0")
-        total_receipts = Decimal("0")
-        for previous, current in zip(counts, counts[1:]):
-            days = Decimal(str(max((current.occurred_at - previous.occurred_at).total_seconds() / 86400, 0)))
-            if days <= 0:
-                continue
-            received = sum(
-                (Decimal(str(item.quantity or 0)) for item in receipts if previous.occurred_at < item.occurred_at <= current.occurred_at),
-                Decimal("0"),
-            )
-            previous_balance = Decimal(str(previous.balance_after or 0))
-            current_balance = Decimal(str(current.balance_after or 0))
-            consumption = previous_balance + received - current_balance
-            if consumption > 0:
-                estimated_consumption += consumption
-            observed_days += days
-            total_receipts += received
-        return estimated_consumption, observed_days, total_receipts, len(counts)
+        metric = InventoryConsumptionPlanningService(self.tenant_id)._consumption_batch(
+            [int(product_id)], since
+        ).get(int(product_id), {})
+        return (
+            Decimal(str(metric.get("consumption", 0))),
+            Decimal(str(metric.get("observed_days", 0))),
+            Decimal(str(metric.get("receipts", 0))),
+            int(metric.get("stock_checks", 0)),
+        )
 
-    def _inbound_quantities(self):
-        totals = {}
-        orders = db.session.scalars(
-            select(Order).where(Order.tenant_id == self.tenant_id, Order.status.in_((STATUS_APPROVED, STATUS_SENT)))
-        ).all()
-        for order in orders:
-            for item in order.items or []:
-                try:
-                    product_id = int(item.get("product_id"))
-                    quantity = Decimal(str(item.get("quantity") or 0))
-                except (AttributeError, TypeError, ValueError):
-                    continue
-                if quantity > 0:
-                    totals[product_id] = totals.get(product_id, Decimal("0")) + quantity
-        return totals
+    def _inbound_quantities(self, product_ids=None):
+        """Return outstanding inbound quantities from relational order lines and posted receipts."""
+        from app.services.inventory_unified_planning_service import InventoryUnifiedPlanningService
+
+        if product_ids is None:
+            product_ids = db.session.scalars(
+                select(Product.id).where(
+                    Product.tenant_id == self.tenant_id,
+                    Product.active.is_(True),
+                )
+            ).all()
+        return InventoryUnifiedPlanningService(self.tenant_id)._open_inbound(
+            [int(product_id) for product_id in product_ids]
+        )
 
     def _forecast_demand(self, daily_rate: Decimal, start: date, end: date, periods):
         if end < start or daily_rate <= 0:
@@ -253,17 +215,9 @@ class InventoryCalendarService:
                 InventoryMovement.occurred_at >= since)
             .order_by(InventoryMovement.product_id, InventoryMovement.occurred_at, InventoryMovement.id)
         ).all()
-        receipt_rows = db.session.scalars(
-            select(InventoryMovement).where(InventoryMovement.tenant_id == self.tenant_id,
-                InventoryMovement.product_id.in_(ids), InventoryMovement.movement_type == MOVEMENT_RECEIPT,
-                InventoryMovement.occurred_at >= since)
-            .order_by(InventoryMovement.product_id, InventoryMovement.occurred_at, InventoryMovement.id)
-        ).all()
-        counts_by_product, receipts_by_product = {}, {}
+        counts_by_product = {}
         for m in count_rows:
             counts_by_product.setdefault(m.product_id, []).append(m)
-        for m in receipt_rows:
-            receipts_by_product.setdefault(m.product_id, []).append(m)
         supplier_ids = {p.supplier_id for p in products if p.supplier_id is not None}
         suppliers = {}
         if supplier_ids:
@@ -272,6 +226,8 @@ class InventoryCalendarService:
             )).all()}
         inbound = self._inbound_quantities()
         periods = self.periods(start=today, end=today + timedelta(days=180), active_only=True)
+        from app.services.inventory_consumption_planning_service import InventoryConsumptionPlanningService
+        consumption_metrics = InventoryConsumptionPlanningService(self.tenant_id)._consumption_batch(ids, since)
         rows = []
         for product in products:
             daily = {}
@@ -284,19 +240,11 @@ class InventoryCalendarService:
             base_schedule = self.base._supplier_schedule_from_supplier(product, supplier)
             row = self.base._recommendation_from_product(product, base_schedule, counts,
                 lookback_days=lookback_days, safety_days=safety_days)
-            receipts = receipts_by_product.get(product.id, [])
-            used, elapsed, received_total = Decimal("0"), Decimal("0"), Decimal("0")
-            for previous, current in zip(counts, counts[1:]):
-                days = Decimal(str(max((current.occurred_at - previous.occurred_at).total_seconds() / 86400, 0)))
-                if days <= 0:
-                    continue
-                received = sum((Decimal(str(r.quantity or 0)) for r in receipts
-                    if previous.occurred_at < r.occurred_at <= current.occurred_at), Decimal("0"))
-                consumption = Decimal(str(previous.balance_after or 0)) + received - Decimal(str(current.balance_after or 0))
-                if consumption > 0:
-                    used += consumption
-                elapsed += days
-                received_total += received
+            metric = consumption_metrics.get(product.id, {})
+            used = Decimal(str(metric.get("consumption", 0)))
+            elapsed = Decimal(str(metric.get("observed_days", 0)))
+            received_total = Decimal(str(metric.get("receipts", 0)))
+            adjustment_delta = Decimal(str(metric.get("adjustment_delta", 0)))
             rate = used / elapsed if elapsed > 0 else Decimal("0")
             schedule = self.schedule_for_product(product, today=today, periods=periods, base_schedule=base_schedule)
             delivery = date.fromisoformat(schedule["next_delivery_date"]) if schedule.get("next_delivery_date") else None
@@ -315,6 +263,7 @@ class InventoryCalendarService:
                 "observed_days": round(float(elapsed), 1), "estimated_depletion": round(float(used), 3),
                 "average_daily_usage": round(float(rate), 3), "base_average_daily_usage": round(float(rate), 3),
                 "receipts_in_observation_period": round(float(received_total), 3),
+                "adjustment_delta_in_observation_period": round(float(adjustment_delta), 3),
                 "confirmed_inbound": float(inbound_qty), "holiday_adjusted_demand": round(float(demand), 3),
                 "holiday_adjusted_target_stock": round(float(target), 3), "safety_stock": round(float(safety), 3),
                 "reorder_point": round(float(target), 3), "recommended_order": round(float(recommended), 3),

@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
 
-from app.models.inventory_movement import InventoryMovement, MOVEMENT_COUNT, MOVEMENT_RECEIPT
+from app.models.inventory_movement import InventoryMovement, MOVEMENT_ADJUSTMENT, MOVEMENT_COUNT, MOVEMENT_RECEIPT
 from app.models.inventory_planning_period import InventoryPlanningPeriod
 from app.models.product import Product
 from app.models.supplier import Supplier
@@ -88,3 +88,29 @@ def test_count_status_tracks_distinct_products(db, tenant_a_admin):
     assert status["counted_products_last_7_days"] == 2
     assert status["completed"] is True
     assert status["completion_percent"] == 100
+
+def test_adjustments_are_not_counted_as_consumption_in_calendar_planning(db, tenant_a_admin):
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="Adjustment Supplier")
+    db.session.add(supplier)
+    db.session.flush()
+    product = _product(db, tenant_id, supplier.id)
+    now = datetime.now(timezone.utc)
+    db.session.add_all([
+        InventoryMovement(tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_COUNT, quantity=100, balance_after=100, occurred_at=now - timedelta(days=10)),
+        InventoryMovement(tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_ADJUSTMENT, quantity=20, balance_after=80, occurred_at=now - timedelta(days=5)),
+        InventoryMovement(tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_COUNT, quantity=20, balance_after=20, occurred_at=now - timedelta(days=1)),
+    ])
+    product.current_stock = 20
+    db.session.commit()
+
+    service = InventoryCalendarService(tenant_id)
+    estimated, observed_days, _, checks = service._consumption_metrics(product.id, 60)
+    assert checks == 2
+    assert observed_days == 9
+    assert estimated == 60
+
+    bulk = service.recommendations(lookback_days=60, safety_days=2)
+    row = next(item for item in bulk if item["product_id"] == product.id)
+    assert row["estimated_depletion"] == 60.0
+    assert row["adjustment_delta_in_observation_period"] == -20.0
