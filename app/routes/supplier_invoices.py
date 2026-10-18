@@ -1,10 +1,13 @@
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from io import BytesIO
+import os
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_login import current_user, login_required
 from sqlalchemy import select
 from werkzeug.exceptions import BadRequest, Conflict, NotFound, HTTPException
+from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.models.order import Order
@@ -129,6 +132,144 @@ def record_invoice_payment(invoice_id):
         result = invoice.to_dict()
         db.session.commit()
         return jsonify({"success": True, "invoice": result}), 201
+    except HTTPException as exc:
+        db.session.rollback()
+        return _error(exc)
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+_ALLOWED_ATTACHMENTS = {
+    ".pdf": ("application/pdf", lambda data: data.startswith(b"%PDF-")),
+    ".jpg": ("image/jpeg", lambda data: data.startswith(b"\\xff\\xd8\\xff")),
+    ".jpeg": ("image/jpeg", lambda data: data.startswith(b"\\xff\\xd8\\xff")),
+    ".png": ("image/png", lambda data: data.startswith(b"\\x89PNG\\r\\n\\x1a\\n")),
+}
+
+
+def _invoice_for_tenant(invoice_id):
+    invoice = db.session.scalar(select(SupplierInvoice).where(
+        SupplierInvoice.id == invoice_id,
+        SupplierInvoice.tenant_id == current_user.tenant_id,
+    ))
+    if invoice is None:
+        raise NotFound("Supplier invoice not found")
+    return invoice
+
+
+@supplier_invoices_bp.route("/supplier-invoices/<int:invoice_id>/attachment", methods=["POST"])
+@login_required
+def upload_supplier_invoice_attachment(invoice_id):
+    try:
+        PermissionService.require_role_at_least("employee")
+        invoice = _invoice_for_tenant(invoice_id)
+        upload = request.files.get("file")
+        if upload is None or not upload.filename:
+            raise BadRequest("file is required")
+        filename = secure_filename(os.path.basename(upload.filename))[:255]
+        extension = os.path.splitext(filename)[1].lower()
+        spec = _ALLOWED_ATTACHMENTS.get(extension)
+        if not filename or spec is None:
+            raise BadRequest("Only PDF, JPG, JPEG and PNG invoice files are supported")
+        data = upload.stream.read(10 * 1024 * 1024 + 1)
+        if not data:
+            raise BadRequest("Uploaded file is empty")
+        if len(data) > 10 * 1024 * 1024:
+            raise BadRequest("Invoice attachment must not exceed 10 MB")
+        mime_type, validate_signature = spec
+        if not validate_signature(data):
+            raise BadRequest("The file content does not match its extension")
+        invoice.attachment_filename = filename
+        invoice.attachment_mime_type = mime_type
+        invoice.attachment_size = len(data)
+        invoice.attachment_data = data
+        db.session.commit()
+        return jsonify({"success": True, "invoice": invoice.to_dict()}), 200
+    except HTTPException as exc:
+        db.session.rollback()
+        return _error(exc)
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+@supplier_invoices_bp.route("/supplier-invoices/<int:invoice_id>/attachment", methods=["GET"])
+@login_required
+def download_supplier_invoice_attachment(invoice_id):
+    try:
+        invoice = _invoice_for_tenant(invoice_id)
+        if not invoice.attachment_data or not invoice.attachment_filename or not invoice.attachment_mime_type:
+            raise NotFound("No attachment is stored for this invoice")
+        return send_file(
+            BytesIO(invoice.attachment_data),
+            mimetype=invoice.attachment_mime_type,
+            as_attachment=True,
+            download_name=invoice.attachment_filename,
+            max_age=0,
+        )
+    except HTTPException as exc:
+        return _error(exc)
+
+
+@supplier_invoices_bp.route("/supplier-invoices/<int:invoice_id>/reconciliation", methods=["POST"])
+@login_required
+def save_invoice_reconciliation(invoice_id):
+    try:
+        PermissionService.require_role_at_least("employee")
+        invoice = _invoice_for_tenant(invoice_id)
+        order = db.session.scalar(select(Order).where(
+            Order.id == invoice.order_id, Order.tenant_id == current_user.tenant_id
+        ))
+        if order is None:
+            raise NotFound("Order not found")
+        payload = request.get_json(silent=True) or {}
+        submitted_lines = payload.get("lines")
+        if not isinstance(submitted_lines, list):
+            raise BadRequest("lines must be a list")
+        if len(submitted_lines) > 500:
+            raise BadRequest("Too many invoice lines")
+        order_lines = order.items if isinstance(order.items, list) else []
+        saved = []
+        seen = set()
+        for line in submitted_lines:
+            if not isinstance(line, dict):
+                raise BadRequest("Each line must be an object")
+            index = line.get("order_index")
+            if not isinstance(index, int) or isinstance(index, bool) or index < 0 or index >= len(order_lines):
+                raise BadRequest("Invalid order line index")
+            if index in seen:
+                raise BadRequest("Duplicate order line index")
+            seen.add(index)
+            source = order_lines[index] if isinstance(order_lines[index], dict) else {}
+            try:
+                ordered_qty = Decimal(str(source.get("quantity", 0)))
+                ordered_price = Decimal(str(source.get("unit_price", 0)))
+                invoiced_qty = Decimal(str(line.get("invoiced_quantity")))
+                invoiced_price = Decimal(str(line.get("invoiced_unit_price")))
+            except (InvalidOperation, TypeError, ValueError):
+                raise BadRequest("Quantities and prices must be valid numbers")
+            values = (ordered_qty, ordered_price, invoiced_qty, invoiced_price)
+            if any(not value.is_finite() or value < 0 or value > Decimal("999999999.99") for value in values):
+                raise BadRequest("Quantities and prices must be non-negative and within the supported limit")
+            qty_diff = invoiced_qty - ordered_qty
+            price_diff = invoiced_price - ordered_price
+            amount_diff = (invoiced_qty * invoiced_price) - (ordered_qty * ordered_price)
+            saved.append({
+                "order_index": index,
+                "product_name": str(source.get("product_name") or source.get("name") or f"פריט {index + 1}")[:500],
+                "sku": str(source.get("sku") or "")[:120] or None,
+                "ordered_quantity": float(ordered_qty),
+                "invoiced_quantity": float(invoiced_qty),
+                "ordered_unit_price": float(ordered_price),
+                "invoiced_unit_price": float(invoiced_price),
+                "quantity_difference": float(qty_diff),
+                "unit_price_difference": float(price_diff),
+                "amount_difference": float(amount_diff),
+            })
+        invoice.line_comparison = saved
+        db.session.commit()
+        return jsonify({"success": True, "invoice": invoice.to_dict()}), 200
     except HTTPException as exc:
         db.session.rollback()
         return _error(exc)
