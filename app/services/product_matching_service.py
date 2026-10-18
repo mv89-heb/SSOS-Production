@@ -241,7 +241,7 @@ class ProductMatchingService:
         if identity:
             # Identity data is strong evidence, but an omitted explicit variant
             # must keep the line in manual review rather than auto-select it.
-            return (min(identity, 0.89), "IDENTITY_VARIANT_UNCONFIRMED") if unconfirmed_variant else (identity, method)
+            return (min(identity, 0.929), "IDENTITY_VARIANT_UNCONFIRMED") if unconfirmed_variant else (identity, method)
         description = extracted.get("description") or ""
         score = max(cls._text_score(description, product.name), cls._text_score(description, product.description) * 0.92)
         extracted_unit = cls.normalize(extracted.get("unit"))
@@ -258,7 +258,7 @@ class ProductMatchingService:
         if supplier_id is not None and product.supplier_id == supplier_id:
             score = min(1.0, score + 0.05)
         if unconfirmed_variant:
-            score = min(score, 0.89)
+            score = min(score, 0.929)
         return round(score, 4), "NAME_SIMILARITY"
 
     def _load_catalog(self):
