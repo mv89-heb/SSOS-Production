@@ -144,14 +144,14 @@ def test_explicit_small_vs_large_variant_is_rejected_even_with_similar_name():
     assert method == "PRODUCT_VARIANT_MISMATCH"
 
 
-def test_explicit_soup_plate_is_not_matched_to_regular_large_plate():
+def test_explicit_soup_plate_stays_in_review_against_regular_plate():
     service = ProductMatchingService(1)
     score, method = service._candidate_score(
         {"description": "צלחות מרק Classic קרם"},
         product(name="צלחות גדול Classic קרם", description="", barcode="", supplier_sku=None),
     )
-    assert score == 0
-    assert method == "PRODUCT_VARIANT_MISMATCH"
+    assert 0 < score < 0.93
+    assert method == "NAME_SIMILARITY"
 
 
 def test_cutlery_types_are_never_interchangeable():
@@ -214,3 +214,20 @@ def test_explicit_pack_count_conflict_is_rejected():
     )
     assert score == 0
     assert method == "PRODUCT_VARIANT_MISMATCH"
+
+
+def test_candidate_missing_explicit_variant_cannot_be_auto_selected():
+    service = ProductMatchingService(1)
+    service._suppliers = []
+    service._products = [
+        product(
+            id=101,
+            name="צלחות קרם Classic",
+            description="",
+            barcode="",
+            supplier_sku=None,
+        ),
+    ]
+    result = service.match_line({"description": "צלחות קטן קרם Classic"})
+    assert result["decision"] == "REVIEW"
+    assert result["best_match"]["product_id"] == 101
