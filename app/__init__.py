@@ -108,6 +108,7 @@ def _register_security_headers(app):
 def _register_blueprints(app):
     from app.routes.auth import auth_bp
     from app.routes.orders import orders_bp
+    from app.routes.supplier_invoices import supplier_invoices_bp
     from app.routes.catalog import catalog_bp
     from app.routes.category_routes import category_bp
     from app.routes.audit import audit_bp
@@ -131,6 +132,7 @@ def _register_blueprints(app):
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
+    app.register_blueprint(supplier_invoices_bp)
     app.register_blueprint(catalog_bp)
     app.register_blueprint(category_bp)
     app.register_blueprint(audit_bp)
