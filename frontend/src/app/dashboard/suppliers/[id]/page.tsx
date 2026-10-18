@@ -320,7 +320,7 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
               <div><dt className="text-xs text-slate-500">מס׳ לקוח</dt><dd className="mt-1 font-medium">{supplier.customer_number || "—"}</dd></div>
               <div><dt className="text-xs text-slate-500">כתובת</dt><dd className="mt-1 font-medium">{[supplier.address, supplier.city].filter(Boolean).join(", ") || "—"}</dd></div>
               <div><dt className="text-xs text-slate-500">ח.פ. / עוסק מורשה</dt><dd className="mt-1 font-medium">{supplier.tax_id || "—"}</dd></div>
-              <div><dt className="text-xs text-slate-500">אתר אינטרנט</dt><dd className="mt-1 font-medium">{supplier.website ? <a href={/^https?:\\/\\//i.test(supplier.website) ? supplier.website : "https://" + supplier.website} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">{supplier.website}</a> : "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">אתר אינטרנט</dt><dd className="mt-1 font-medium">{supplier.website ? <a href={supplier.website.startsWith("http://") || supplier.website.startsWith("https://") ? supplier.website : "https://" + supplier.website} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">{supplier.website}</a> : "—"}</dd></div>
               <div><dt className="text-xs text-slate-500">קטגוריית ספק</dt><dd className="mt-1 font-medium">{supplier.supplier_category || "—"}</dd></div>
               <div><dt className="text-xs text-slate-500">תנאי תשלום</dt><dd className="mt-1 font-medium">{supplier.payment_terms || "—"}</dd></div>
               <div><dt className="text-xs text-slate-500">ימי אשראי</dt><dd className="mt-1 font-medium">{supplier.credit_days ?? "—"}</dd></div>
