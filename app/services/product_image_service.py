@@ -1,12 +1,13 @@
 """Conservative product-image lookup through Open Food Facts.
 
-Only barcode-based matches are accepted. We never infer an image from a similar
-name, and the caller should only fill products without a manually supplied image.
+Barcode matches are preferred. If no usable barcode exists, a name search is
+accepted only when the normalized product-name token sets match exactly.
 """
 import json
 import re
+import unicodedata
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 
@@ -32,25 +33,16 @@ def _allowed_image_url(value):
     return value.strip()
 
 
-def lookup_product_image(barcode, timeout=8):
-    """Return a verified-by-barcode image candidate, or a reason no match exists."""
-    normalized = _digits(barcode)
-    if not normalized or _is_synthetic_barcode(normalized):
-        return {"image_url": None, "reason": "missing_or_synthetic_barcode"}
-    endpoint = f"{SOURCE_BASE}/api/v2/product/{quote(normalized, safe='')}.json?fields=code,product_name,brands,quantity,image_front_url,selected_images"
-    request = Request(endpoint, headers={"User-Agent": "SSOS-Procurement/1.0 (product image lookup)", "Accept": "application/json"})
+def _request_json(url, timeout):
+    request = Request(url, headers={"User-Agent": "SSOS-Procurement/1.0 (product image lookup)", "Accept": "application/json"})
     try:
         with urlopen(request, timeout=timeout) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+            return json.loads(response.read().decode("utf-8"))
     except (HTTPError, URLError, TimeoutError, OSError, ValueError, UnicodeDecodeError):
-        return {"image_url": None, "reason": "source_unavailable"}
-    if payload.get("status") != 1 or not isinstance(payload.get("product"), dict):
-        return {"image_url": None, "reason": "product_not_found"}
-    product = payload["product"]
-    returned_code = _digits(product.get("code"))
-    # Ignore leading zero differences only; never accept a different barcode.
-    if returned_code.lstrip("0") != normalized.lstrip("0"):
-        return {"image_url": None, "reason": "barcode_mismatch"}
+        return None
+
+
+def _image_from_product(product):
     selected = product.get("selected_images") or {}
     front = selected.get("front") if isinstance(selected, dict) else {}
     display = front.get("display") if isinstance(front, dict) else {}
@@ -59,13 +51,79 @@ def lookup_product_image(barcode, timeout=8):
         or (display.get("en") if isinstance(display, dict) else None)
         or (display.get("he") if isinstance(display, dict) else None)
     )
-    image_url = _allowed_image_url(candidate)
-    if not image_url:
-        return {"image_url": None, "reason": "image_not_available"}
+    return _allowed_image_url(candidate)
+
+
+def _normalize_product_name(value):
+    normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
+    # Keep letters and digits; normalize punctuation and whitespace.
+    normalized = "".join(ch if ch.isalnum() else " " for ch in normalized)
+    return tuple(sorted(set(normalized.split())))
+
+
+def _name_lookup(product_name, timeout):
+    tokens = _normalize_product_name(product_name)
+    if len(tokens) < 2:
+        return {"image_url": None, "reason": "product_name_too_short"}
+    query = urlencode({
+        "search_terms": str(product_name).strip(),
+        "search_simple": "1",
+        "action": "process",
+        "json": "1",
+        "page_size": "5",
+        "fields": "code,product_name,brands,quantity,image_front_url,selected_images",
+        "lc": "he",
+        "cc": "il",
+    })
+    payload = _request_json(f"{SOURCE_BASE}/cgi/search.pl?{query}", timeout)
+    if not isinstance(payload, dict) or not isinstance(payload.get("products"), list):
+        return {"image_url": None, "reason": "source_unavailable"}
+    matches = []
+    for product in payload["products"]:
+        if not isinstance(product, dict):
+            continue
+        if _normalize_product_name(product.get("product_name")) != tokens:
+            continue
+        code = _digits(product.get("code"))
+        image_url = _image_from_product(product)
+        if code and image_url:
+            matches.append((code, image_url, product))
+    # Multiple distinct barcode matches are ambiguous even when names look alike.
+    unique = {(code, image_url) for code, image_url, _ in matches}
+    if len(unique) != 1:
+        return {"image_url": None, "reason": "name_match_ambiguous" if unique else "product_not_found"}
+    code, image_url = next(iter(unique))
     return {
         "image_url": image_url,
-        "reason": "matched",
+        "reason": "matched_by_exact_name",
         "source": SOURCE_NAME,
-        "source_url": f"{SOURCE_BASE}/product/{normalized}",
-        "product_name": str(product.get("product_name") or "").strip() or None,
+        "source_url": f"{SOURCE_BASE}/product/{code}",
+        "product_name": next((p.get("product_name") for c, u, p in matches if c == code and u == image_url), None),
+        "match_method": "exact_normalized_name",
     }
+
+
+def lookup_product_image(barcode, product_name=None, timeout=4):
+    """Return a safe image candidate, preferring barcode and requiring exact fallback names."""
+    normalized = _digits(barcode)
+    usable_barcode = bool(normalized and not _is_synthetic_barcode(normalized))
+    if usable_barcode:
+        endpoint = f"{SOURCE_BASE}/api/v2/product/{quote(normalized, safe='')}.json?fields=code,product_name,brands,quantity,image_front_url,selected_images"
+        payload = _request_json(endpoint, timeout)
+        if isinstance(payload, dict) and payload.get("status") == 1 and isinstance(payload.get("product"), dict):
+            product = payload["product"]
+            returned_code = _digits(product.get("code"))
+            if returned_code.lstrip("0") == normalized.lstrip("0"):
+                image_url = _image_from_product(product)
+                if image_url:
+                    return {
+                        "image_url": image_url, "reason": "matched", "source": SOURCE_NAME,
+                        "source_url": f"{SOURCE_BASE}/product/{normalized}",
+                        "product_name": str(product.get("product_name") or "").strip() or None,
+                        "match_method": "exact_barcode",
+                    }
+            else:
+                return {"image_url": None, "reason": "barcode_mismatch"}
+    if product_name:
+        return _name_lookup(product_name, timeout)
+    return {"image_url": None, "reason": "missing_or_synthetic_barcode"}
