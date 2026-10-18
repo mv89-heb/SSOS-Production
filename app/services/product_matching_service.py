@@ -24,6 +24,43 @@ class ProductMatchingService:
         "שיווק", "מסחר", "מסחרית",
     }
 
+    # Attributes that distinguish catalog identities. A fuzzy score must never
+    # override a conflict in one of these explicit attributes.
+    ITEM_TYPE_GROUPS = {
+        "utensil": {
+            "כף": "spoon", "כפות": "spoon", "כפית": "teaspoon", "כפיות": "teaspoon",
+            "מזלג": "fork", "מזלגות": "fork", "סכין": "knife", "סכינים": "knife",
+        },
+        "dishware": {
+            "צלחת": "plate", "צלחות": "plate", "קערה": "bowl", "קעריות": "bowl",
+            "קערית": "bowl", "קעריות": "bowl", "מגש": "tray", "מגשים": "tray",
+            "כוס": "cup", "כוסות": "cup", "ספל": "mug", "ספלים": "mug",
+        },
+        "paper_goods": {
+            "מפית": "napkin", "מפיות": "napkin", "מגבת": "towel", "מגבות": "towel",
+            "טואלט": "toilet_paper", "נייר": "paper",
+        },
+    }
+    VARIANT_GROUPS = {
+        "size": {
+            "גדול": "large", "גדולה": "large", "גדולים": "large", "גדולות": "large",
+            "קטן": "small", "קטנה": "small", "קטנים": "small", "קטנות": "small",
+            "ענק": "giant", "ענקית": "giant", "בינוני": "medium", "בינונית": "medium",
+        },
+        "color": {
+            "לבן": "white", "לבנה": "white", "לבנים": "white", "לבנות": "white",
+            "שחור": "black", "שחורה": "black", "שחורים": "black", "שחורות": "black",
+            "שקוף": "transparent", "שקופה": "transparent", "שקופים": "transparent", "שקופות": "transparent",
+            "קרם": "cream", "זהב": "gold", "זהובה": "gold", "כסף": "silver",
+            "כסופה": "silver", "כחול": "blue", "כחולה": "blue", "אדום": "red", "אדומה": "red",
+            "ירוק": "green", "ירוקה": "green",
+        },
+        "use": {
+            "מרק": "soup", "סלטיות": "salad_bowls", "סלטיה": "salad_bowl",
+            "חלונות": "windows", "אסלות": "toilet", "רצפות": "floor",
+        },
+    }
+
     def __init__(self, tenant_id: int):
         self.tenant_id = tenant_id
         self._products: list[Product] | None = None
@@ -97,7 +134,33 @@ class ProductMatchingService:
         return 0.0, None
 
     @classmethod
+    def _variant_conflict(cls, extracted, product) -> bool:
+        """Return True when explicit line attributes contradict a catalog item.
+
+        A conflicting variant is rejected before barcode/SKU shortcuts and before
+        fuzzy scoring. Missing catalog attributes are treated as unsafe too when
+        the document explicitly names the attribute (e.g. small vs unspecified).
+        """
+        source_tokens = cls.tokens(extracted.get("description"))
+        catalog_text = " ".join(
+            str(value or "") for value in (product.name, product.description)
+        )
+        catalog_tokens = cls.tokens(catalog_text)
+
+        for group in (cls.ITEM_TYPE_GROUPS, cls.VARIANT_GROUPS):
+            for attribute_map in group.values():
+                source_values = {attribute_map[token] for token in source_tokens if token in attribute_map}
+                if not source_values:
+                    continue
+                catalog_values = {attribute_map[token] for token in catalog_tokens if token in attribute_map}
+                if source_values != catalog_values:
+                    return True
+        return False
+
+    @classmethod
     def _candidate_score(cls, extracted, product, supplier_id: int | None = None) -> tuple[float, str]:
+        if cls._variant_conflict(extracted, product):
+            return 0.0, "PRODUCT_VARIANT_MISMATCH"
         identity, method = cls._identity_score(extracted, product)
         if identity:
             return identity, method
