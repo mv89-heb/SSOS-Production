@@ -312,8 +312,8 @@ class OrderService:
                 offer_snapshot = None
                 supplier_sku = product.supplier_sku
 
-            if unit_price < 0:
-                raise Conflict(f"Product {p_id} has an invalid negative price")
+            if unit_price <= 0:
+                raise Conflict(f"Product {p_id} must have a valid purchase price greater than zero")
 
             enriched_items.append({
                 "product_id": product.id,
