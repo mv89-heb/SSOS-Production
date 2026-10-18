@@ -52,10 +52,10 @@ export default function SupplierOverviewPage() {
   const [category, setCategory] = useState("all");
   const [sortBy, setSortBy] = useState<"savings" | "name" | "price" | "percent">("savings");
   // Strip common natural-language intent words before searching catalog fields.
-  const searchTerm = useMemo(() => search
-    .replace(/איפה\\s+(כדאי\\s+)?(לקנות|לרכוש|מומלץ\\s+לקנות)/gi, " ")
-    .replace(/(תראה|הצג|מצא|חפש|השווה|השוואה|המלץ|המלצה|מומלץ|כדאי|לקנות|לרכוש|הכי|זול|זולים|זולות|מחיר|מחירים|ספק|ספקים|לפי|קטגוריה|קטגוריית|מוצר|מוצרים|רכישה|לרכישה|איפה|מה|של|את|עם|בין|בקטגוריה|בקטגוריית)/gi, " ")
-    .replace(/\\s+/g, " ").trim(), [search]);
+  const searchTerm = useMemo(() => {
+    const intentWords = new Set(["איפה", "כדאי", "לקנות", "לרכוש", "מומלץ", "תראה", "הצג", "מצא", "חפש", "השווה", "השוואה", "המלץ", "המלצה", "הכי", "זול", "זולים", "זולות", "מחיר", "מחירים", "ספק", "ספקים", "לפי", "קטגוריה", "קטגוריית", "מוצר", "מוצרים", "מוצרי", "רכישה", "לרכישה", "מה", "של", "את", "עם", "בין", "בקטגוריה", "בקטגוריית"]);
+    return search.replace(/[.,?!]/g, " ").split(/\s+/).filter((word) => word && !intentWords.has(word.toLowerCase())).join(" ").trim();
+  }, [search]);
   const deferredSearch = useDeferredValue(searchTerm);
 
   const query = useQuery({
