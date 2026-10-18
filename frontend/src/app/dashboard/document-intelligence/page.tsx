@@ -51,16 +51,23 @@ export default function DocumentIntelligencePage() {
   const supplierOptions = useMemo(() => [...suppliers].sort((a, b) => a.name.localeCompare(b.name, "he")).map((s) => ({ id: s.id, name: s.name, extra: s.customer_number })), [suppliers]);
   const items = useMemo<ExtractedItem[]>(() => Array.isArray(data?.items) ? data.items : [], [data]);
   const sections = useMemo<SupplierSection[]>(() => Array.isArray(data?.supplier_sections) ? data.supplier_sections : [], [data]);
+  const autoSelectedIndexesRef = useRef<Record<number, Set<number>>>({});
   const appliedIndexes = useMemo(() => new Set<number>((Array.isArray(data?.applied_line_indexes) ? data.applied_line_indexes : []).map(Number)), [data]);
   const selectableIndexes = useMemo(() => items.map((_, index) => index).filter((index) => !appliedIndexes.has(index)), [items, appliedIndexes]);
   const allSelected = selectableIndexes.length > 0 && selectableIndexes.every((index) => selectedLines.has(index));
   useEffect(() => {
+    if (!analysis) {
+      setSelectedLines(new Set());
+      return;
+    }
+    const previouslyAutoSelected = autoSelectedIndexesRef.current[analysis.id] ?? new Set<number>();
+    autoSelectedIndexesRef.current[analysis.id] = previouslyAutoSelected;
     setSelectedLines((current) => {
       const next = new Set([...current].filter((index) => !appliedIndexes.has(index)));
       // Preselect only deterministic, high-confidence supplier + product matches.
-      // Uncertain lines remain unchecked for explicit human review.
+      // Remember auto-selected rows so later progress refreshes do not override a user's deselection.
       items.forEach((item, index) => {
-        if (appliedIndexes.has(index)) return;
+        if (appliedIndexes.has(index) || previouslyAutoSelected.has(index)) return;
         const product = item.product_matching?.best_match;
         const supplier = item.supplier_matching;
         const confidentProduct = Boolean(product && (
@@ -69,12 +76,13 @@ export default function DocumentIntelligencePage() {
         ));
         if (confidentProduct && supplier?.decision === "AUTO_MATCH" && product?.product_id && supplier.supplier_id) {
           next.add(index);
+          previouslyAutoSelected.add(index);
         }
       });
       if (next.size === current.size && [...next].every((index) => current.has(index))) return current;
       return next;
     });
-  }, [items, appliedIndexes]);
+  }, [analysis?.id, items, appliedIndexes]);
   const toggleAllLines = () => setSelectedLines((current) => { const next = new Set(current); if (allSelected) selectableIndexes.forEach((index) => next.delete(index)); else selectableIndexes.forEach((index) => next.add(index)); return next; });
   const toggleLine = (index: number) => setSelectedLines((current) => { const next = new Set(current); if (next.has(index)) next.delete(index); else next.add(index); return next; });
   const productOptionsForItem = (item: ExtractedItem) => {
