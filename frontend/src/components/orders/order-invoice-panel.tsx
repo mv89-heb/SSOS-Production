@@ -101,7 +101,7 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
             <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="font-black">{invoice.invoice_number}</div><div className="mt-1 text-xs text-slate-500">חשבונית: {invoice.invoice_date ?? "—"} · פירעון: {invoice.due_date ?? "לא הוגדר"}</div>{invoice.notes && <p className="mt-2 whitespace-pre-wrap text-sm text-slate-500">{invoice.notes}</p>}<div className="mt-2 flex flex-wrap items-center gap-2">
               {invoice.attachment_filename ? <a className="inline-flex items-center gap-1 text-sm font-bold text-blue-700 underline dark:text-blue-300" href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/supplier-invoices/${invoice.id}/attachment`}><Download size={14} /> {invoice.attachment_filename} ({Math.max(1, Math.round((invoice.attachment_size ?? 0) / 1024))} KB)</a> : <span className="text-xs text-slate-500">לא צורף קובץ מקור</span>}
               <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border px-2 py-1 text-xs font-bold"><Upload size={13} /> {invoice.attachment_filename ? "החלפת קובץ" : "צירוף חשבונית"}<input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" className="sr-only" onChange={(event) => setAttachmentFiles((current) => ({ ...current, [invoice.id]: event.target.files?.[0] ?? null }))} /></label>
-              {attachmentFiles[invoice.id] && <><span className="max-w-48 truncate text-xs">{attachmentFiles[invoice.id]?.name}</span><Button size="sm" disabled={uploadingInvoiceId === invoice.id} onClick={async () => {
+              {attachmentFiles[invoice.id] && <><span className="max-w-48 truncate text-xs">{attachmentFiles[invoice.id]?.name}</span><Button disabled={uploadingInvoiceId === invoice.id} onClick={async () => {
                 const file = attachmentFiles[invoice.id];
                 if (!file) return;
                 if (file.size > 10 * 1024 * 1024) { setMessage("גודל הקובץ המרבי הוא 10MB."); return; }
@@ -131,7 +131,7 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
                 })}
               </tbody></table></div>
               {invoice.line_comparison?.length > 0 && <p className="text-xs text-slate-500">ההשוואה האחרונה נשמרה. הפער החיובי/שלילי הוא לפי סכום פריט מחושב ואינו כולל בהכרח מע״מ, הנחות או דמי משלוח.</p>}
-              <div className="flex justify-end"><Button size="sm" disabled={savingReconciliationId === invoice.id} onClick={async () => {
+              <div className="flex justify-end"><Button disabled={savingReconciliationId === invoice.id} onClick={async () => {
                 setSavingReconciliationId(invoice.id); setMessage(null);
                 try {
                   const lines = order.items.map((item, index) => {
