@@ -33,7 +33,9 @@ class ProductMatchingService:
         },
         "dishware": {
             "צלחת": "plate", "צלחות": "plate", "קערה": "bowl", "קעריות": "bowl",
-            "קערית": "bowl", "קעריות": "bowl", "מגש": "tray", "מגשים": "tray",
+            "קערית": "bowl", "לפתנית": "small_dish", "לפתניות": "small_dish",
+            "מרקיה": "soup_bowl", "מרקיות": "soup_bowl",
+            "מגש": "tray", "מגשים": "tray",
             "כוס": "cup", "כוסות": "cup", "ספל": "mug", "ספלים": "mug",
         },
         "paper_goods": {
@@ -258,10 +260,11 @@ class ProductMatchingService:
         if supplier_id is not None and product.supplier_id == supplier_id:
             score = min(1.0, score + 0.05)
         if unconfirmed_variant:
-            # Penalize missing variant evidence while preserving meaningful ranking.
-            # This keeps the candidate in review and still lets supplier context rank it.
+            # Missing explicit type/variant evidence is not safe for automatic selection,
+            # even when the normalized name is highly similar. Keep the candidate visible
+            # for a human to confirm, and preserve supplier context for ranking.
             score = max(0.0, score - 0.10)
-        return round(score, 4), "NAME_SIMILARITY"
+        return round(score, 4), "NAME_VARIANT_UNCONFIRMED" if unconfirmed_variant else "NAME_SIMILARITY"
 
     def _load_catalog(self):
         if self._products is None:
