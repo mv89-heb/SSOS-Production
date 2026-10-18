@@ -3,6 +3,9 @@
 Revision ID: 20261020_merge_procurement_heads
 Revises: 20261019_product_image_metadata, 20260917_db_integrity
 """
+from alembic import op
+import sqlalchemy as sa
+
 revision = "20261020_merge_procurement_heads"
 down_revision = ("20261019_product_image_metadata", "20260917_db_integrity")
 branch_labels = None
