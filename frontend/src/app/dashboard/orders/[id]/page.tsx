@@ -3,7 +3,7 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Bell, CheckCircle2, FileText, Loader2, Package, Send, ShieldCheck, Trash2, Truck } from "lucide-react";
+import { ArrowLeft, Bell, CheckCircle2, FileText, Loader2, Package, Printer, Send, ShieldCheck, Trash2, Truck } from "lucide-react";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,27 @@ import { useActivateOrderReminder, useCompleteOrderReminder, useCreateManualOrde
 import { useOrder, useDeleteOrder, useUpdateDraftOrder, useSubmitOrder, useApproveOrder, useRejectOrder, useMarkSentOrder, useCompleteOrder, useDuplicateOrder } from "@/hooks/use-orders";
 
 const money = (currency: string, value: number) => `${currency} ${value.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function escapePrintHtml(value: unknown) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character] ?? character);
+}
+
+function printPurchaseOrder(order: import("@/types").Order) {
+  const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+  if (!printWindow) {
+    window.alert("הדפדפן חסם חלון הדפסה. אפשר לאפשר חלונות קופצים לאתר ולנסות שוב.");
+    return;
+  }
+  const rows = order.items.map((item, index) => `<tr><td>${index + 1}</td><td>${escapePrintHtml(item.sku || "—")}</td><td>${escapePrintHtml(item.product_name)}</td><td>${escapePrintHtml(item.quantity)}</td><td>${escapePrintHtml(money(order.currency, item.unit_price))}</td><td>${escapePrintHtml(money(order.currency, item.total_price))}</td></tr>`).join("");
+  const html = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>הזמנת רכש ${escapePrintHtml(order.order_number)}</title><style>
+  @page{size:A4;margin:16mm}body{font-family:Arial,sans-serif;color:#111;direction:rtl}header{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #222;padding-bottom:16px}h1{font-size:24px;margin:0 0 8px}h2{font-size:16px;margin:22px 0 8px}.muted{color:#555;font-size:12px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:20px 0}.box{border:1px solid #ddd;padding:10px;border-radius:6px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ccc;padding:8px;text-align:right}th{background:#f3f4f6}.total{margin-top:16px;text-align:left;font-size:18px;font-weight:bold}.notes{white-space:pre-wrap;border:1px solid #ddd;padding:10px;min-height:30px}.footer{margin-top:36px;border-top:1px solid #ddd;padding-top:10px;font-size:11px;color:#555}@media print{button{display:none}}
+  </style></head><body><header><div><h1>הזמנת רכש</h1><div>ישיבת אוהבי ירושלים - ראשית</div><div class="muted">מסמך פנימי להעברה לספק</div></div><div><strong>מס׳ הזמנה: ${escapePrintHtml(order.order_number)}</strong><div class="muted">תאריך: ${escapePrintHtml(new Date(order.created_at).toLocaleDateString("he-IL"))}</div><div class="muted">סטטוס: ${escapePrintHtml(order.status)}</div></div></header><div class="meta"><div class="box"><strong>ספק</strong><div>${escapePrintHtml(order.supplier_name)}</div><div>${escapePrintHtml(order.supplier_contact || "")}</div><div>${escapePrintHtml(order.supplier_email || "")}</div></div><div class="box"><strong>אספקה מתוכננת</strong><div>${escapePrintHtml(order.planned_order_date || "לא הוגדר")}</div><div><strong>מטבע:</strong> ${escapePrintHtml(order.currency)}</div></div></div><h2>פריטי ההזמנה</h2><table><thead><tr><th>#</th><th>מק״ט</th><th>תיאור</th><th>כמות</th><th>מחיר יחידה</th><th>סה״כ</th></tr></thead><tbody>${rows}</tbody></table><div class="total">סה״כ הזמנה: ${escapePrintHtml(money(order.currency, order.final_total))}</div>${order.notes ? `<h2>הערות</h2><div class="notes">${escapePrintHtml(order.notes)}</div>` : ""}<div class="footer">נא לאשר קבלת ההזמנה ולתאם את מועד האספקה מול המזמין.</div><script>window.onload=function(){window.focus();window.print();};</script></body></html>`;
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -103,7 +124,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             : <p className="text-sm text-slate-500">ההזמנה סגורה, לכן אין צורך בתזכורת.</p>}
         </CardContent>
       </Card>
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:p-5"><div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-sm font-extrabold text-slate-800 dark:text-white">פעולות</span>{canCreateOrEdit && <Button variant="secondary" onClick={() => duplicateOrder.mutate(orderId, { onSuccess: (newOrder) => router.push(`/dashboard/orders/${newOrder.id}`) })} disabled={isMutating}><FileText size={16} /> {duplicateOrder.isPending ? "משכפל..." : "שכפול הזמנה"}</Button>}{canCreateOrEdit && order.status === "draft" && !isEditingDraft && <Button variant="secondary" onClick={startEditingDraft} disabled={isMutating}>עריכת טיוטה</Button>}{canCreateOrEdit && order.status === "draft" && <Button onClick={() => submit.mutate()} disabled={isMutating}>{submit.isPending ? "שולח..." : "שליחה לאישור"}</Button>}{isManagerOrAdmin && order.status === "submitted" && !isRejecting && <><Button onClick={() => approve.mutate()} disabled={isMutating}>{approve.isPending ? "מאשר..." : "אישור הזמנה"}</Button><Button variant="danger" onClick={() => setIsRejecting(true)} disabled={isMutating}>דחייה</Button></>}{isManagerOrAdmin && order.status === "approved" && <Button onClick={() => markSent.mutate()} disabled={isMutating}><Send size={16} /> {markSent.isPending ? "מסמן..." : "סימון כנשלח לספק"}</Button>}{isManagerOrAdmin && order.status === "sent" && <Button onClick={() => complete.mutate()} disabled={isMutating}><CheckCircle2 size={16} /> {complete.isPending ? "משלים..." : "סימון כהושלמה"}</Button>}{canDelete && <Button variant="danger" onClick={handleDelete} disabled={isMutating}><Trash2 size={16} /> {deleteOrder.isPending ? "מוחק..." : "מחיקת הזמנה"}</Button>}{isMutating && <span className="inline-flex items-center gap-1 text-xs text-slate-400"><Loader2 size={13} className="animate-spin" /> מעדכן...</span>}</div></section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:p-5"><div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-sm font-extrabold text-slate-800 dark:text-white">פעולות</span><Button variant="secondary" onClick={() => printPurchaseOrder(order)}><Printer size={16} /> הדפסה / שמירה כ־PDF</Button>{canCreateOrEdit && <Button variant="secondary" onClick={() => duplicateOrder.mutate(orderId, { onSuccess: (newOrder) => router.push(`/dashboard/orders/${newOrder.id}`) })} disabled={isMutating}><FileText size={16} /> {duplicateOrder.isPending ? "משכפל..." : "שכפול הזמנה"}</Button>}{canCreateOrEdit && order.status === "draft" && !isEditingDraft && <Button variant="secondary" onClick={startEditingDraft} disabled={isMutating}>עריכת טיוטה</Button>}{canCreateOrEdit && order.status === "draft" && <Button onClick={() => submit.mutate()} disabled={isMutating}>{submit.isPending ? "שולח..." : "שליחה לאישור"}</Button>}{isManagerOrAdmin && order.status === "submitted" && !isRejecting && <><Button onClick={() => approve.mutate()} disabled={isMutating}>{approve.isPending ? "מאשר..." : "אישור הזמנה"}</Button><Button variant="danger" onClick={() => setIsRejecting(true)} disabled={isMutating}>דחייה</Button></>}{isManagerOrAdmin && order.status === "approved" && <Button onClick={() => markSent.mutate()} disabled={isMutating}><Send size={16} /> {markSent.isPending ? "מסמן..." : "סימון כנשלח לספק"}</Button>}{isManagerOrAdmin && order.status === "sent" && <Button onClick={() => complete.mutate()} disabled={isMutating}><CheckCircle2 size={16} /> {complete.isPending ? "משלים..." : "סימון כהושלמה"}</Button>}{canDelete && <Button variant="danger" onClick={handleDelete} disabled={isMutating}><Trash2 size={16} /> {deleteOrder.isPending ? "מוחק..." : "מחיקת הזמנה"}</Button>}{isMutating && <span className="inline-flex items-center gap-1 text-xs text-slate-400"><Loader2 size={13} className="animate-spin" /> מעדכן...</span>}</div></section>
       <WhatsAppOrderShare order={order} />
       <OrderReceivingPanel order={order} />
       <OrderInvoicePanel order={order} />
