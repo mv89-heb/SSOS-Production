@@ -95,13 +95,13 @@ export default function SupplierOverviewPage() {
     });
     return [...counts.values()].sort((a, b) => b.wins - a.wins || b.savings - a.savings)[0] ?? null;
   }, [visibleRows]);
-  const chartRows = [...visibleRows].filter((row) => row.supplier_count >= 2 && row.savings_per_unit > 0 && quantityFor(row) > 0).sort((a, b) => b.savings_per_unit * quantityFor(b) - a.savings_per_unit * quantityFor(a)).slice(0, 6);
-  const maxSaving = Math.max(1, ...chartRows.map((row) => row.savings_per_unit * quantityFor(row)));
   const rowKey = (row: Row) => `${row.product_id}::${row.currency}::${row.comparison_unit || "unit"}`;
   const quantityFor = (row: Row) => {
     const parsed = Number(quantities[rowKey(row)] ?? "1");
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   };
+  const chartRows = [...visibleRows].filter((row) => row.supplier_count >= 2 && row.savings_per_unit > 0 && quantityFor(row) > 0).sort((a, b) => b.savings_per_unit * quantityFor(b) - a.savings_per_unit * quantityFor(a)).slice(0, 6);
+  const maxSaving = Math.max(1, ...chartRows.map((row) => row.savings_per_unit * quantityFor(row)));
   const sumByCurrency = (rows: Row[], amountFor: (row: Row) => number) => rows.reduce<Record<string, number>>((totals, row) => {
     totals[row.currency || "ILS"] = (totals[row.currency || "ILS"] || 0) + amountFor(row);
     return totals;
