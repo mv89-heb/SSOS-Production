@@ -110,3 +110,15 @@ export function useCompleteOrder(id: number) {
     },
   });
 }
+
+
+export function useDuplicateOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => orderService.duplicateOrder(id),
+    onSuccess: (order) => {
+      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      queryClient.setQueryData(orderKey(order.id), order);
+    },
+  });
+}
