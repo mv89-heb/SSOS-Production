@@ -15,8 +15,11 @@ def upgrade():
     bind = op.get_bind()
     existing = {column["name"] for column in sa.inspect(bind).get_columns("suppliers")}
     for column in (
+        sa.Column("phone2", sa.String(50), nullable=True),
+        sa.Column("customer_number", sa.String(100), nullable=True),
         sa.Column("order_days", sa.String(100), nullable=True),
         sa.Column("delivery_days", sa.String(100), nullable=True),
+        sa.Column("ordering_rules", sa.JSON(), nullable=True),
     ):
         if column.name not in existing:
             op.add_column("suppliers", column)
