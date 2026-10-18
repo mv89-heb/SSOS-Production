@@ -1,7 +1,13 @@
+from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from itertools import combinations
 
+from sqlalchemy import select
+
 from app.extensions import db
+from app.models.price_observation import PriceObservation
+from app.models.supplier import Supplier
+from app.models.supplier_offer import SupplierProductOffer
 from app.repositories.product_repository import ProductRepository
 from app.repositories.price_history_repository import PriceHistoryRepository
 from app.repositories.price_observation_repository import PriceObservationRepository
@@ -97,13 +103,100 @@ class PriceIntelligenceService:
             return "יחידת השוואה שונה — לא ניתן להשוות מחיר ישירות"
         return None
 
+    def _build_batch_comparison_context(self, products):
+        """Load comparison data in a few tenant-scoped queries instead of N+1 lookups."""
+        product_by_id = {product.id: product for product in products}
+        product_ids = list(product_by_id)
+        if not product_ids:
+            return {"products": {}, "offers": {}, "observations": {}, "suppliers": {}}
+
+        offers_by_product = defaultdict(list)
+        offers = db.session.scalars(
+            select(SupplierProductOffer)
+            .where(
+                SupplierProductOffer.tenant_id == self.tenant_id,
+                SupplierProductOffer.product_id.in_(product_ids),
+                SupplierProductOffer.active.is_(True),
+            )
+            .order_by(SupplierProductOffer.product_id.asc(), SupplierProductOffer.price.asc(), SupplierProductOffer.id.asc())
+        ).all()
+        for offer in offers:
+            offers_by_product[offer.product_id].append(offer)
+
+        # Only the latest positive observation per product/supplier is used as a
+        # comparison source. Ordering lets Python select that row in one pass.
+        observations_by_product = defaultdict(list)
+        seen_observation_suppliers = set()
+        observations = db.session.scalars(
+            select(PriceObservation)
+            .where(
+                PriceObservation.tenant_id == self.tenant_id,
+                PriceObservation.product_id.in_(product_ids),
+                PriceObservation.observed_price > 0,
+            )
+            .order_by(
+                PriceObservation.product_id.asc(),
+                PriceObservation.supplier_id.asc(),
+                PriceObservation.observed_at.desc(),
+                PriceObservation.id.desc(),
+            )
+        ).all()
+        for observation in observations:
+            key = (observation.product_id, observation.supplier_id)
+            if key in seen_observation_suppliers:
+                continue
+            seen_observation_suppliers.add(key)
+            observations_by_product[observation.product_id].append(observation)
+
+        supplier_ids = {
+            product.supplier_id for product in products if product.supplier_id is not None
+        }
+        supplier_ids.update(offer.supplier_id for offer in offers if offer.supplier_id is not None)
+        supplier_ids.update(row.supplier_id for row in observations if row.supplier_id is not None)
+        suppliers = {}
+        if supplier_ids:
+            suppliers = {
+                supplier.id: supplier
+                for supplier in db.session.scalars(
+                    select(Supplier).where(
+                        Supplier.tenant_id == self.tenant_id,
+                        Supplier.id.in_(supplier_ids),
+                    )
+                ).all()
+            }
+        return {
+            "products": product_by_id,
+            "offers": offers_by_product,
+            "observations": observations_by_product,
+            "suppliers": suppliers,
+        }
+
+    def _prepare_batch_comparison_context(self, products):
+        # Keep lightweight test doubles and partial service objects on the
+        # repository-backed path; production instances have all four repositories.
+        if not all(hasattr(self, name) for name in (
+            "tenant_id", "product_repo", "offer_repo", "observation_repo", "supplier_repo"
+        )):
+            self._comparison_context = None
+            return
+        self._comparison_context = self._build_batch_comparison_context(products)
+
     def compare_product(self, product_id: int):
-        product = self.product_repo.get_by_id_or_404(product_id)
+        context = getattr(self, "_comparison_context", None)
+        if context is not None and product_id in context["products"]:
+            product = context["products"][product_id]
+        else:
+            product = self.product_repo.get_by_id_or_404(product_id)
         default_unit = self.normalize_unit(product.unit)
         by_supplier = {}
 
+        def supplier_for(supplier_id):
+            if context is not None:
+                return context["suppliers"].get(supplier_id)
+            return self.supplier_repo.get_by_id(supplier_id)
+
         if product.current_price is not None and self._decimal(product.current_price) > 0:
-            primary_supplier = self.supplier_repo.get_by_id(product.supplier_id)
+            primary_supplier = supplier_for(product.supplier_id)
             by_supplier[product.supplier_id] = self._price_payload(
                 product.supplier_id,
                 primary_supplier.name if primary_supplier else None,
@@ -114,13 +207,16 @@ class PriceIntelligenceService:
                 primary=True,
             )
 
-        # Product.supplier_offers is not tenant-filtered at relationship level.
-        # Read through the tenant-scoped repository so malformed cross-tenant rows
-        # can never leak into the comparison result.
-        for offer in self.offer_repo.get_by_product(product_id):
+        # Tenant-scoped offers are batch-loaded for portfolio endpoints; individual
+        # product comparisons retain the same repository-backed fallback.
+        if context is not None:
+            product_offers = context["offers"].get(product_id, [])
+        else:
+            product_offers = self.offer_repo.get_by_product(product_id)
+        for offer in product_offers:
             if not offer.active or self._decimal(offer.price) <= 0 or offer.supplier_id == product.supplier_id:
                 continue
-            supplier = self.supplier_repo.get_by_id(offer.supplier_id)
+            supplier = supplier_for(offer.supplier_id)
             if supplier is None:
                 continue
             by_supplier[offer.supplier_id] = self._price_payload(
@@ -133,15 +229,16 @@ class PriceIntelligenceService:
             )
 
         # Invoice/delivery-document observations are also real supplier price
-        # evidence. Use the latest observation per supplier to fill comparison
-        # gaps when no explicit active catalog offer exists. Explicit offers and
-        # the catalog's primary price always take precedence.
-        observation_repo = getattr(self, "observation_repo", None)
-        observations = observation_repo.get_latest_by_product(product_id) if observation_repo is not None else []
+        # evidence. Portfolio endpoints batch-load the latest observations.
+        if context is not None:
+            observations = context["observations"].get(product_id, [])
+        else:
+            observation_repo = getattr(self, "observation_repo", None)
+            observations = observation_repo.get_latest_by_product(product_id) if observation_repo is not None else []
         for observation in observations:
             if observation.supplier_id in by_supplier:
                 continue
-            supplier = self.supplier_repo.get_by_id(observation.supplier_id)
+            supplier = supplier_for(observation.supplier_id)
             if supplier is None:
                 continue
             unit = observation.unit or observation.comparison_unit or product.unit or default_unit
@@ -177,8 +274,6 @@ class PriceIntelligenceService:
                 else:
                     incomparable.append({**row, "incomparable_reason": reason})
         elif offers:
-            # In an incomplete catalog there may be no current price. Still compare
-            # alternate offers against each other so the screen remains useful.
             anchor = offers[0]
             for row in offers:
                 reason = self._incomparable_reason(anchor, row)
@@ -338,10 +433,10 @@ class PriceIntelligenceService:
                 "supplier_count": len(grouped), "suppliers": list(grouped.values())}
 
     def get_portfolio_summary(self, product_limit: int = 2000, opportunity_limit: int = 10):
-        """Build a tenant-scoped executive snapshot from deterministic price facts."""
+        """Build a tenant-scoped executive snapshot without adding unlike currencies."""
         products = self.product_repo.get_all_for_matching()[:max(1, int(product_limit))]
-        total_current = Decimal("0")
-        total_best = Decimal("0")
+        self._prepare_batch_comparison_context(products)
+        totals_by_currency = {}
         opportunity_count = 0
         comparable_products = 0
         opportunities = []
@@ -355,21 +450,30 @@ class PriceIntelligenceService:
             best = comparison.get("best_offer")
             if not current:
                 continue
+            currency = str(current.get("currency") or "ILS").upper()
+            bucket = totals_by_currency.setdefault(currency, {
+                "current_unit_total": Decimal("0"),
+                "best_unit_total": Decimal("0"),
+                "potential_savings": Decimal("0"),
+                "opportunity_products": 0,
+            })
             alternatives = [
                 offer for offer in (comparison.get("offers") or [])
                 if offer.get("supplier_id") != current.get("supplier_id")
             ]
             current_price = self._decimal(current["normalized_price"])
-            total_current += current_price
             best_price = current_price
             if alternatives:
                 comparable_products += 1
                 if best:
                     best_price = min(current_price, self._decimal(best["normalized_price"]))
-            total_best += best_price
             savings = max(Decimal("0"), current_price - best_price)
+            bucket["current_unit_total"] += current_price
+            bucket["best_unit_total"] += best_price
+            bucket["potential_savings"] += savings
             if savings > 0:
                 opportunity_count += 1
+                bucket["opportunity_products"] += 1
                 opportunities.append({
                     "product_id": product.id,
                     "product_name": product.name,
@@ -380,27 +484,57 @@ class PriceIntelligenceService:
                     "best_price": float(best_price),
                     "savings_per_unit": round(float(savings), 6),
                     "savings_percent": round(float(savings / current_price * Decimal("100")), 4) if current_price else 0.0,
-                    "currency": current.get("currency", "ILS"),
+                    "currency": currency,
                 })
             analyzed.append(product)
-        opportunities.sort(key=lambda row: row["savings_per_unit"], reverse=True)
-        potential_savings = max(Decimal("0"), total_current - total_best)
-        savings_percent = potential_savings / total_current * Decimal("100") if total_current > 0 else Decimal("0")
-        return {
+        # Percentages can be ranked across currencies; absolute per-unit amounts cannot.
+        opportunities.sort(key=lambda row: row["savings_percent"], reverse=True)
+        currency_totals = {}
+        for currency, bucket in totals_by_currency.items():
+            current_total = bucket["current_unit_total"]
+            best_total = bucket["best_unit_total"]
+            potential = max(Decimal("0"), bucket["potential_savings"])
+            percent = potential / current_total * Decimal("100") if current_total > 0 else Decimal("0")
+            currency_totals[currency] = {
+                "current_unit_total": round(float(current_total), 2),
+                "best_unit_total": round(float(best_total), 2),
+                "potential_savings": round(float(potential), 2),
+                "potential_savings_percent": round(float(percent), 4),
+                "opportunity_products": bucket["opportunity_products"],
+            }
+
+        # Legacy scalar fields are safe only for a single currency. When the
+        # catalog contains multiple currencies, consumers must use currency_totals.
+        if len(currency_totals) == 1:
+            only_totals = next(iter(currency_totals.values()))
+            current_unit_total = only_totals["current_unit_total"]
+            best_unit_total = only_totals["best_unit_total"]
+            potential_savings = only_totals["potential_savings"]
+            potential_savings_percent = only_totals["potential_savings_percent"]
+        elif not currency_totals:
+            current_unit_total = best_unit_total = potential_savings = potential_savings_percent = 0
+        else:
+            current_unit_total = best_unit_total = potential_savings = potential_savings_percent = None
+
+        result = {
             "products_analyzed": len(analyzed),
             "products_with_comparable_alternatives": comparable_products,
             "opportunity_products": opportunity_count,
-            "current_unit_total": round(float(total_current), 2),
-            "best_unit_total": round(float(total_best), 2),
-            "potential_savings": round(float(potential_savings), 2),
-            "potential_savings_percent": round(float(savings_percent), 4),
+            "currency_totals": currency_totals,
+            "current_unit_total": current_unit_total,
+            "best_unit_total": best_unit_total,
+            "potential_savings": potential_savings,
+            "potential_savings_percent": potential_savings_percent,
             "top_opportunities": opportunities[:max(1, int(opportunity_limit))],
             "recent_changes": [row.to_dict() for row in self.history_repo.list_all(limit=50)],
         }
+        self._comparison_context = None
+        return result
 
     def get_supplier_price_scores(self, product_limit: int = 2000, limit: int = 10):
         """Score suppliers on price competitiveness and coverage only; no invented quality metrics."""
         products = self.product_repo.get_all_for_matching()[:max(1, int(product_limit))]
+        self._prepare_batch_comparison_context(products)
         stats = {}
         analyzed = 0
         for product in products:
@@ -430,7 +564,9 @@ class PriceIntelligenceService:
             score = round((coverage * 50) + (win_rate * 50), 1)
             results.append({**entry, "coverage_percent": round(coverage * 100, 1), "win_rate_percent": round(win_rate * 100, 1), "score": score})
         results.sort(key=lambda row: (-row["score"], -row["wins"], row["supplier_name"] or ""))
-        return {"products_analyzed": analyzed, "suppliers": results[:max(1, int(limit))]}
+        result = {"products_analyzed": analyzed, "suppliers": results[:max(1, int(limit))]}
+        self._comparison_context = None
+        return result
 
     def get_price_history(self, product_id: int, supplier_id: int | None = None, limit: int = 100):
         self.product_repo.get_by_id_or_404(product_id)

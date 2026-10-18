@@ -13,12 +13,12 @@ def _summary_service(comparisons):
     return service
 
 
-def _comparison(current_price, best_price=None, supplier_id=1, best_supplier_id=2):
-    current = {"supplier_id": supplier_id, "supplier_name": "Current", "normalized_price": current_price, "currency": "ILS"}
+def _comparison(current_price, best_price=None, supplier_id=1, best_supplier_id=2, currency="ILS"):
+    current = {"supplier_id": supplier_id, "supplier_name": "Current", "normalized_price": current_price, "currency": currency}
     offers = []
     best = None
     if best_price is not None:
-        best = {"supplier_id": best_supplier_id, "supplier_name": "Alternative", "normalized_price": best_price, "currency": "ILS"}
+        best = {"supplier_id": best_supplier_id, "supplier_name": "Alternative", "normalized_price": best_price, "currency": currency}
         offers = [best]
     return {"current": current, "best_offer": best, "offers": offers, "incomparable_offers": []}
 
@@ -36,6 +36,22 @@ def test_portfolio_summary_calculates_only_real_price_opportunities():
     assert result["top_opportunities"][0]["product_id"] == 1
     assert result["top_opportunities"][0]["best_supplier"] == "Alternative"
 
+
+
+def test_portfolio_totals_are_separated_when_catalog_has_multiple_currencies():
+    service = _summary_service({
+        1: _comparison(100, 80, currency="ILS"),
+        2: _comparison(50, 40, currency="USD"),
+    })
+
+    result = service.get_portfolio_summary()
+
+    assert result["currency_totals"]["ILS"]["potential_savings"] == 20.0
+    assert result["currency_totals"]["USD"]["potential_savings"] == 10.0
+    assert result["current_unit_total"] is None
+    assert result["best_unit_total"] is None
+    assert result["potential_savings"] is None
+    assert result["potential_savings_percent"] is None
 
 def test_supplier_scores_rank_by_coverage_and_price_wins():
     service = _summary_service({
