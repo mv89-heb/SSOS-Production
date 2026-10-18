@@ -25,6 +25,11 @@ export const orderService = {
     return data.order;
   },
 
+  duplicateOrder: async (id: number) => {
+    const { data } = await apiClient.post<{ success: boolean; order: Order }>(`/api/orders/${id}/duplicate`);
+    return data.order;
+  },
+
   updateDraftOrder: async (id: number, payload: UpdateDraftOrderInput) => {
     const { data } = await apiClient.put<{ success: boolean; order: Order }>(`/api/orders/${id}`, payload);
     return data.order;

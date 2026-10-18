@@ -85,6 +85,40 @@ def update_order(order_id):
     db.session.commit()
     return jsonify({"success": True, "order": order.to_dict()})
 
+@orders_bp.route("/<int:order_id>/duplicate", methods=["POST"])
+@login_required
+def duplicate_order(order_id):
+    """Create a new draft from an existing order without copying its lifecycle or receipts."""
+    try:
+        PermissionService.require_role_at_least("employee")
+    except HTTPException as exc:
+        return _handle(exc)
+
+    service = OrderService(tenant_id=current_user.tenant_id)
+    try:
+        source = service.get_order(order_id)
+        payload = {
+            "supplier_id": source.supplier_id,
+            "currency": source.currency,
+            "notes": source.notes,
+            "planned_order_date": None,
+            "items": [
+                {"product_id": item.product_id, "quantity": float(item.quantity)}
+                for item in source.order_items
+            ],
+        }
+        duplicate = service.create_order(current_user, payload)
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Failed to duplicate purchase order: order_id=%s", order_id)
+        return jsonify({"success": False, "error": "duplicate_failed", "message": "לא ניתן לשכפל את ההזמנה כרגע"}), 500
+
+    db.session.commit()
+    return jsonify({"success": True, "order": duplicate.to_dict()}), 201
+
 @orders_bp.route("/<int:order_id>", methods=["DELETE"])
 @login_required
 def delete_order(order_id):
