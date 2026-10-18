@@ -188,3 +188,29 @@ def test_same_explicit_variant_can_still_use_exact_identity():
     )
     assert score == 1.0
     assert method == "BARCODE"
+
+
+
+def test_explicit_package_volume_and_fat_percentage_conflicts_are_rejected():
+    service = ProductMatchingService(1)
+    cases = [
+        ("חלב תנובה 3% 1 ליטר", "חלב תנובה 3% 2 ליטר"),
+        ("חלב תנובה 3% 1 ליטר", "חלב תנובה 1.5% 1 ליטר"),
+    ]
+    for source, catalog_name in cases:
+        score, method = service._candidate_score(
+            {"description": source},
+            product(name=catalog_name, description="", barcode="", supplier_sku=None),
+        )
+        assert score == 0, (source, catalog_name, score, method)
+        assert method == "PRODUCT_VARIANT_MISMATCH"
+
+
+def test_explicit_pack_count_conflict_is_rejected():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "כפות קרם ארוז 50 יח"},
+        product(name="כפות קרם ארוז 100 יח", description="", barcode="", supplier_sku=None),
+    )
+    assert score == 0
+    assert method == "PRODUCT_VARIANT_MISMATCH"
