@@ -136,17 +136,17 @@ class ProductMatchingService:
     @classmethod
     def _measure_signature(cls, value) -> tuple[str, float] | None:
         raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
-        raw = raw.replace("\\u05f4", '"').replace("\\u05f3", "'")
+        raw = raw.replace("\u05f4", '"').replace("\u05f3", "'")
         match = re.search(
-            r"(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*(millilit(?:er|re)s?|ml|מיליליטר|מ[\\"']?ל|"
-            r"lit(?:er|re)s?|l|ליטרים?|ליטר|kg|kgs?|ק\\s*ג|קילו(?:גרם)?|g|גרם|"
-            r"cm|סמ|ס\\s*מ|mm|ממ|מ\\s*מ|מטרים?|מטר)(?!\\w)",
+            r"(?<!\d)(\d+(?:[.,]\d+)?)\s*(millilit(?:er|re)s?|ml|מיליליטר|מ[\"']?ל|"
+            r"lit(?:er|re)s?|l|ליטרים?|ליטר|kg|kgs?|ק\s*ג|קילו(?:גרם)?|g|גרם|"
+            r"cm|סמ|ס\s*מ|mm|ממ|מ\s*מ|מטרים?|מטר)(?!\w)",
             raw,
         )
         if not match:
             return None
         amount = float(match.group(1).replace(",", "."))
-        unit = re.sub(r"\\s+", "", match.group(2))
+        unit = re.sub(r"\s+", "", match.group(2))
         if unit in {"l", "liter", "liters", "litre", "litres", "ליטר", "ליטרים"}:
             return "volume_ml", amount * 1000
         if unit in {"ml", "milliliter", "milliliters", "millilitre", "millilitres", "מיליליטר", 'מל', 'מ"ל'}:
@@ -166,14 +166,14 @@ class ProductMatchingService:
     @classmethod
     def _percent_signature(cls, value) -> float | None:
         raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
-        raw = raw.replace("\\u05f4", '"').replace("\\u05f3", "'")
-        match = re.search(r"(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*(?:%|אחוז(?:ים)?)(?!\\w)", raw)
+        raw = raw.replace("\u05f4", '"').replace("\u05f3", "'")
+        match = re.search(r"(?<!\d)(\d+(?:[.,]\d+)?)\s*(?:%|אחוז(?:ים)?)(?!\w)", raw)
         return float(match.group(1).replace(",", ".")) if match else None
 
     @classmethod
     def _package_count(cls, value) -> int | None:
         raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
-        match = re.search(r"(?<!\\d)(\\d+)\\s*(?:יח(?:ידות|ידה|י|׳|')?|pcs?|pieces)(?!\\w)", raw)
+        match = re.search(r"(?<!\d)(\d+)\s*(?:יח(?:ידות|ידה|י|׳|')?|pcs?|pieces)(?!\w)", raw)
         return int(match.group(1)) if match else None
 
     @classmethod
