@@ -134,6 +134,49 @@ class ProductMatchingService:
         return 0.0, None
 
     @classmethod
+    def _measure_signature(cls, value) -> tuple[str, float] | None:
+        raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
+        raw = raw.replace("\\u05f4", '"').replace("\\u05f3", "'")
+        match = re.search(
+            r"(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*(millilit(?:er|re)s?|ml|מיליליטר|מ[\\"']?ל|"
+            r"lit(?:er|re)s?|l|ליטרים?|ליטר|kg|kgs?|ק\\s*ג|קילו(?:גרם)?|g|גרם|"
+            r"cm|סמ|ס\\s*מ|mm|ממ|מ\\s*מ|מטרים?|מטר)(?!\\w)",
+            raw,
+        )
+        if not match:
+            return None
+        amount = float(match.group(1).replace(",", "."))
+        unit = re.sub(r"\\s+", "", match.group(2))
+        if unit in {"l", "liter", "liters", "litre", "litres", "ליטר", "ליטרים"}:
+            return "volume_ml", amount * 1000
+        if unit in {"ml", "milliliter", "milliliters", "millilitre", "millilitres", "מיליליטר", 'מל', 'מ"ל'}:
+            return "volume_ml", amount
+        if unit in {"kg", "kgs", "קג", "קילו", "קילוגרם"}:
+            return "mass_g", amount * 1000
+        if unit in {"g", "גרם"}:
+            return "mass_g", amount
+        if unit in {"cm", "סמ"}:
+            return "length_mm", amount * 10
+        if unit in {"mm", "ממ"}:
+            return "length_mm", amount
+        if unit in {"מטר", "מטרים"}:
+            return "length_mm", amount * 1000
+        return None
+
+    @classmethod
+    def _percent_signature(cls, value) -> float | None:
+        raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
+        raw = raw.replace("\\u05f4", '"').replace("\\u05f3", "'")
+        match = re.search(r"(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*(?:%|אחוז(?:ים)?)(?!\\w)", raw)
+        return float(match.group(1).replace(",", ".")) if match else None
+
+    @classmethod
+    def _package_count(cls, value) -> int | None:
+        raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
+        match = re.search(r"(?<!\\d)(\\d+)\\s*(?:יח(?:ידות|ידה|י|׳|')?|pcs?|pieces)(?!\\w)", raw)
+        return int(match.group(1)) if match else None
+
+    @classmethod
     def _variant_conflict(cls, extracted, product) -> bool:
         """Return True when explicit line attributes contradict a catalog item.
 
@@ -146,6 +189,19 @@ class ProductMatchingService:
             str(value or "") for value in (product.name, product.description)
         )
         catalog_tokens = cls.tokens(catalog_text)
+
+        source_measure = cls._measure_signature(extracted.get("description"))
+        catalog_measure = cls._measure_signature(product.name)
+        if source_measure is not None and source_measure != catalog_measure:
+            return True
+        source_percent = cls._percent_signature(extracted.get("description"))
+        catalog_percent = cls._percent_signature(product.name)
+        if source_percent is not None and source_percent != catalog_percent:
+            return True
+        source_count = cls._package_count(extracted.get("description"))
+        catalog_count = cls._package_count(product.name)
+        if source_count is not None and source_count != catalog_count:
+            return True
 
         for group in (cls.ITEM_TYPE_GROUPS, cls.VARIANT_GROUPS):
             for attribute_map in group.values():
