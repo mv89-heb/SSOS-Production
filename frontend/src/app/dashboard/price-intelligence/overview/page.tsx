@@ -95,8 +95,8 @@ export default function SupplierOverviewPage() {
     });
     return [...counts.values()].sort((a, b) => b.wins - a.wins || b.savings - a.savings)[0] ?? null;
   }, [visibleRows]);
-  const chartRows = [...visibleRows].filter((row) => row.savings_per_unit > 0).sort((a, b) => b.savings_per_unit - a.savings_per_unit).slice(0, 6);
-  const maxSaving = Math.max(1, ...chartRows.map((row) => row.savings_per_unit));
+  const chartRows = [...visibleRows].filter((row) => row.supplier_count >= 2 && row.savings_per_unit > 0 && quantityFor(row) > 0).sort((a, b) => b.savings_per_unit * quantityFor(b) - a.savings_per_unit * quantityFor(a)).slice(0, 6);
+  const maxSaving = Math.max(1, ...chartRows.map((row) => row.savings_per_unit * quantityFor(row)));
   const rowKey = (row: Row) => `${row.product_id}::${row.currency}::${row.comparison_unit || "unit"}`;
   const quantityFor = (row: Row) => {
     const parsed = Number(quantities[rowKey(row)] ?? "1");
@@ -244,12 +244,12 @@ export default function SupplierOverviewPage() {
           </> : <p className="mt-3 text-sm text-slate-500">אין מספיק הצעות תואמות כדי להמליץ על ספק. נסה להסיר סינון או להשלים הצעות מחיר.</p>}
         </div>
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-          <div className="flex items-center gap-2"><BarChart3 size={19} className="text-indigo-600" /><h2 className="font-black">פערי החיסכון הבולטים</h2></div>
+          <div className="flex items-center gap-2"><BarChart3 size={19} className="text-indigo-600" /><h2 className="font-black">הזדמנויות החיסכון לפי הכמויות</h2></div>
           {chartRows.length ? <div className="mt-4 space-y-3">
             {chartRows.map((row) => <div key={rowKey(row)}>
-              <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="truncate font-bold">{row.product_name}</span><span className="shrink-0 font-black text-emerald-700">{money(row.savings_per_unit, row.currency)}</span></div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-emerald-500" style={{ width: String(Math.min(100, Math.max(0, row.savings_per_unit / maxSaving * 100))) + "%" }} /></div>
-              <div className="mt-1 text-[11px] text-slate-400">{row.best_supplier ? "הספק הזול: " + row.best_supplier : "אין ספק מומלץ"}</div>
+              <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="truncate font-bold">{row.product_name}</span><span className="shrink-0 font-black text-emerald-700">{money(row.savings_per_unit * quantityFor(row), row.currency)}</span></div>
+              <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-emerald-500" style={{ width: String(Math.min(100, Math.max(0, row.savings_per_unit * quantityFor(row) / maxSaving * 100))) + "%" }} /></div>
+              <div className="mt-1 text-[11px] text-slate-400">פער ליחידה: {money(row.savings_per_unit, row.currency)} · כמות: {quantityFor(row)} · {row.best_supplier ? "הספק הזול: " + row.best_supplier : "אין ספק מומלץ"}</div>
             </div>)}
           </div> : <p className="mt-3 text-sm text-slate-500">לא נמצאו פערי מחיר חיוביים בתוצאות המסוננות.</p>}
         </div>
