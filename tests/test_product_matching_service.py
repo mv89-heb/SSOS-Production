@@ -231,3 +231,23 @@ def test_candidate_missing_explicit_variant_cannot_be_auto_selected():
     result = service.match_line({"description": "צלחות קטן קרם Classic"})
     assert result["decision"] == "REVIEW"
     assert result["best_match"]["product_id"] == 101
+
+
+def test_small_dishes_do_not_match_large_plates_automatically():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "לפתניות צבעוני 25 יח' קרם"},
+        product(name="צלחות גדול צבעוני 25 יח קרם", description="", barcode="", supplier_sku=None),
+    )
+    assert score == 0
+    assert method == "PRODUCT_VARIANT_MISMATCH"
+
+
+def test_soup_bowls_are_not_equivalent_to_regular_plates():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "מרקיות צבעוני 25 יח' קרם"},
+        product(name="צלחות גדול צבעוני 25 יח קרם", description="", barcode="", supplier_sku=None),
+    )
+    assert score == 0
+    assert method == "PRODUCT_VARIANT_MISMATCH"
