@@ -92,7 +92,7 @@ def register_employee(client, tenant_slug, email="employee@acme.test"):
 
 @pytest.fixture()
 def make_order():
-    def _make(client, quantity=1, price=10.0, supplier_name="Test Supplier", product_name="Test Product", sku="SKU-TEST"):
+    def _make(client, quantity=1, price=10.0, supplier_name="Test Supplier", product_name="Test Product", sku="SKU-TEST", planned_order_date=None):
         s = client.post("/api/catalog/suppliers", json={"name": supplier_name})
         supplier_id = s.get_json()["supplier"]["id"]
         p = client.post("/api/catalog/products", json={
@@ -105,9 +105,12 @@ def make_order():
             })
         assert p.status_code == 201, p.get_json()
         product_id = p.get_json()["product"]["id"]
-        resp = client.post("/api/orders", json={
+        payload = {
             "supplier_id": supplier_id,
             "items": [{"product_id": product_id, "quantity": quantity}],
-        })
+        }
+        if planned_order_date is not None:
+            payload["planned_order_date"] = planned_order_date
+        resp = client.post("/api/orders", json=payload)
         return resp, supplier_id, product_id
     return _make
