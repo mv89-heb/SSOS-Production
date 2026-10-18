@@ -39,7 +39,15 @@ class InventoryConsumptionPlanningService(InventoryUnifiedPlanningService):
         result = {}
         for product_id in product_ids:
             events = events_by_product.get(product_id, [])
-            counts = [event for event in events if event.movement_type == MOVEMENT_COUNT]
+            daily_latest = {}
+            for event in events:
+                if event.movement_type != MOVEMENT_COUNT:
+                    continue
+                day_key = event.occurred_at.date()
+                previous = daily_latest.get(day_key)
+                if previous is None or (event.occurred_at, event.id) > (previous.occurred_at, previous.id):
+                    daily_latest[day_key] = event
+            counts = sorted(daily_latest.values(), key=lambda row: (row.occurred_at, row.id))
             consumption = Decimal("0")
             observed_days = Decimal("0")
             total_receipts = Decimal("0")
