@@ -238,16 +238,15 @@ export default function SupplierOverviewPage() {
           {recommendedSupplier ? <>
             <div className="mt-3 text-xl font-black text-violet-700 dark:text-violet-300">{recommendedSupplier.name}</div>
             <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
-              הספק מופיע כהצעה הזולה ביותר ב-{recommendedSupplier.wins} מתוך {visibleRows.length} המוצרים המסוננים.
-              זו המלצה לפי מספר זכיות במחיר הנמוך, ולא לפי סל משוקלל בכמויות או עלויות משלוח.
+              הספק מופיע כהצעה הזולה ביותר ב-{recommendedSupplier.wins} מתוך {visibleRows.length} שורות ההשוואה המסוננות.
+              זהו מדד לזכיות במחיר נמוך בלבד, ולא המלצה לרכישת כל הסל מאותו ספק. בדוק את הכמויות, הכיסוי, דמי המשלוח ומינימום ההזמנה לפני החלטה.
             </p>
-            <div className="mt-3 text-xs text-slate-500">סכום פערי המחיר ליחידה במוצרים הרלוונטיים: {money(recommendedSupplier.savings)}</div>
           </> : <p className="mt-3 text-sm text-slate-500">אין מספיק הצעות תואמות כדי להמליץ על ספק. נסה להסיר סינון או להשלים הצעות מחיר.</p>}
         </div>
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
           <div className="flex items-center gap-2"><BarChart3 size={19} className="text-indigo-600" /><h2 className="font-black">פערי החיסכון הבולטים</h2></div>
           {chartRows.length ? <div className="mt-4 space-y-3">
-            {chartRows.map((row) => <div key={row.product_id}>
+            {chartRows.map((row) => <div key={rowKey(row)}>
               <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="truncate font-bold">{row.product_name}</span><span className="shrink-0 font-black text-emerald-700">{money(row.savings_per_unit, row.currency)}</span></div>
               <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-emerald-500" style={{ width: String(Math.min(100, Math.max(0, row.savings_per_unit / maxSaving * 100))) + "%" }} /></div>
               <div className="mt-1 text-[11px] text-slate-400">{row.best_supplier ? "הספק הזול: " + row.best_supplier : "אין ספק מומלץ"}</div>
