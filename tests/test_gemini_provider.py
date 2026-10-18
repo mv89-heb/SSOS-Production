@@ -42,6 +42,7 @@ def test_retryable_error_detection():
     assert GeminiProvider._is_retryable_error(TimeoutError("read operation timed out"))
     assert GeminiProvider._is_retryable_error(RuntimeError("503 UNAVAILABLE"))
     assert GeminiProvider._is_retryable_error(RuntimeError("429 RESOURCE_EXHAUSTED"))
+    assert not GeminiProvider._is_retryable_error(RuntimeError("402 RESOURCE_EXHAUSTED: Your prepayment credits are depleted"))
     assert not GeminiProvider._is_retryable_error(ValueError("400 invalid argument"))
 
 

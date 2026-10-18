@@ -223,6 +223,11 @@ class GeminiProvider:
     def _is_retryable_error(exc: Exception) -> bool:
         """Identify transient Gemini/network failures that are safe to retry."""
         detail = str(exc).lower()
+        # Billing exhaustion (HTTP 402) is not transient. Retrying the same
+        # request or switching models in the same billed project cannot restore
+        # depleted prepayment credits and only delays a clear failure message.
+        if "402" in detail or "prepayment credits are depleted" in detail or "billing account" in detail:
+            return False
         return any(marker in detail for marker in (
             "timeout", "timed out", "deadline exceeded", "temporarily unavailable",
             "service unavailable", "unavailable", "resource exhausted", "429", "500", "502", "503", "504",
