@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { Fragment, useDeferredValue, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Award, BarChart3, Search, TrendingDown, Sparkles, ArrowUpDown } from "lucide-react";
+import { ArrowLeft, Award, BarChart3, Search, TrendingDown, Sparkles, ArrowUpDown, Download, ChevronDown, ChevronUp } from "lucide-react";
 import { apiClient } from "@/services/api-client";
 
 const money = (value: number | null | undefined, currency = "ILS") =>
@@ -51,6 +51,8 @@ export default function SupplierOverviewPage() {
   const [opportunities, setOpportunities] = useState(false);
   const [category, setCategory] = useState("all");
   const [sortBy, setSortBy] = useState<"savings" | "name" | "price" | "percent">("savings");
+  const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   // Strip common natural-language intent words before searching catalog fields.
   const searchTerm = useMemo(() => {
     const intentWords = new Set(["איפה", "כדאי", "לי", "בבקשה", "לקנות", "לרכוש", "מומלץ", "תראה", "הצג", "מצא", "חפש", "השווה", "השוואה", "המלץ", "המלצה", "הכי", "זול", "זולים", "זולות", "מחיר", "מחירים", "ספק", "ספקים", "לפי", "קטגוריה", "קטגוריית", "מוצר", "מוצרים", "מוצרי", "רכישה", "לרכישה", "מה", "של", "את", "עם", "בין", "בקטגוריה", "בקטגוריית"]);
@@ -93,8 +95,44 @@ export default function SupplierOverviewPage() {
     });
     return [...counts.values()].sort((a, b) => b.wins - a.wins || b.savings - a.savings)[0] ?? null;
   }, [visibleRows]);
-  const chartRows = [...visibleRows].filter((row) => row.savings_per_unit > 0).sort((a, b) => b.savings_per_unit - a.savings_per_unit).slice(0, 6);
-  const maxSaving = Math.max(1, ...chartRows.map((row) => row.savings_per_unit));
+  const rowKey = (row: Row) => `${row.product_id}::${row.currency}::${row.comparison_unit || "unit"}`;
+  const quantityFor = (row: Row) => {
+    const parsed = Number(quantities[rowKey(row)] ?? "1");
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  };
+  const chartRows = [...visibleRows].filter((row) => row.supplier_count >= 2 && row.savings_per_unit > 0 && quantityFor(row) > 0).sort((a, b) => b.savings_per_unit * quantityFor(b) - a.savings_per_unit * quantityFor(a)).slice(0, 6);
+  const maxSaving = Math.max(1, ...chartRows.map((row) => row.savings_per_unit * quantityFor(row)));
+  const sumByCurrency = (rows: Row[], amountFor: (row: Row) => number) => rows.reduce<Record<string, number>>((totals, row) => {
+    totals[row.currency || "ILS"] = (totals[row.currency || "ILS"] || 0) + amountFor(row);
+    return totals;
+  }, {});
+  const formatCurrencyTotals = (totals: Record<string, number>) => {
+    const entries = Object.entries(totals).filter(([, value]) => value > 0.000001);
+    return entries.length ? entries.map(([currency, value]) => money(value, currency)).join(" + ") : money(0);
+  };
+  const basketSavingsByCurrency = sumByCurrency(visibleRows, (row) => row.supplier_count >= 2 ? Math.max(0, row.savings_per_unit) * quantityFor(row) : 0);
+  const unitGapsByCurrency = sumByCurrency(visibleRows, (row) => row.supplier_count >= 2 ? Math.max(0, row.savings_per_unit) : 0);
+  const basketRowsWithQuantity = visibleRows.filter((row) => row.supplier_count >= 2 && quantityFor(row) > 0);
+  const splitSuppliers = new Set(basketRowsWithQuantity.map((row) => row.best_supplier).filter((name): name is string => Boolean(name)));
+  const exportCsv = () => {
+    const headers = ["מוצר", "קטגוריה", "יחידת השוואה", "מטבע", "ספק במחיר הגבוה", "מחיר גבוה", "ספק זול", "מחיר זול", "פער ליחידה", "כמות לתכנון", "חיסכון משוער לפי הכמות", "מספר ספקים"];
+    const escapeCsv = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const lines = visibleRows.map((row) => [
+      row.product_name, row.category, row.comparison_unit, row.currency, row.current_supplier,
+      row.current_price, row.best_supplier, row.best_price, row.savings_per_unit, quantityFor(row),
+      row.supplier_count >= 2 ? row.savings_per_unit * quantityFor(row) : 0, row.supplier_count,
+    ].map(escapeCsv).join(","));
+    const csv = "\uFEFF" + [headers.map(escapeCsv).join(","), ...lines].join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "ssos-price-comparison.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div dir="rtl" className="space-y-5 pb-12">
@@ -118,23 +156,27 @@ export default function SupplierOverviewPage() {
         </div>
       </header>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         {[
-          ["מוצרים שנבדקו", data?.summary?.products_analyzed ?? 0],
-          ["עם חלופה להשוואה", data?.summary?.products_with_comparable_alternatives ?? 0],
-          ["הזדמנויות חיסכון", data?.summary?.opportunity_products ?? 0],
-          ["חיסכון פוטנציאלי", money(data?.summary?.potential_savings)],
-          ["אחוז חיסכון", Number(data?.summary?.potential_savings_percent ?? 0).toFixed(1) + "%"],
+          ["מוצרים / קבוצות מחיר", visibleRows.length],
+          ["עם חלופות תואמות", visibleRows.filter((row) => row.supplier_count >= 2).length],
+          ["הזדמנויות חיסכון", visibleRows.filter((row) => row.supplier_count >= 2 && row.savings_per_unit > 0).length],
+          ["סכום פערים ליחידה", formatCurrencyTotals(unitGapsByCurrency)],
+          ["חיסכון משוער לפי הכמויות", formatCurrencyTotals(basketSavingsByCurrency)],
+          ["ספקים בסל מפוצל", splitSuppliers.size],
         ].map(([label, value]) => (
           <div
             key={String(label)}
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"
+            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950"
           >
             <div className="text-xs font-bold text-slate-500">{label}</div>
-            <div className="mt-2 text-2xl font-black">{value}</div>
+            <div className="mt-2 text-xl font-black">{value}</div>
           </div>
         ))}
       </section>
+      <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+        חשוב: אומדן הכמויות מחושב בנפרד לכל מטבע, לפי הכמות שהזנת בכל שורה. בקטלוג האחיד הפער הוא בין ההצעה הגבוהה לנמוכה; בקטלוג המוצרים הוא עשוי להיות ביחס למחיר הנוכחי. האומדן אינו כולל משלוח, מינימום הזמנה, זמינות או תנאי תשלום, ואינו מבטיח שספק יחיד יכול לספק את כל הסל.
+      </p>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="flex flex-col gap-3 lg:flex-row">
@@ -176,6 +218,12 @@ export default function SupplierOverviewPage() {
             <TrendingDown className="ml-1 inline" size={16} /> רק מוצרים עם חיסכון
           </button>
         </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs leading-5 text-slate-500">אפשר להזין כמות לכל מוצר, לפתוח את כל הצעות הספקים ולייצא את התוצאות לאחר הסינון.</div>
+          <button type="button" onClick={exportCsv} disabled={!visibleRows.length} className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+            <Download size={16} /> ייצוא CSV לפי הסינון
+          </button>
+        </div>
         <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
           <span>
             {search !== deferredSearch ? "מעדכן תוצאות..." : query.isFetching ? "מרענן תוצאות..." : "החיפוש כולל את כל שדות המוצר והספק"}
@@ -186,23 +234,22 @@ export default function SupplierOverviewPage() {
 
       <section className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-3xl border border-violet-200 bg-white p-5 shadow-sm dark:border-violet-900 dark:bg-slate-950">
-          <div className="flex items-center gap-2"><Sparkles size={19} className="text-violet-600" /><h2 className="font-black">המלצת רכש לפי התוצאות</h2></div>
+          <div className="flex items-center gap-2"><Sparkles size={19} className="text-violet-600" /><h2 className="font-black">ספקים עם הכי הרבה זכיות במחיר נמוך</h2></div>
           {recommendedSupplier ? <>
             <div className="mt-3 text-xl font-black text-violet-700 dark:text-violet-300">{recommendedSupplier.name}</div>
             <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
-              הספק מופיע כהצעה הזולה ביותר ב-{recommendedSupplier.wins} מתוך {visibleRows.length} המוצרים המסוננים.
-              זו המלצה לפי מספר זכיות במחיר הנמוך, ולא לפי סל משוקלל בכמויות או עלויות משלוח.
+              הספק מופיע כהצעה הזולה ביותר ב-{recommendedSupplier.wins} מתוך {visibleRows.length} שורות ההשוואה המסוננות.
+              זהו מדד לזכיות במחיר נמוך בלבד, ולא המלצה לרכישת כל הסל מאותו ספק. בדוק את הכמויות, הכיסוי, דמי המשלוח ומינימום ההזמנה לפני החלטה.
             </p>
-            <div className="mt-3 text-xs text-slate-500">סכום פערי המחיר ליחידה במוצרים הרלוונטיים: {money(recommendedSupplier.savings)}</div>
           </> : <p className="mt-3 text-sm text-slate-500">אין מספיק הצעות תואמות כדי להמליץ על ספק. נסה להסיר סינון או להשלים הצעות מחיר.</p>}
         </div>
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-          <div className="flex items-center gap-2"><BarChart3 size={19} className="text-indigo-600" /><h2 className="font-black">פערי החיסכון הבולטים</h2></div>
+          <div className="flex items-center gap-2"><BarChart3 size={19} className="text-indigo-600" /><h2 className="font-black">הזדמנויות החיסכון לפי הכמויות</h2></div>
           {chartRows.length ? <div className="mt-4 space-y-3">
-            {chartRows.map((row) => <div key={row.product_id}>
-              <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="truncate font-bold">{row.product_name}</span><span className="shrink-0 font-black text-emerald-700">{money(row.savings_per_unit, row.currency)}</span></div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-emerald-500" style={{ width: String(Math.min(100, Math.max(0, row.savings_per_unit / maxSaving * 100))) + "%" }} /></div>
-              <div className="mt-1 text-[11px] text-slate-400">{row.best_supplier ? "הספק הזול: " + row.best_supplier : "אין ספק מומלץ"}</div>
+            {chartRows.map((row) => <div key={rowKey(row)}>
+              <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="truncate font-bold">{row.product_name}</span><span className="shrink-0 font-black text-emerald-700">{money(row.savings_per_unit * quantityFor(row), row.currency)}</span></div>
+              <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-emerald-500" style={{ width: String(Math.min(100, Math.max(0, row.savings_per_unit * quantityFor(row) / maxSaving * 100))) + "%" }} /></div>
+              <div className="mt-1 text-[11px] text-slate-400">פער ליחידה: {money(row.savings_per_unit, row.currency)} · כמות: {quantityFor(row)} · {row.best_supplier ? "הספק הזול: " + row.best_supplier : "אין ספק מומלץ"}</div>
             </div>)}
           </div> : <p className="mt-3 text-sm text-slate-500">לא נמצאו פערי מחיר חיוביים בתוצאות המסוננות.</p>}
         </div>
@@ -236,7 +283,7 @@ export default function SupplierOverviewPage() {
                 </div>
               </div>
               <div ref={tableScrollRef} dir="ltr" tabIndex={0} aria-label="טבלת השוואת מחירים, גלילה אופקית" className="overflow-x-auto overscroll-x-contain" style={{ scrollbarGutter: "stable", WebkitOverflowScrolling: "touch" }}>
-              <table dir="rtl" className="w-full min-w-[1120px] text-right text-sm">
+              <table dir="rtl" className="w-full min-w-[1450px] text-right text-sm">
                 <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900">
                   <tr>
                     <th className="px-4 py-3">מוצר</th>
@@ -246,13 +293,16 @@ export default function SupplierOverviewPage() {
                     <th className="px-4 py-3">ספק זול ביותר</th>
                     <th className="px-4 py-3">מחיר זול ביותר</th>
                     <th className="px-4 py-3">פער ליחידה</th>
-                    <th className="px-4 py-3">מס׳ ספקים</th>
-                    <th className="px-4 py-3">פעולה</th>
+                    <th className="px-4 py-3">כמות לתכנון</th>
+                    <th className="px-4 py-3">חיסכון משוער</th>
+                    <th className="px-4 py-3">ספקים</th>
+                    <th className="px-4 py-3">הצעות</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {visibleRows.map((row) => (
-                    <tr key={row.product_id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                    <Fragment key={rowKey(row)}>
+                    <tr className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
                       <td className="px-4 py-4">
                         <Link href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="font-black hover:text-violet-600">
                           {row.product_name}
@@ -276,16 +326,61 @@ export default function SupplierOverviewPage() {
                           <span className="text-slate-400">אין</span>
                         )}
                       </td>
+                      <td className="px-4 py-4">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          inputMode="decimal"
+                          aria-label={`כמות לתכנון עבור ${row.product_name}`}
+                          value={quantities[rowKey(row)] ?? "1"}
+                          onChange={(event) => setQuantities((previous) => ({ ...previous, [rowKey(row)]: event.target.value }))}
+                          className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm font-bold outline-none focus:border-violet-500 dark:border-slate-700 dark:bg-slate-900"
+                        />
+                        <div className="mt-1 text-[10px] text-slate-400">{row.comparison_unit || "יחידה"}</div>
+                      </td>
+                      <td className="px-4 py-4">
+                        {row.supplier_count >= 2 && quantityFor(row) > 0
+                          ? <><strong className="text-emerald-700">{money(row.savings_per_unit * quantityFor(row), row.currency)}</strong><span className="mt-1 block text-[10px] text-slate-400">אומדן לפי הכמות</span></>
+                          : <span className="text-slate-400">—</span>}
+                      </td>
                       <td className="px-4 py-4">{row.supplier_count}</td>
                       <td className="px-4 py-4">
-                        <Link
-                          href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id}
-                          className="rounded-lg bg-violet-50 px-3 py-2 text-xs font-black text-violet-700"
-                        >
-                          {row.master_product_id ? "פתח קטלוג אחיד" : "פתח"}
-                        </Link>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={() => setExpandedRows((previous) => ({ ...previous, [rowKey(row)]: !previous[rowKey(row)] }))} className="inline-flex items-center gap-1 rounded-lg bg-violet-50 px-3 py-2 text-xs font-black text-violet-700 dark:bg-violet-950/40 dark:text-violet-200">
+                            {expandedRows[rowKey(row)] ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {expandedRows[rowKey(row)] ? "הסתר" : "כל ההצעות"}
+                          </button>
+                          <Link href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-black dark:border-slate-700">
+                            פתח
+                          </Link>
+                        </div>
                       </td>
                     </tr>
+                    {expandedRows[rowKey(row)] && (
+                      <tr className="bg-violet-50/60 dark:bg-violet-950/20">
+                        <td colSpan={11} className="px-4 py-4">
+                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <div className="font-black">כל הצעות המחיר — {row.product_name}</div>
+                            <div className="text-xs text-slate-500">השוואה: {row.comparison_unit || "יחידה"} · {row.currency}</div>
+                          </div>
+                          {row.offers?.length ? (
+                            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                              {[...row.offers].sort((a, b) => a.price - b.price).map((offer, index) => (
+                                <div key={`${offer.supplier_id}::${offer.currency}::${offer.unit}`} className={`rounded-xl border p-3 ${index === 0 ? "border-emerald-300 bg-white dark:border-emerald-800 dark:bg-slate-950" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"}`}>
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="font-bold">{offer.supplier_name || `ספק #${offer.supplier_id}`}</div>
+                                    {index === 0 && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">הזול ביותר</span>}
+                                  </div>
+                                  <div className="mt-2 text-xl font-black">{money(offer.price, offer.currency)}</div>
+                                  <div className="mt-1 text-xs text-slate-500">לפי {offer.unit || row.comparison_unit || "יחידה"}</div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : <p className="text-sm text-slate-500">אין פירוט הצעות זמין לשורה זו.</p>}
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
