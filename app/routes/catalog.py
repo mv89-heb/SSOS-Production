@@ -1,9 +1,12 @@
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, BadRequest
 from app.extensions import db
+from app.models.product import Product
 from app.services.catalog_service import CatalogService
 from app.services.permission_service import PermissionService
+from app.services.product_image_service import lookup_product_image
 from app.utils.validators import validate_product_payload
 
 catalog_bp = Blueprint("catalog", __name__, url_prefix="/api/catalog")
@@ -841,3 +844,71 @@ def compare_master_product(master_product_id):
         return jsonify({"success": True, **result})
     except HTTPException as exc:
         return _handle(exc)
+
+
+@catalog_bp.route("/products/images/enrich", methods=["POST"])
+@login_required
+def enrich_missing_product_images():
+    """Fill missing images using exact barcodes or an exact normalized-name match."""
+    try:
+        PermissionService.require_role_at_least("manager")
+    except HTTPException as exc:
+        return _handle(exc)
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        limit = int(payload.get("limit", 10))
+    except (TypeError, ValueError):
+        raise BadRequest("limit must be an integer")
+    if limit < 1 or limit > 50:
+        raise BadRequest("limit must be between 1 and 50")
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=30)
+    candidates = (
+        Product.query.filter_by(tenant_id=current_user.tenant_id, active=True)
+        .filter(db.or_(Product.image_url.is_(None), db.func.trim(Product.image_url) == ""))
+        .filter(db.or_(Product.image_checked_at.is_(None), Product.image_checked_at < cutoff))
+        .order_by(Product.id.asc()).limit(limit).all()
+    )
+    matched = []
+    no_match = 0
+    name_searches = 0
+    missing_or_synthetic_barcode = 0
+    for product in candidates:
+        barcode = str(product.barcode or "").strip()
+        if not barcode.isdigit() or barcode.startswith("990000010000"):
+            missing_or_synthetic_barcode += 1
+            name_searches += 1
+        result = lookup_product_image(product.barcode, product.name)
+        product.image_checked_at = now
+        if result.get("image_url"):
+            # Only blank image URLs are queried, so manual/curated images remain intact.
+            product.image_url = result["image_url"]
+            product.image_source = result.get("source") or "Open Food Facts"
+            product.image_source_url = result.get("source_url")
+            matched.append({
+                "product_id": product.id, "name": product.name,
+                "image_url": product.image_url, "match_method": result.get("match_method"),
+            })
+        else:
+            no_match += 1
+    db.session.commit()
+    remaining = (
+        Product.query.filter_by(tenant_id=current_user.tenant_id, active=True)
+        .filter(db.or_(Product.image_url.is_(None), db.func.trim(Product.image_url) == ""))
+        .filter(db.or_(Product.image_checked_at.is_(None), Product.image_checked_at < cutoff))
+        .count()
+    )
+    return jsonify({
+        "success": True,
+        "attempted": len(candidates),
+        "matched": len(matched),
+        "no_match": no_match,
+        "remaining_eligible": remaining,
+        "name_search_attempted": name_searches,
+        "missing_or_synthetic_barcode": missing_or_synthetic_barcode,
+        "matches": matched,
+        "source": "Open Food Facts",
+        "policy": "Exact barcode matches preferred; name fallback requires identical normalized token sets and one unambiguous result. Existing images are never overwritten.",
+    })

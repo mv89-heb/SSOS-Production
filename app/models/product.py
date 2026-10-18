@@ -37,6 +37,9 @@ class Product(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     image_url = db.Column(db.String(500), nullable=True)
+    image_source = db.Column(db.String(80), nullable=True)
+    image_source_url = db.Column(db.String(500), nullable=True)
+    image_checked_at = db.Column(db.DateTime(timezone=True), nullable=True)
     barcode = db.Column(db.String(64), nullable=True, index=True)
     category = db.Column(db.String(100), nullable=True, index=True)
     category_source = db.Column(db.String(30), nullable=True)
@@ -109,6 +112,9 @@ class Product(db.Model):
             "active": self.active,
             "created_at": self.created_at.isoformat(),
             "image_url": self.image_url,
+            "image_source": self.image_source,
+            "image_source_url": self.image_source_url,
+            "image_checked_at": self.image_checked_at.isoformat() if self.image_checked_at else None,
             "barcode": self.barcode,
             "category": self.category,
             "category_source": self.category_source,
