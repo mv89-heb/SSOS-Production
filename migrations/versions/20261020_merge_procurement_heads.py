@@ -10,8 +10,17 @@ depends_on = None
 
 
 def upgrade():
-    # Both parent branches have applied their own schema changes.
-    pass
+    # Repair supplier schedule columns for databases that already recorded the
+    # supplier-profile migration before its missing columns were corrected.
+    bind = op.get_bind()
+    existing = {column["name"] for column in sa.inspect(bind).get_columns("suppliers")}
+    for column in (
+        sa.Column("order_days", sa.String(100), nullable=True),
+        sa.Column("delivery_days", sa.String(100), nullable=True),
+    ):
+        if column.name not in existing:
+            op.add_column("suppliers", column)
+            existing.add(column.name)
 
 
 def downgrade():
