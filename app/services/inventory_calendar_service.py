@@ -139,21 +139,20 @@ class InventoryCalendarService:
             total_receipts += received
         return estimated_consumption, observed_days, total_receipts, len(counts)
 
-    def _inbound_quantities(self):
-        totals = {}
-        orders = db.session.scalars(
-            select(Order).where(Order.tenant_id == self.tenant_id, Order.status.in_((STATUS_APPROVED, STATUS_SENT)))
-        ).all()
-        for order in orders:
-            for item in order.items or []:
-                try:
-                    product_id = int(item.get("product_id"))
-                    quantity = Decimal(str(item.get("quantity") or 0))
-                except (AttributeError, TypeError, ValueError):
-                    continue
-                if quantity > 0:
-                    totals[product_id] = totals.get(product_id, Decimal("0")) + quantity
-        return totals
+    def _inbound_quantities(self, product_ids=None):
+        """Return outstanding inbound quantities from relational order lines and posted receipts."""
+        from app.services.inventory_unified_planning_service import InventoryUnifiedPlanningService
+
+        if product_ids is None:
+            product_ids = db.session.scalars(
+                select(Product.id).where(
+                    Product.tenant_id == self.tenant_id,
+                    Product.active.is_(True),
+                )
+            ).all()
+        return InventoryUnifiedPlanningService(self.tenant_id)._open_inbound(
+            [int(product_id) for product_id in product_ids]
+        )
 
     def _forecast_demand(self, daily_rate: Decimal, start: date, end: date, periods):
         if end < start or daily_rate <= 0:
