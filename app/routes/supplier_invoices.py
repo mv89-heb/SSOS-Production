@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 import os
@@ -13,6 +13,7 @@ from app.extensions import db
 from app.models.order import Order
 from app.models.receipt import Receipt
 from app.models.supplier_invoice import SupplierInvoice, SupplierInvoicePayment
+from app.models.supplier_offer import SupplierProductOffer
 from app.services.permission_service import PermissionService
 
 supplier_invoices_bp = Blueprint("supplier_invoices", __name__, url_prefix="/api")
@@ -120,15 +121,47 @@ def record_invoice_payment(invoice_id):
         paid = sum((Decimal(str(payment.amount)) for payment in invoice.payments), Decimal("0"))
         if paid + amount > Decimal(str(invoice.amount)):
             raise Conflict("Payment exceeds the outstanding invoice balance")
+        payment_date = _date(data.get("payment_date"), "payment_date", required=True)
         payment = SupplierInvoicePayment(
             tenant_id=current_user.tenant_id, invoice_id=invoice.id, amount=amount,
-            payment_date=_date(data.get("payment_date"), "payment_date", required=True),
+            payment_date=payment_date,
             reference=str(data.get("reference") or "").strip()[:255] or None,
             notes=str(data.get("notes") or "").strip()[:5000] or None,
             created_by=current_user.id,
         )
         db.session.add(payment)
         db.session.flush()
+        if paid + amount >= Decimal(str(invoice.amount)):
+            order = invoice.order
+            order_lines = order.items if order and isinstance(order.items, list) else []
+            reconciled_lines = invoice.line_comparison if isinstance(invoice.line_comparison, list) else []
+            # Only update a supplier offer when its order item can be matched
+            # unambiguously to one manually reconciled invoice line.
+            for order_item in (order.order_items if order else []):
+                offer = order_item.supplier_offer
+                if offer is None or offer.tenant_id != current_user.tenant_id or offer.supplier_id != invoice.supplier_id:
+                    continue
+                product_name = None
+                if order_item.product is not None:
+                    product_name = getattr(order_item.product, "name", None)
+                if not product_name and isinstance(order_item.product_snapshot, dict):
+                    product_name = order_item.product_snapshot.get("name") or order_item.product_snapshot.get("product_name")
+                if not product_name:
+                    continue
+                normalized_name = " ".join(str(product_name).casefold().split())
+                matching = [
+                    line for line in reconciled_lines
+                    if isinstance(line, dict)
+                    and " ".join(str(line.get("product_name") or "").casefold().split()) == normalized_name
+                ]
+                if len(matching) == 1:
+                    try:
+                        paid_unit_price = Decimal(str(matching[0].get("invoiced_unit_price")))
+                    except (InvalidOperation, TypeError, ValueError):
+                        continue
+                    if paid_unit_price.is_finite() and paid_unit_price >= 0:
+                        offer.last_paid_price = paid_unit_price.quantize(Decimal("0.01"))
+                        offer.last_paid_at = datetime.combine(payment_date, datetime.min.time(), tzinfo=timezone.utc)
         result = invoice.to_dict()
         db.session.commit()
         return jsonify({"success": True, "invoice": result}), 201

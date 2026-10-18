@@ -18,6 +18,8 @@ class SupplierProductOffer(db.Model):
 
     supplier_sku = db.Column(db.String(100), nullable=True)
     price = db.Column(db.Numeric(12, 2), nullable=False)
+    last_paid_price = db.Column(db.Numeric(12, 2), nullable=True)
+    last_paid_at = db.Column(db.DateTime, nullable=True)
     currency = db.Column(db.String(3), default="ILS", nullable=False)
     unit = db.Column(db.String(50), nullable=True)
     units_per_carton = db.Column(db.Integer, nullable=True)
@@ -42,6 +44,8 @@ class SupplierProductOffer(db.Model):
             "supplier_name": self.supplier.name if self.supplier else None,
             "supplier_sku": self.supplier_sku,
             "price": float(self.price),
+            "last_paid_price": float(self.last_paid_price) if self.last_paid_price is not None else None,
+            "last_paid_at": self.last_paid_at.isoformat() if self.last_paid_at else None,
             "currency": self.currency,
             "unit": self.unit,
             "units_per_carton": self.units_per_carton,
