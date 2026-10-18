@@ -231,8 +231,26 @@ export default function ProcurementIntelligencePage() {
       .sort((a, b) => b.estimatedCost - a.estimatedCost);
   }, [actionRows, opportunityByProduct, productById, supplierNames]);
 
-  const basketTotal = purchaseBasket.reduce((sum, row) => sum + row.estimatedCost, 0);
-  const basketSavings = purchaseBasket.reduce((sum, row) => sum + row.estimatedSavings, 0);
+  // Never aggregate monetary values across currencies: show each currency independently.
+  const basketTotalsByCurrency = purchaseBasket.reduce((totals, row) => {
+    const currency = row.currency || "ILS";
+    totals[currency] = (totals[currency] || 0) + row.estimatedCost;
+    return totals;
+  }, {} as Record<string, number>);
+  const basketSavingsByCurrency = purchaseBasket.reduce((totals, row) => {
+    const currency = row.currency || "ILS";
+    totals[currency] = (totals[currency] || 0) + row.estimatedSavings;
+    return totals;
+  }, {} as Record<string, number>);
+  const opportunityGapByCurrency = (data?.top_opportunities ?? []).reduce((totals, row) => {
+    const currency = row.currency || "ILS";
+    totals[currency] = (totals[currency] || 0) + Math.max(0, Number(row.savings_per_unit ?? 0));
+    return totals;
+  }, {} as Record<string, number>);
+  const formatCurrencyTotals = (totals: Record<string, number>) => {
+    const entries = Object.entries(totals).filter(([, value]) => Number.isFinite(value) && value > 0);
+    return entries.length ? entries.map(([currency, value]) => money(value, currency)).join(" · ") : "—";
+  };
 
   const categoryRows = useMemo(() => {
     const map = new Map<string, { count: number; stock: number }>();
@@ -320,8 +338,8 @@ export default function ProcurementIntelligencePage() {
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
         <StatCard label="דורש טיפול" value={number(actionRows.length)} hint={`${number(urgentStock.length)} דחופים · ${number(reorderStock.length)} להזמנה`} icon={<AlertTriangle className="text-red-500" size={18} />} tone={actionRows.length ? "red" : "emerald"} />
-        <StatCard label="סל רכש מומלץ" value={money(basketTotal)} hint={`${number(purchaseBasket.length)} מוצרים · לפני התאמות ידניות`} icon={<ShoppingCart className="text-indigo-500" size={18} />} tone="blue" />
-        <StatCard label="חיסכון פוטנציאלי" value={money(data?.potential_savings)} hint={`${number(data?.opportunity_products)} מוצרים עם חלופה זולה יותר`} icon={<TrendingDown className="text-emerald-500" size={18} />} tone="emerald" />
+        <StatCard label="סל רכש מומלץ" value={formatCurrencyTotals(basketTotalsByCurrency)} hint={`${number(purchaseBasket.length)} מוצרים · מוצג בנפרד לפי מטבע · לפני משלוח והתאמות ידניות`} icon={<ShoppingCart className="text-indigo-500" size={18} />} tone="blue" />
+        <StatCard label="פערי מחיר ליחידה" value={formatCurrencyTotals(opportunityGapByCurrency)} hint={`${number(data?.opportunity_products)} מוצרים עם חלופה זולה יותר · סכום פערים ליחידה, לא חיסכון מובטח`} icon={<TrendingDown className="text-emerald-500" size={18} />} tone="emerald" />
         <StatCard label="כיסוי מלאי ממוצע" value={averageCoverage == null ? "—" : `${number(averageCoverage)} ימים`} hint={`${number(coverageReady.length)} מוצרים עם נתוני צריכה מספיקים`} icon={<PackageSearch className="text-violet-500" size={18} />} tone="violet" />
         <StatCard label="נתוני מלאי חסרים" value={number(insufficientInventoryData)} hint="נדרשות לפחות שתי ספירות כדי לחשב צריכה" icon={<XCircle className="text-amber-500" size={18} />} tone="amber" />
         <StatCard label="מוצרים פעילים" value={number(readinessData?.products.active)} hint={`${number(readinessData?.products.categorized)} עם קטגוריה`} icon={<PackageSearch className="text-blue-500" size={18} />} tone="blue" />
@@ -401,9 +419,9 @@ export default function ProcurementIntelligencePage() {
                   </div>
                 ))}
               </div>
-              <div className="grid grid-cols-2 gap-3 border-t border-slate-100 p-4 dark:border-slate-800">
-                <div><div className="text-xs text-slate-500">עלות סל</div><div className="text-xl font-black">{money(basketTotal)}</div></div>
-                <div><div className="text-xs text-slate-500">חיסכון מזוהה בתוך הסל</div><div className="text-xl font-black text-emerald-600">{money(basketSavings)}</div></div>
+              <div className="grid gap-3 border-t border-slate-100 p-4 dark:border-slate-800 sm:grid-cols-2">
+                <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">עלות סל משוערת</div><div className="mt-1 text-lg font-black">{formatCurrencyTotals(basketTotalsByCurrency)}</div><div className="mt-1 text-xs text-slate-500">כל מטבע מחושב בנפרד</div></div>
+                <div className="rounded-xl bg-emerald-50 p-3 dark:bg-emerald-950/20"><div className="text-xs text-emerald-700 dark:text-emerald-300">פער מול המחיר הנוכחי בסל</div><div className="mt-1 text-lg font-black text-emerald-700 dark:text-emerald-300">{formatCurrencyTotals(basketSavingsByCurrency)}</div><div className="mt-1 text-xs text-emerald-700/80 dark:text-emerald-300/80">אומדן בלבד; לא כולל עלויות נלוות או תנאי ספק</div></div>
               </div>
               <div className="border-t border-slate-100 p-4 dark:border-slate-800"><a href="/dashboard/orders" className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700">פתח הזמנות רכש <ArrowLeft size={15} /></a></div>
             </>
@@ -414,7 +432,7 @@ export default function ProcurementIntelligencePage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Section title="💰 איפה יש כסף על השולחן" hint="השוואות מחיר אמיתיות בלבד, לפי יחידת השוואה ומטבע תואמים.">
+        <Section title="💰 איפה יש כסף על השולחן" hint="השוואות מחיר אמיתיות בלבד, לפי יחידת השוואה ומטבע תואמים. פערי המחיר מוצגים בנפרד לפי מטבע ואינם כוללים עלויות משלוח, מינימום הזמנה או תנאי אשראי.">
           {data?.top_opportunities?.length ? (
             <div className="space-y-4 p-5">
               {data.top_opportunities.slice(0, showAllOpportunities ? data.top_opportunities.length : 15).map((row) => (
