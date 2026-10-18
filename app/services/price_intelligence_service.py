@@ -425,6 +425,7 @@ class PriceIntelligenceService:
     def get_portfolio_summary(self, product_limit: int = 2000, opportunity_limit: int = 10):
         """Build a tenant-scoped executive snapshot from deterministic price facts."""
         products = self.product_repo.get_all_for_matching()[:max(1, int(product_limit))]
+        self._comparison_context = self._build_batch_comparison_context(products)
         total_current = Decimal("0")
         total_best = Decimal("0")
         opportunity_count = 0
@@ -471,7 +472,7 @@ class PriceIntelligenceService:
         opportunities.sort(key=lambda row: row["savings_per_unit"], reverse=True)
         potential_savings = max(Decimal("0"), total_current - total_best)
         savings_percent = potential_savings / total_current * Decimal("100") if total_current > 0 else Decimal("0")
-        return {
+        result = {
             "products_analyzed": len(analyzed),
             "products_with_comparable_alternatives": comparable_products,
             "opportunity_products": opportunity_count,
@@ -482,6 +483,8 @@ class PriceIntelligenceService:
             "top_opportunities": opportunities[:max(1, int(opportunity_limit))],
             "recent_changes": [row.to_dict() for row in self.history_repo.list_all(limit=50)],
         }
+        self._comparison_context = None
+        return result
 
     def get_supplier_price_scores(self, product_limit: int = 2000, limit: int = 10):
         """Score suppliers on price competitiveness and coverage only; no invented quality metrics."""
