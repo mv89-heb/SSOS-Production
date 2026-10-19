@@ -266,7 +266,11 @@ class InventoryUnifiedPlanningService:
             horizon = max(1, horizon)
             target_end = min(window_end, delivery_date + timedelta(days=safety_days) if delivery_date else today + timedelta(days=horizon))
             demand = self._forecast(daily_rate, today, target_end, periods)
-            safety_stock = self._forecast(daily_rate, target_end + timedelta(days=1), target_end + timedelta(days=max(1, safety_days)), periods)
+            safety_stock = (
+                self._forecast(daily_rate, target_end + timedelta(days=1), target_end + timedelta(days=safety_days), periods)
+                if safety_days > 0
+                else Decimal("0")
+            )
             target_stock = demand + safety_stock
             current_stock = Decimal(str(product.current_stock or 0))
             open_inbound = inbound.get(product.id, Decimal("0"))
