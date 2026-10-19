@@ -77,16 +77,24 @@ def test_recommendation_uses_stock_checks_and_supplier_days(db, tenant_a_admin):
         balance_after=80,
         occurred_at=now - timedelta(days=10),
     )
+    same_day_earlier = InventoryMovement(
+        tenant_id=tenant_id,
+        product_id=product.id,
+        movement_type=MOVEMENT_COUNT,
+        quantity=60,
+        balance_after=60,
+        occurred_at=now - timedelta(days=5),
+    )
     current = InventoryMovement(
         tenant_id=tenant_id,
         product_id=product.id,
         movement_type=MOVEMENT_COUNT,
         quantity=50,
         balance_after=50,
-        occurred_at=now - timedelta(days=5),
+        occurred_at=now - timedelta(days=5) + timedelta(minutes=1),
     )
     product.current_stock = 50
-    db.session.add_all([previous, current])
+    db.session.add_all([previous, same_day_earlier, current])
     db.session.commit()
 
     result = InventoryPlanningService(tenant_id).recommendation(
@@ -97,11 +105,20 @@ def test_recommendation_uses_stock_checks_and_supplier_days(db, tenant_a_admin):
 
     assert result["stock_checks_in_period"] == 2
     assert result["estimated_depletion"] == 30
-    assert result["average_daily_usage"] == 6
+    assert result["average_daily_usage"] == pytest.approx(6, abs=0.002)
     assert result["lead_time_days"] == 2
     assert result["supplier_schedule"]["supplier_name"] == "Ben & Jerry"
     assert result["supplier_schedule"]["schedule_ready"] is True
     assert result["data_ready"] is True
+
+    bulk_result = InventoryPlanningService(tenant_id).recommendations(
+        lookback_days=60,
+        safety_days=2,
+    )
+    product_result = next(row for row in bulk_result if row["product_id"] == product.id)
+    assert product_result["stock_checks_in_period"] == 2
+    assert product_result["estimated_depletion"] == 30
+    assert product_result["average_daily_usage"] == pytest.approx(6, abs=0.002)
 
 
 def test_recommendation_is_insufficient_without_two_checks(db, tenant_a_admin):
