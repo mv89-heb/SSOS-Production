@@ -162,35 +162,55 @@ class InventoryUnifiedPlanningService:
         return result
 
     def _open_inbound(self, product_ids):
+        """Return remaining quantities per active order line, less posted receipts for that same line.
+
+        Receipts must be tied to their own order item. Aggregating receipts only
+        by product can let a receipt from a cancelled or unrelated order erase
+        inbound stock expected from a different active order.
+        """
         if not product_ids:
             return {}
-        ordered = dict(db.session.execute(
-            select(OrderItem.product_id, func.coalesce(func.sum(OrderItem.quantity), 0))
+
+        posted_receipts = (
+            select(
+                ReceiptItem.order_item_id.label("order_item_id"),
+                func.coalesce(func.sum(ReceiptItem.quantity), 0).label("received_quantity"),
+            )
+            .join(Receipt, Receipt.id == ReceiptItem.receipt_id)
+            .where(
+                ReceiptItem.tenant_id == self.tenant_id,
+                Receipt.tenant_id == self.tenant_id,
+                Receipt.status == RECEIPT_POSTED,
+            )
+            .group_by(ReceiptItem.order_item_id)
+            .subquery()
+        )
+
+        rows = db.session.execute(
+            select(
+                OrderItem.product_id,
+                OrderItem.quantity,
+                func.coalesce(posted_receipts.c.received_quantity, 0),
+            )
             .join(Order, Order.id == OrderItem.order_id)
+            .outerjoin(posted_receipts, posted_receipts.c.order_item_id == OrderItem.id)
             .where(
                 OrderItem.tenant_id == self.tenant_id,
                 Order.tenant_id == self.tenant_id,
                 OrderItem.product_id.in_(product_ids),
                 Order.status.in_((STATUS_APPROVED, STATUS_SENT)),
-            ).group_by(OrderItem.product_id)
-        ).all())
-        received = dict(db.session.execute(
-            select(OrderItem.product_id, func.coalesce(func.sum(ReceiptItem.quantity), 0))
-            .join(ReceiptItem, ReceiptItem.order_item_id == OrderItem.id)
-            .join(Receipt, Receipt.id == ReceiptItem.receipt_id)
-            .where(
-                OrderItem.tenant_id == self.tenant_id,
-                ReceiptItem.tenant_id == self.tenant_id,
-                Receipt.tenant_id == self.tenant_id,
-                OrderItem.product_id.in_(product_ids),
-                Receipt.status == RECEIPT_POSTED,
-            ).group_by(OrderItem.product_id)
-        ).all())
-        return {
-            product_id: max(Decimal("0"), Decimal(str(ordered.get(product_id, 0))) - Decimal(str(received.get(product_id, 0))))
-            for product_id in product_ids
-            if max(Decimal("0"), Decimal(str(ordered.get(product_id, 0))) - Decimal(str(received.get(product_id, 0)))) > 0
-        }
+            )
+        ).all()
+
+        inbound = {}
+        for product_id, ordered_quantity, received_quantity in rows:
+            outstanding = max(
+                Decimal("0"),
+                Decimal(str(ordered_quantity or 0)) - Decimal(str(received_quantity or 0)),
+            )
+            if outstanding > 0:
+                inbound[product_id] = inbound.get(product_id, Decimal("0")) + outstanding
+        return inbound
 
     def _forecast(self, daily_rate, start, end, periods):
         if daily_rate <= 0 or end < start:
