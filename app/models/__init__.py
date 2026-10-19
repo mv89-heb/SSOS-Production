@@ -11,6 +11,7 @@ from app.models.document_analysis import DocumentAnalysis
 from app.models.product_classification_feedback import ProductClassificationFeedback
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.order_tracking_event import OrderTrackingEvent
 from app.models.receipt import Receipt
 from app.models.receipt_item import ReceiptItem
 from app.models.supplier_invoice import SupplierInvoice, SupplierInvoicePayment
