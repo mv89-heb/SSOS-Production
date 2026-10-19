@@ -62,6 +62,8 @@ def test_unified_planning_uses_physical_counts_and_open_inbound(db, tenant_a_adm
     assert without_order["open_inbound"] == 0
     assert without_order["available_for_planning"] == 20
     assert without_order["planning_engine"] == "unified-v1"
+    # The lead-time demand ends at delivery; the safety buffer is forecast separately.
+    assert without_order["planning_horizon_days"] == without_order["lead_time_days"]
 
     without_safety_buffer = service.recommendation(product.id, lookback_days=60, safety_days=0)
     assert without_safety_buffer["safety_stock"] == 0
