@@ -264,7 +264,7 @@ class InventoryUnifiedPlanningService:
             if days_until_order is not None:
                 horizon = max(horizon, days_until_order + lead_time_days + safety_days)
             horizon = max(1, horizon)
-            target_end = min(window_end, delivery_date + timedelta(days=safety_days) if delivery_date else today + timedelta(days=horizon))
+            target_end = min(window_end, delivery_date if delivery_date else today + timedelta(days=horizon - safety_days))
             demand = self._forecast(daily_rate, today, target_end, periods)
             safety_stock = (
                 self._forecast(daily_rate, target_end + timedelta(days=1), target_end + timedelta(days=safety_days), periods)
