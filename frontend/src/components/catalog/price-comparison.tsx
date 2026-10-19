@@ -131,7 +131,7 @@ export function PriceComparison({
         </div>
         <div className="text-right">
           <div className="font-semibold text-slate-900">{money(row.price, row.currency)}</div>
-          <div className="text-xs text-slate-400">מחיר מקורי</div>{offer?.last_paid_price != null && <div className="mt-1 text-xs text-indigo-700 dark:text-indigo-300">מחיר אחרון ששולם: {money(offer.last_paid_price, offer.currency)}{offer.last_paid_at ? ` · ${new Date(offer.last_paid_at).toLocaleDateString("he-IL")}` : ""}</div>}
+          <div className="text-xs text-slate-400">מחיר מקורי</div><div className="mt-1 text-xs text-slate-600 sm:hidden">{isComparable ? <>{money(row.normalized_price, row.currency)} <span className="text-slate-400">לפי יחידת השוואה</span></> : <span className="text-amber-700">לא ניתן להשוות</span>}</div>{offer?.last_paid_price != null && <div className="mt-1 text-xs text-indigo-700 dark:text-indigo-300">מחיר אחרון ששולם: {money(offer.last_paid_price, offer.currency)}{offer.last_paid_at ? ` · ${new Date(offer.last_paid_at).toLocaleDateString("he-IL")}` : ""}</div>}
         </div>
         <div className="hidden text-right sm:block">
           {isComparable ? <><div className="font-semibold text-slate-900">{money(row.normalized_price, row.currency)}</div><div className="text-xs text-slate-400">לפי יחידת השוואה</div></> : <span className="text-xs text-amber-700">לא ניתן להשוות</span>}
