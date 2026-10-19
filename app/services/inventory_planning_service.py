@@ -37,6 +37,27 @@ class InventoryPlanningService:
         return result
 
     @staticmethod
+    def _dedupe_daily_counts(movements):
+        """Keep only the last physical count for each calendar day.
+
+        Same-day recounts are corrections, not separate elapsed-time observations.
+        Order by timestamp and id so the final count of each day wins.
+        """
+        ordered = sorted(
+            movements,
+            key=lambda movement: (
+                movement.occurred_at.date() if movement.occurred_at else date.min,
+                movement.id or 0,
+                movement.occurred_at.isoformat() if movement.occurred_at else "",
+            ),
+        )
+        daily = {}
+        for movement in ordered:
+            day = movement.occurred_at.date() if movement.occurred_at else date.min
+            daily[day] = movement
+        return list(daily.values())
+
+    @staticmethod
     def _parse_weekdays(value):
         if not value:
             return set()
@@ -123,6 +144,7 @@ class InventoryPlanningService:
             counts = prefetched_counts.get(product.id, [])
         else:
             counts = db.session.scalars(select(InventoryMovement).where(InventoryMovement.tenant_id == self.tenant_id, InventoryMovement.product_id == product.id, InventoryMovement.movement_type == MOVEMENT_COUNT, InventoryMovement.occurred_at >= since).order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())).all()
+        counts = self._dedupe_daily_counts(counts)
         estimated_depletion = Decimal("0")
         observed_days = Decimal("0")
         if len(counts) >= 2:
@@ -205,6 +227,7 @@ class InventoryPlanningService:
         lookback_days = max(7, min(int(lookback_days), 365))
         safety_days = max(0, min(int(safety_days), 90))
         now = datetime.now(timezone.utc)
+        counts = self._dedupe_daily_counts(counts)
         estimated_depletion = Decimal("0")
         observed_days = Decimal("0")
         if len(counts) >= 2:
