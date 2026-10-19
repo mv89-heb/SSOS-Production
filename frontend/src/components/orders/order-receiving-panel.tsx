@@ -37,10 +37,24 @@ export function OrderReceivingPanel({ order }: { order: Order }) {
   }, [receiptsQuery.data]);
   const createReceipt = useMutation({
     mutationFn: async () => {
-      const items = lines.map((line) => ({
-        order_item_id: line.id,
-        quantity: Number(quantities[line.id] || 0),
-      })).filter((item) => Number.isInteger(item.quantity) && item.quantity > 0);
+      const items: Array<{ order_item_id: number; quantity: number }> = [];
+      for (const line of lines) {
+        const rawQuantity = quantities[line.id]?.trim();
+        if (!rawQuantity) continue;
+        const quantity = Number(rawQuantity);
+        if (!Number.isFinite(quantity) || !Number.isInteger(quantity) || quantity < 0) {
+          throw new Error("יש להזין כמויות שלמות וחיוביות בלבד");
+        }
+        if (quantity === 0) continue;
+        const ordered = Number(line.quantity);
+        const received = receivedByLine.get(line.id) ?? 0;
+        const remaining = Math.max(0, ordered - received);
+        if (quantity > remaining) {
+          const label = line.product_snapshot?.name ?? `פריט ${line.id}`;
+          throw new Error(`הכמות שהוזנה עבור ${label} גדולה מהיתרה להזמנה (${remaining})`);
+        }
+        items.push({ order_item_id: line.id, quantity });
+      }
       if (!items.length) throw new Error("יש להזין כמות שהתקבלה לפחות בפריט אחד");
       const { data } = await apiClient.post<ReceiptCreateResponse>(
         `/api/orders/${order.id}/receipts`,
@@ -89,7 +103,7 @@ export function OrderReceivingPanel({ order }: { order: Order }) {
         {message && <p role="status" className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800">{message}</p>}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-xs text-slate-500">{(receiptsQuery.data ?? []).length} קבלות קודמות</div>
-          <Button onClick={() => { setMessage(null); createReceipt.mutate(); }} disabled={createReceipt.isPending || !lines.length || receiptsQuery.isLoading}>
+          <Button onClick={() => { setMessage(null); createReceipt.mutate(); }} disabled={createReceipt.isPending || !lines.length || receiptsQuery.isLoading || receiptsQuery.isError}>
             <CheckCircle2 size={16} /> {createReceipt.isPending ? "שומר קבלה..." : "רישום קבלת סחורה"}
           </Button>
         </div>
