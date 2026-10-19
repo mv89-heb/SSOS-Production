@@ -47,19 +47,72 @@ class InventoryCalendarService:
         period = self._period_for_date(rows, target_date)
         return Decimal(str(period.consumption_multiplier or 1)) if period else Decimal("1")
 
-    def schedule_for_product(self, product, today=None, periods=None):
+    def schedule_for_product(self, product, today=None, periods=None, base_schedule=None):
+        """Return the supplier schedule while preserving caller-provided schedule overrides."""
         today = today or datetime.now(timezone.utc).date()
-        periods = periods if periods is not None else self.periods(start=today, end=today + timedelta(days=180), active_only=True)
-        supplier = db.session.scalar(select(Supplier).where(Supplier.id == product.supplier_id, Supplier.tenant_id == self.tenant_id, Supplier.active.is_(True)))
-        return self.engine._schedule(product, supplier, today, periods)
+        periods = periods if periods is not None else self.periods(
+            start=today, end=today + timedelta(days=180), active_only=True
+        )
+        if base_schedule is None:
+            base_schedule = self.engine._schedule(
+                product,
+                db.session.scalar(
+                    select(Supplier).where(
+                        Supplier.id == product.supplier_id,
+                        Supplier.tenant_id == self.tenant_id,
+                        Supplier.active.is_(True),
+                    )
+                ),
+                today,
+                periods,
+            )
+        base_order_days = set(base_schedule.get("order_days") or [])
+        base_delivery_days = set(base_schedule.get("delivery_days") or [])
+
+        def days_for(target, field, fallback):
+            period = self._period_for_date(periods, target)
+            raw = getattr(period, field, None) if period else None
+            return self._parse_weekdays(raw) if raw else set() or fallback
+
+        next_order = None
+        for offset in range(181):
+            candidate = today + timedelta(days=offset)
+            if candidate.weekday() in (days_for(candidate, "order_days", base_order_days) or base_order_days):
+                next_order = candidate
+                break
+
+        next_delivery = None
+        if next_order:
+            for offset in range(1, 181):
+                candidate = next_order + timedelta(days=offset)
+                if candidate.weekday() in (days_for(candidate, "delivery_days", base_delivery_days) or base_delivery_days):
+                    next_delivery = candidate
+                    break
+
+        period_for_order = self._period_for_date(periods, next_order) if next_order else None
+        return {
+            **base_schedule,
+            "next_order_date": next_order.isoformat() if next_order else None,
+            "next_delivery_date": next_delivery.isoformat() if next_delivery else None,
+            "recommended_check_date": next_order.isoformat() if next_order else None,
+            "order_cutoff_time": (
+                period_for_order.order_cutoff_time
+                if period_for_order
+                else base_schedule.get("order_cutoff_time")
+            ),
+            "schedule_adjusted_for_period": bool(
+                (next_order and base_schedule.get("next_order_date") != next_order.isoformat())
+                or (next_delivery and base_schedule.get("next_delivery_date") != next_delivery.isoformat())
+            ),
+        }
 
     def _consumption_metrics(self, product_id: int, lookback_days=60):
         since = datetime.now(timezone.utc) - timedelta(days=max(1, int(lookback_days)))
         metric = self.engine._consumption_batch([int(product_id)], since).get(int(product_id), {})
         return (
-            float(metric.get("consumption", 0)),
-            float(metric.get("observed_days", 0)),
-            float(metric.get("receipts", 0)),
+            Decimal(str(metric.get("consumption", 0))),
+            Decimal(str(metric.get("observed_days", 0))),
+            Decimal(str(metric.get("receipts", 0))),
             int(metric.get("stock_checks", 0)),
         )
 
@@ -71,7 +124,21 @@ class InventoryCalendarService:
         return self.engine._open_inbound([int(product_id) for product_id in product_ids])
 
     def recommendation(self, product_id: int, *, lookback_days=60, safety_days=2, inbound_quantities=None):
-        return self.engine.recommendation(product_id, lookback_days=lookback_days, safety_days=safety_days)
+        row = self.engine.recommendation(
+            product_id, lookback_days=lookback_days, safety_days=safety_days
+        )
+        if inbound_quantities is not None and row:
+            inbound = Decimal(str(inbound_quantities.get(int(product_id), 0) or 0))
+            current_stock = Decimal(str(row.get("current_stock", 0) or 0))
+            target_stock = Decimal(str(
+                row.get("holiday_adjusted_target_stock",
+                        row.get("target_stock", row.get("reorder_point", 0))) or 0
+            ))
+            row["confirmed_inbound"] = float(inbound)
+            row["recommended_order"] = float(max(Decimal("0"), target_stock - current_stock - inbound))
+            if row.get("status") not in ("urgent", "insufficient_data"):
+                row["status"] = "reorder" if current_stock + inbound <= target_stock else "healthy"
+        return row
 
     def recommendations(self, *, lookback_days=60, safety_days=2, limit=500):
         return self.engine.recommendations(lookback_days=lookback_days, safety_days=safety_days, limit=limit)
