@@ -56,8 +56,8 @@ export const documentIntelligenceService = {
     onAnalysisStatus?.(result);
     return result;
   },
-  uploadManyAndAnalyze: async (files: File[], onFileStatus?: (file: File, analysis: DocumentAnalysis | null, stage: "uploading" | "uploaded" | "processing" | "done", percent: number) => void) => {
-    const results: DocumentAnalysis[] = [];
+  uploadManyAndAnalyze: async (files: File[], onFileStatus?: (file: File, analysis: DocumentAnalysis | null, stage: "uploading" | "uploaded" | "processing" | "done" | "failed", percent: number, error?: string) => void) => {
+    const results: Array<DocumentAnalysis | undefined> = new Array(files.length);
     const concurrency = Math.min(2, Math.max(1, files.length));
     let nextIndex = 0;
     async function worker() {
@@ -65,22 +65,28 @@ export const documentIntelligenceService = {
         const index = nextIndex++;
         if (index >= files.length) return;
         const file = files[index];
-        const result = await documentIntelligenceService.uploadAndAnalyze(
-          file,
-          (percent) => onFileStatus?.(file, null, "uploading", percent),
-          (analysis) => onFileStatus?.(
+        try {
+          const result = await documentIntelligenceService.uploadAndAnalyze(
             file,
-            analysis,
-            analysis.status === "UPLOADED" ? "uploaded" : analysis.status === "PROCESSING" ? "processing" : "done",
-            analysis.extracted_data?.processing?.percent ?? (analysis.status === "UPLOADED" ? 100 : 0),
-          ),
-        );
-        results[index] = result;
-        onFileStatus?.(file, result, "done", 100);
+            (percent) => onFileStatus?.(file, null, "uploading", percent),
+            (analysis) => onFileStatus?.(
+              file,
+              analysis,
+              ["FAILED", "AI_UNAVAILABLE"].includes(analysis.status) ? "failed" : analysis.status === "UPLOADED" ? "uploaded" : analysis.status === "PROCESSING" ? "processing" : "done",
+              analysis.extracted_data?.processing?.percent ?? (analysis.status === "UPLOADED" ? 100 : 0),
+              analysis.error_message || undefined,
+            ),
+          );
+          results[index] = result;
+          onFileStatus?.(file, result, result.status === "FAILED" || result.status === "AI_UNAVAILABLE" ? "failed" : "done", 100, result.error_message || undefined);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : "העלאת המסמך או ניתוחו נכשלו";
+          onFileStatus?.(file, null, "failed", 0, message);
+        }
       }
     }
     await Promise.all(Array.from({ length: concurrency }, () => worker()));
-    return results;
+    return results.filter((item): item is DocumentAnalysis => Boolean(item));
   },
   analyze: async (id: number) => { const { data } = await apiClient.post<{ success: boolean; analysis: DocumentAnalysis }>(`/api/document-intelligence/${id}/analyze`); return data.analysis; },
   get: async (id: number) => { const { data } = await apiClient.get<{ success: boolean; analysis: DocumentAnalysis }>(`/api/document-intelligence/${id}`); return data.analysis; },
