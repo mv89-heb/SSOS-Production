@@ -136,5 +136,5 @@ def test_explicit_inbound_quantities_reduce_recommended_order(monkeypatch):
 
     assert result["confirmed_inbound"] == 10.0
     assert result["recommended_order"] == 5.0
-    assert result["status"] == "healthy"
+    assert result["status"] == "reorder"
 
