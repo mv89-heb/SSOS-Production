@@ -88,3 +88,53 @@ def test_count_status_tracks_distinct_products(db, tenant_a_admin):
     assert status["counted_products_last_7_days"] == 2
     assert status["completed"] is True
     assert status["completion_percent"] == 100
+
+
+def test_schedule_for_product_preserves_explicit_base_schedule(db, tenant_a_admin):
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="Supplier")
+    db.session.add(supplier)
+    db.session.flush()
+    product = _product(db, tenant_id, supplier.id)
+    service = InventoryCalendarService(tenant_id)
+
+    result = service.schedule_for_product(
+        product,
+        today=date(2026, 10, 19),  # Monday
+        periods=[],
+        base_schedule={
+            "supplier_id": supplier.id,
+            "supplier_name": supplier.name,
+            "order_days": [0],  # Monday
+            "delivery_days": [2],  # Wednesday
+            "next_order_date": None,
+            "next_delivery_date": None,
+            "order_cutoff_time": "10:00",
+        },
+    )
+
+    assert result["next_order_date"] == "2026-10-19"
+    assert result["next_delivery_date"] == "2026-10-21"
+    assert result["order_cutoff_time"] == "10:00"
+
+
+def test_explicit_inbound_quantities_reduce_recommended_order(monkeypatch):
+    service = InventoryCalendarService(tenant_id=1)
+    monkeypatch.setattr(
+        service.engine,
+        "recommendation",
+        lambda *args, **kwargs: {
+            "product_id": 7,
+            "current_stock": 5.0,
+            "holiday_adjusted_target_stock": 20.0,
+            "recommended_order": 15.0,
+            "status": "reorder",
+        },
+    )
+
+    result = service.recommendation(7, inbound_quantities={7: 10})
+
+    assert result["confirmed_inbound"] == 10.0
+    assert result["recommended_order"] == 5.0
+    assert result["status"] == "healthy"
+
