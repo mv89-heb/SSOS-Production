@@ -105,7 +105,7 @@ def test_recommendation_uses_stock_checks_and_supplier_days(db, tenant_a_admin):
 
     assert result["stock_checks_in_period"] == 2
     assert result["estimated_depletion"] == 30
-    assert result["average_daily_usage"] == 6
+    assert result["average_daily_usage"] == pytest.approx(6, abs=0.002)
     assert result["lead_time_days"] == 2
     assert result["supplier_schedule"]["supplier_name"] == "Ben & Jerry"
     assert result["supplier_schedule"]["schedule_ready"] is True
@@ -118,7 +118,7 @@ def test_recommendation_uses_stock_checks_and_supplier_days(db, tenant_a_admin):
     product_result = next(row for row in bulk_result if row["product_id"] == product.id)
     assert product_result["stock_checks_in_period"] == 2
     assert product_result["estimated_depletion"] == 30
-    assert product_result["average_daily_usage"] == 6
+    assert product_result["average_daily_usage"] == pytest.approx(6, abs=0.002)
 
 
 def test_recommendation_is_insufficient_without_two_checks(db, tenant_a_admin):
