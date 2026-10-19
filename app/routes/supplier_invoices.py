@@ -175,9 +175,9 @@ def record_invoice_payment(invoice_id):
 
 _ALLOWED_ATTACHMENTS = {
     ".pdf": ("application/pdf", lambda data: data.startswith(b"%PDF-")),
-    ".jpg": ("image/jpeg", lambda data: data.startswith(b"\\xff\\xd8\\xff")),
-    ".jpeg": ("image/jpeg", lambda data: data.startswith(b"\\xff\\xd8\\xff")),
-    ".png": ("image/png", lambda data: data.startswith(b"\\x89PNG\\r\\n\\x1a\\n")),
+    ".jpg": ("image/jpeg", lambda data: data.startswith(b"\xff\xd8\xff")),
+    ".jpeg": ("image/jpeg", lambda data: data.startswith(b"\xff\xd8\xff")),
+    ".png": ("image/png", lambda data: data.startswith(b"\x89PNG\r\n\x1a\n")),
 }
 
 
