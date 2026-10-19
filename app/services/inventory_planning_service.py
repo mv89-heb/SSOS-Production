@@ -47,8 +47,8 @@ class InventoryPlanningService:
             movements,
             key=lambda movement: (
                 movement.occurred_at.date() if movement.occurred_at else date.min,
-                movement.id or 0,
                 movement.occurred_at.isoformat() if movement.occurred_at else "",
+                movement.id or 0,
             ),
         )
         daily = {}
