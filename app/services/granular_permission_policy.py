@@ -6,6 +6,8 @@ Overrides are restricted to known keys and role defaults remain the fallback.
 from flask_login import current_user
 from werkzeug.exceptions import Forbidden
 
+RESTRICTED_OVERRIDE_KEYS = {"users.manage", "permissions.manage", "audit.view"}
+
 ROLE_DEFAULTS = {
     "employee": {
         "orders.view": True,
@@ -65,7 +67,7 @@ def effective_permissions(user):
     if not isinstance(overrides, dict):
         return permissions
     for key, value in overrides.items():
-        if key in permissions and isinstance(value, bool):
+        if key in permissions and key not in RESTRICTED_OVERRIDE_KEYS and isinstance(value, bool):
             permissions[key] = value
     return permissions
 
