@@ -15,6 +15,7 @@ const permissionLabels: Array<{key: string; label: string}> = [
   { key: "orders.view", label: "צפייה בהזמנות" },
   { key: "orders.create", label: "יצירה ועריכת הזמנות" },
   { key: "orders.approve", label: "אישור הזמנות" },
+  { key: "orders.reject", label: "דחיית הזמנות" },
   { key: "orders.mark_sent", label: "סימון הזמנה כנשלחה" },
   { key: "orders.complete", label: "השלמת הזמנה" },
   { key: "orders.delete", label: "מחיקת הזמנות" },
@@ -32,7 +33,7 @@ const permissionLabels: Array<{key: string; label: string}> = [
 ];
 const rolePermissionDefaults: Record<AdminUser["role"], Record<string, boolean>> = {
   employee: Object.fromEntries(permissionLabels.map(p => [p.key, ["orders.view","orders.create","orders.approve","orders.mark_sent","orders.complete","catalog.view","inventory.view","inventory.count","documents.view","documents.upload","reports.view"].includes(p.key)])),
-  manager: Object.fromEntries(permissionLabels.map(p => [p.key, ["orders.view","orders.create","orders.approve","orders.mark_sent","orders.complete","catalog.view","catalog.manage","inventory.view","inventory.count","documents.view","documents.upload","reports.view","reports.export"].includes(p.key)])),
+  manager: Object.fromEntries(permissionLabels.map(p => [p.key, ["orders.view","orders.create","orders.approve","orders.reject","orders.mark_sent","orders.complete","catalog.view","catalog.manage","inventory.view","inventory.count","documents.view","documents.upload","reports.view","reports.export"].includes(p.key)])),
   admin: Object.fromEntries(permissionLabels.map(p => [p.key, true])),
 };
 const roleLabel = (role: AdminUser["role"]) => role === "admin" ? "מנהל מערכת" : role === "manager" ? "מנהל" : "עובד";
