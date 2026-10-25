@@ -99,12 +99,15 @@ class ProductionConfig(BaseConfig):
         cors_origins = _csv_env("CORS_ORIGINS")
         gemini_api_key = os.environ.get("GEMINI_API_KEY", "").strip()
         ratelimit_storage = _required_env("RATELIMIT_STORAGE_URI")
+        worker_mode = _env_bool("SSOS_WORKER_MODE", False)
 
         if not cors_origins:
             raise RuntimeError("CORS_ORIGINS must contain at least one allowed origin in production")
         if not database_url.startswith("postgresql"):
             raise RuntimeError("Production DATABASE_URL must use PostgreSQL/Neon")
-        if ratelimit_storage == "memory://":
+        # Scheduled one-off workers do not serve HTTP traffic, so their rate-limit
+        # backend is never shared with web instances and does not need external Redis.
+        if ratelimit_storage == "memory://" and not worker_mode:
             raise RuntimeError("RATELIMIT_STORAGE_URI must use shared production storage (for example Redis)")
 
         app.config["SECRET_KEY"] = secret_key
