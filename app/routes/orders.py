@@ -39,7 +39,7 @@ def list_orders():
 @login_required
 def create_order():
     try:
-        PermissionService.require_role_at_least("employee")
+        PermissionService.require_permission("orders.create")
     except HTTPException as exc:
         return _handle(exc)
     data = request.get_json(silent=True) or {}
@@ -66,7 +66,7 @@ def get_order(order_id):
 @login_required
 def update_order(order_id):
     try:
-        PermissionService.require_role_at_least("employee")
+        PermissionService.require_permission("orders.edit")
     except HTTPException as exc:
         return _handle(exc)
     data = request.get_json(silent=True) or {}
@@ -90,7 +90,7 @@ def update_order(order_id):
 def duplicate_order(order_id):
     """Create a new draft from an existing order without copying its lifecycle or receipts."""
     try:
-        PermissionService.require_role_at_least("employee")
+        PermissionService.require_permission("orders.create")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -129,7 +129,7 @@ def delete_order(order_id):
     deletion.
     """
     try:
-        PermissionService.require_role_at_least("employee")
+        PermissionService.require_permission("orders.delete")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -157,7 +157,7 @@ def delete_order(order_id):
 @login_required
 def submit_order(order_id):
     try:
-        PermissionService.require_role_at_least("employee")
+        PermissionService.require_permission("orders.edit")
     except HTTPException as exc:
         return _handle(exc)
     service = OrderService(tenant_id=current_user.tenant_id)
@@ -173,7 +173,7 @@ def submit_order(order_id):
 @login_required
 def approve_order(order_id):
     try:
-        PermissionService.require_role_at_least("employee")
+        PermissionService.require_permission("orders.approve")
     except HTTPException as exc:
         return _handle(exc)
     service = OrderService(tenant_id=current_user.tenant_id)
@@ -189,7 +189,7 @@ def approve_order(order_id):
 @login_required
 def reject_order(order_id):
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("orders.reject")
     except HTTPException as exc:
         return _handle(exc)
     data = request.get_json(silent=True) or {}
@@ -206,7 +206,7 @@ def reject_order(order_id):
 @login_required
 def mark_order_sent(order_id):
     try:
-        PermissionService.require_role_at_least("employee")
+        PermissionService.require_permission("orders.mark_sent")
     except HTTPException as exc:
         return _handle(exc)
     service = OrderService(tenant_id=current_user.tenant_id)
@@ -222,7 +222,7 @@ def mark_order_sent(order_id):
 @login_required
 def mark_order_completed(order_id):
     try:
-        PermissionService.require_role_at_least("employee")
+        PermissionService.require_permission("orders.complete")
     except HTTPException as exc:
         return _handle(exc)
     service = OrderService(tenant_id=current_user.tenant_id)

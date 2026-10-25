@@ -5,6 +5,7 @@ from werkzeug.exceptions import HTTPException, NotFound
 
 from app.extensions import db
 from app.models.user import ROLE_ADMIN, ROLE_EMPLOYEE, VALID_ROLES, User
+from app.services.granular_permission_policy import ROLE_DEFAULTS
 from app.services.audit_service import AuditService
 from app.services.permission_service import PermissionService
 from app.utils.validators import is_strong_password, is_valid_email, normalize_email
@@ -151,6 +152,7 @@ def update_user(user_id: int):
     new_role = data.get("role")
     new_active = data.get("active")
     new_password = data.get("password")
+    new_permissions = data.get("permissions")
 
     if new_email is not None:
         email = normalize_email(str(new_email))
@@ -197,6 +199,23 @@ def update_user(user_id: int):
             return jsonify({"success": False, "error": "last_admin_protected"}), 409
         user.active = active
 
+    if new_permissions is not None:
+        if not isinstance(new_permissions, dict):
+            return jsonify({"success": False, "error": "invalid_permissions", "message": "ההרשאות חייבות להיות אובייקט."}), 400
+        known_permissions = set(ROLE_DEFAULTS.get(ROLE_EMPLOYEE, {}).keys()) - {"users.manage", "permissions.manage", "audit.view"}
+        unknown = set(new_permissions.keys()) - known_permissions
+        if unknown:
+            return jsonify({"success": False, "error": "unknown_permissions", "message": "נשלחו מפתחות הרשאה לא מוכרים.", "keys": sorted(unknown)}), 400
+        if any(value is not None and not isinstance(value, bool) for value in new_permissions.values()):
+            return jsonify({"success": False, "error": "invalid_permission_value", "message": "ערך הרשאה חייב להיות true, false או null."}), 400
+        overrides = dict(user.permissions or {})
+        for key, value in new_permissions.items():
+            if value is None:
+                overrides.pop(key, None)
+            else:
+                overrides[key] = value
+        user.permissions = overrides or None
+
     if new_password is not None:
         password = str(new_password)
         if not is_strong_password(password):
@@ -214,7 +233,7 @@ def update_user(user_id: int):
         user_id=current_user.id,
         action="users.update",
         title=f"Updated user {user.email}",
-        metadata={"target_user_id": user.id},
+        metadata={"target_user_id": user.id, "permission_keys_changed": sorted(new_permissions.keys()) if isinstance(new_permissions, dict) else []},
     )
     db.session.commit()
     return jsonify({"success": True, "user": user.to_dict()})

@@ -2,6 +2,7 @@ from flask_login import current_user
 from werkzeug.exceptions import Forbidden, Unauthorized
 
 from app.models.user import ROLE_RANK, ROLE_ADMIN
+from app.services.granular_permission_policy import has_permission
 
 
 class PermissionService:
@@ -15,6 +16,12 @@ class PermissionService:
     @staticmethod
     def _normalized_role(role) -> str:
         return str(role or "").strip().lower()
+
+    @staticmethod
+    def require_permission(permission: str):
+        PermissionService.require_authenticated()
+        if not has_permission(permission, current_user):
+            raise Forbidden(f"Permission required: {permission}")
 
     @staticmethod
     def require_role_at_least(minimum_role: str):
