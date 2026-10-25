@@ -30,7 +30,7 @@ const permissionLabels: Array<{key: string; label: string}> = [
   { key: "reports.export", label: "ייצוא דוחות" },
 ];
 const rolePermissionDefaults: Record<AdminUser["role"], Record<string, boolean>> = {
-  employee: Object.fromEntries(permissionLabels.map(p => [p.key, ["orders.view","orders.create","orders.approve","orders.mark_sent","orders.complete","catalog.view","inventory.view","inventory.count","documents.view","documents.upload","reports.view"].includes(p.key)])),
+  employee: Object.fromEntries(permissionLabels.map(p => [p.key, ["orders.view","orders.create","orders.approve","orders.mark_sent","orders.complete","catalog.view","inventory.view","inventory.count","reports.view"].includes(p.key)])),
   manager: Object.fromEntries(permissionLabels.map(p => [p.key, ["orders.view","orders.create","orders.approve","orders.reject","orders.mark_sent","orders.complete","catalog.view","catalog.manage","inventory.view","inventory.count","documents.view","documents.upload","documents.process","reports.view","reports.export"].includes(p.key)])),
   admin: Object.fromEntries(permissionLabels.map(p => [p.key, true])),
 };
