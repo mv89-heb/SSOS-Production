@@ -63,7 +63,7 @@ def create_supplier():
         description: Supplier created
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -134,7 +134,7 @@ def update_supplier(supplier_id):
         description: Supplier not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -230,7 +230,7 @@ def create_product():
         description: Supplier not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -332,7 +332,7 @@ def update_product(product_id):
         description: Product not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -372,7 +372,7 @@ def delete_product(product_id):
         description: Product not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -461,7 +461,7 @@ def create_offer(product_id):
         description: This supplier already has a price on file for this product
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -518,7 +518,7 @@ def update_offer(product_id, offer_id):
         description: Offer not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -556,7 +556,7 @@ def delete_offer(product_id, offer_id):
         description: Offer not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -677,7 +677,7 @@ def review_master_product_candidates():
     from app.services.master_product_matching_service import MasterProductMatchingService
 
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -750,7 +750,7 @@ def review_master_product_candidates():
 def intake_supplier_product():
     from app.services.master_product_matching_service import MasterProductMatchingService
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
         item, suggestions = MasterProductMatchingService(
             current_user.tenant_id, current_user.id
         ).intake(request.get_json(silent=True) or {})
@@ -772,7 +772,7 @@ def intake_supplier_product():
 def list_pending_supplier_products():
     from app.services.master_product_matching_service import MasterProductMatchingService
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
     except HTTPException as exc:
         return _handle(exc)
     service = MasterProductMatchingService(current_user.tenant_id, current_user.id)
@@ -786,7 +786,7 @@ def approve_supplier_product_match(supplier_product_id):
     from app.services.master_product_matching_service import MasterProductMatchingService
     data = request.get_json(silent=True) or {}
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
         service = MasterProductMatchingService(current_user.tenant_id, current_user.id)
         if data.get("create_master_product"):
             item, master = service.create_master_and_approve(supplier_product_id, data["create_master_product"])
@@ -814,7 +814,7 @@ def reject_supplier_product_match(supplier_product_id):
     from app.models.supplier_product import SupplierProduct
     from app.services.audit_service import AuditService
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
         item = db.session.execute(select(SupplierProduct).where(
             SupplierProduct.id == supplier_product_id,
             SupplierProduct.tenant_id == current_user.tenant_id,
@@ -851,7 +851,7 @@ def compare_master_product(master_product_id):
 def enrich_missing_product_images():
     """Fill missing images using exact barcodes or an exact normalized-name match."""
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("catalog.manage")
     except HTTPException as exc:
         return _handle(exc)
 
