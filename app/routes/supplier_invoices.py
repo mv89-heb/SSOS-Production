@@ -181,6 +181,9 @@ def record_invoice_payment(invoice_id):
             notes=str(data.get("notes") or "").strip()[:5000] or None,
             created_by=current_user.id,
         )
+        # Keep the ORM relationship in sync so the response and subsequent
+        # approval checks see the payment created in this transaction.
+        invoice.payments.append(payment)
         db.session.add(payment)
         db.session.flush()
         if paid + amount >= Decimal(str(invoice.amount)):
