@@ -1,7 +1,7 @@
 """Granular permission policy primitives.
 
-This module is deliberately separate from the existing role guard until the
-user model and admin API can persist per-user overrides in a reviewed change.
+Role defaults and per-user boolean overrides used by API permission checks.
+Overrides are restricted to known keys and role defaults remain the fallback.
 """
 from flask_login import current_user
 from werkzeug.exceptions import Forbidden
