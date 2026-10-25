@@ -12,8 +12,9 @@ from werkzeug.utils import secure_filename
 from app.extensions import db
 from app.models.order import Order
 from app.models.receipt import Receipt
-from app.models.supplier_invoice import SupplierInvoice, SupplierInvoicePayment
+from app.models.supplier_invoice import SupplierInvoice, SupplierInvoicePayment, INVOICE_APPROVAL_PENDING, INVOICE_APPROVAL_APPROVED, VALID_INVOICE_APPROVAL_STATUSES
 from app.models.supplier_offer import SupplierProductOffer
+from app.services.audit_service import AuditService
 from app.services.permission_service import PermissionService
 
 supplier_invoices_bp = Blueprint("supplier_invoices", __name__, url_prefix="/api")
