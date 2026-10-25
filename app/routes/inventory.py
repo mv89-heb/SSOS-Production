@@ -154,11 +154,6 @@ def generate_barcodes():
         return _handle(exc)
 
     """Generate stable internal barcodes for products that do not have one."""
-    try:
-        PermissionService.require_role_at_least("manager")
-    except HTTPException as exc:
-        return _handle(exc)
-
     payload = request.get_json(silent=True) or {}
     raw_ids = payload.get("product_ids")
     include_inactive = bool(payload.get("include_inactive", False))
