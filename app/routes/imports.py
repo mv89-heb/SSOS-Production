@@ -58,7 +58,7 @@ def list_sessions():
         description: List of import sessions
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.view")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -87,7 +87,7 @@ def get_session(session_id):
         description: Session not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.view")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -129,7 +129,7 @@ def get_session_rows(session_id):
         description: Session not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.view")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -179,7 +179,7 @@ def upload():
         description: supplier_id given but not found in this tenant
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.upload")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -253,7 +253,7 @@ def analyze_session(session_id):
         description: The original file could not be read for analysis
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.process")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -290,7 +290,7 @@ def get_analysis(session_id):
         description: Session not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.view")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -331,7 +331,7 @@ def get_mapping(session_id):
         description: Session has no staged sheet to map yet
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.view")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -384,7 +384,7 @@ def update_mapping(session_id):
         description: Session or mapping not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.process")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -426,7 +426,7 @@ def approve_mapping(session_id):
         description: Session or mapping not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.process")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -464,7 +464,7 @@ def list_mapping_templates(session_id):
         description: Session not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.view")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -510,7 +510,7 @@ def save_mapping_template(session_id):
         description: Session, mapping, or supplier not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.process")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -558,7 +558,7 @@ def apply_mapping_template(session_id, template_id):
         description: Session, mapping, or template not found
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.process")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -604,7 +604,7 @@ def validate_session(session_id):
         description: No mapping yet, or mapping not approved
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.process")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -641,7 +641,7 @@ def get_validation(session_id):
         description: Session not found, or no validation has been run yet
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.view")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -688,7 +688,7 @@ def get_preview(session_id):
         description: Session not found, or no validation has been run yet
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.view")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -743,7 +743,7 @@ def commit_import(session_id):
           or already committed)
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.process")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -779,7 +779,7 @@ def get_execution(session_id):
         description: Session not found, or nothing has been committed yet
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.view")
     except HTTPException as exc:
         return _handle(exc)
 
@@ -816,7 +816,7 @@ def rollback_execution(execution_id):
         description: Already rolled back
     """
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_permission("documents.process")
     except HTTPException as exc:
         return _handle(exc)
 
