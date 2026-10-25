@@ -173,7 +173,7 @@ def submit_order(order_id):
 @login_required
 def approve_order(order_id):
     try:
-        PermissionService.require_role_at_least("manager")
+        PermissionService.require_role_at_least("employee")
     except HTTPException as exc:
         return _handle(exc)
     service = OrderService(tenant_id=current_user.tenant_id)
