@@ -13,7 +13,8 @@ const tabs: Array<{ id: Tab; label: string; icon: typeof UserRound }> = [
 ];
 const permissionLabels: Array<{key: string; label: string}> = [
   { key: "orders.view", label: "צפייה בהזמנות" },
-  { key: "orders.create", label: "יצירה ועריכת הזמנות" },
+  { key: "orders.create", label: "יצירת הזמנות" },
+  { key: "orders.edit", label: "עריכת הזמנות" },
   { key: "orders.approve", label: "אישור הזמנות" },
   { key: "orders.reject", label: "דחיית הזמנות" },
   { key: "orders.mark_sent", label: "סימון הזמנה כנשלחה" },
@@ -29,7 +30,7 @@ const permissionLabels: Array<{key: string; label: string}> = [
   { key: "reports.view", label: "צפייה בדוחות" },
 ];
 const rolePermissionDefaults: Record<AdminUser["role"], Record<string, boolean>> = {
-  employee: Object.fromEntries(permissionLabels.map(p => [p.key, ["orders.view","orders.create","orders.approve","orders.mark_sent","orders.complete","catalog.view","inventory.view","inventory.count","reports.view"].includes(p.key)])),
+  employee: Object.fromEntries(permissionLabels.map(p => [p.key, ["orders.view","orders.create","orders.edit","orders.approve","orders.mark_sent","orders.complete","catalog.view","inventory.view","inventory.count","reports.view"].includes(p.key)])),
   manager: Object.fromEntries(permissionLabels.map(p => [p.key, ["orders.view","orders.create","orders.approve","orders.reject","orders.mark_sent","orders.complete","catalog.view","catalog.manage","inventory.view","inventory.count","documents.view","documents.upload","documents.process","reports.view"].includes(p.key)])),
   admin: Object.fromEntries(permissionLabels.map(p => [p.key, true])),
 };
