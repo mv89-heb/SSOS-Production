@@ -178,6 +178,11 @@ def _master_catalog_overview(tenant_id, search, limit, only_opportunities):
 @price_overview_bp.route("/overview", methods=["GET"])
 @login_required
 def overview():
+    try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     """Return a tenant-scoped supplier comparison without per-product query loops."""
     try:
         tenant_id = current_user.tenant_id
