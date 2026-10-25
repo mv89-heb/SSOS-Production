@@ -198,11 +198,6 @@ def barcode_labels():
         return _handle(exc)
 
     """Generate an A4 PDF containing printable Code 128 labels."""
-    try:
-        PermissionService.require_role_at_least("manager")
-    except HTTPException as exc:
-        return _handle(exc)
-
     payload = request.get_json(silent=True) or {}
     try:
         items = _parse_label_items(payload)
