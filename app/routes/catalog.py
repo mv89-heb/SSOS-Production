@@ -30,6 +30,11 @@ def list_suppliers():
       200:
         description: A list of suppliers
     """
+    try:
+        PermissionService.require_permission("catalog.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     service = CatalogService(current_user.tenant_id, current_user.id)
     suppliers = service.list_suppliers(active_only=request.args.get("active") == "true")
     return jsonify({"success": True, "suppliers": [s.to_dict() for s in suppliers]})
@@ -92,6 +97,11 @@ def get_supplier(supplier_id):
       404:
         description: Supplier not found
     """
+    try:
+        PermissionService.require_permission("catalog.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     service = CatalogService(current_user.tenant_id, current_user.id)
     try:
         supplier = service.get_supplier(supplier_id)
@@ -167,6 +177,11 @@ def list_products():
       200:
         description: List of products
     """
+    try:
+        PermissionService.require_permission("catalog.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     supplier_id = request.args.get("supplier_id", type=int)
     active_only = request.args.get("active") == "true"
     service = CatalogService(current_user.tenant_id, current_user.id)
@@ -266,6 +281,11 @@ def get_product(product_id):
       404:
         description: Product not found
     """
+    try:
+        PermissionService.require_permission("catalog.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     service = CatalogService(current_user.tenant_id, current_user.id)
     try:
         product = service.get_product(product_id)
@@ -409,6 +429,11 @@ def list_offers(product_id):
       404:
         description: Product not found
     """
+    try:
+        PermissionService.require_permission("catalog.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     service = CatalogService(current_user.tenant_id, current_user.id)
     try:
         offers = service.list_offers(product_id)
@@ -588,6 +613,11 @@ def master_product_match_suggestions():
 @catalog_bp.route("/master-products", methods=["GET"])
 @login_required
 def list_master_products():
+    try:
+        PermissionService.require_permission("catalog.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     from sqlalchemy import select, or_
     from app.models.master_product import MasterProduct
     from app.models.supplier_product import SupplierProduct
@@ -838,6 +868,11 @@ def reject_supplier_product_match(supplier_product_id):
 @catalog_bp.route("/master-products/<int:master_product_id>/comparison", methods=["GET"])
 @login_required
 def compare_master_product(master_product_id):
+    try:
+        PermissionService.require_permission("catalog.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     from app.services.master_product_matching_service import MasterProductMatchingService
     try:
         result = MasterProductMatchingService(current_user.tenant_id, current_user.id).compare_master_product(master_product_id)
