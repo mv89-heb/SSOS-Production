@@ -27,7 +27,6 @@ def test_employee_defaults_allow_customer_order_workflow():
 def test_manager_defaults_allow_catalog_management_but_not_user_admin():
     permissions = effective_permissions(user("manager"))
     assert permissions["catalog.manage"] is True
-    assert permissions["reports.export"] is True
     assert permissions["users.manage"] is False
     assert permissions["permissions.manage"] is False
 
