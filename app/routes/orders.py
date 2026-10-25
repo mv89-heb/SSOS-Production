@@ -25,6 +25,11 @@ def _handle(exc: HTTPException):
 @orders_bp.route("", methods=["GET"])
 @login_required
 def list_orders():
+    try:
+        PermissionService.require_permission("orders.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     status = request.args.get("status")
     limit = request.args.get("limit", 50)
     offset = request.args.get("offset", 0)
@@ -55,6 +60,11 @@ def create_order():
 @orders_bp.route("/<int:order_id>", methods=["GET"])
 @login_required
 def get_order(order_id):
+    try:
+        PermissionService.require_permission("orders.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     service = OrderService(tenant_id=current_user.tenant_id)
     try:
         order = service.get_order(order_id)
@@ -238,6 +248,11 @@ def mark_order_completed(order_id):
 @login_required
 def list_receipts(order_id):
     try:
+        PermissionService.require_permission("orders.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
+    try:
         receipts = ReceiptService(tenant_id=current_user.tenant_id).list_for_order(order_id)
     except HTTPException as exc:
         return _handle(exc)
@@ -273,6 +288,11 @@ def create_receipt(order_id):
 @orders_bp.route("/<int:order_id>/receipts/<int:receipt_id>", methods=["GET"])
 @login_required
 def get_order_receipt(order_id, receipt_id):
+    try:
+        PermissionService.require_permission("orders.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     try:
         receipt = ReceiptService(tenant_id=current_user.tenant_id).get(receipt_id)
         if receipt.order_id != order_id:
