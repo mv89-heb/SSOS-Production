@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, CheckCircle2, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, FileSearch, RefreshCw, ShieldCheck } from "lucide-react";
 import { adminService, type AdminAuditLog } from "@/services/admin-service";
 import { useAuth } from "@/providers/auth-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -87,7 +87,7 @@ export default function AdminAuditHealthPage() {
         {error ? null : loading && logs.length === 0 ? (
           <div className="rounded-xl border bg-white p-8 text-center text-sm text-slate-500">טוען אירועים...</div>
         ) : logs.length === 0 ? (
-          <EmptyState title="אין אירועי ביקורת להצגה" description="אירועים מתועדים יופיעו כאן לאחר ביצוע פעולות במערכת." />
+          <EmptyState icon={FileSearch} title="אין אירועי ביקורת להצגה" description="אירועים מתועדים יופיעו כאן לאחר ביצוע פעולות במערכת." />
         ) : (
           <div className="overflow-hidden rounded-xl border bg-white">
             <Table>
