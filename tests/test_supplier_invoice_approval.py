@@ -5,14 +5,10 @@ from app.models.supplier_invoice import (
 )
 
 
-def _create_sent_order(client, make_order):
+def _create_order(client, make_order):
     response, _, _ = make_order(client)
     assert response.status_code in (200, 201), response.get_json()
-    order_id = response.get_json()["order"]["id"]
-    for action in ("submit", "approve", "sent"):
-        response = client.post(f"/api/orders/{order_id}/{action}", json={})
-        assert response.status_code == 200, response.get_json()
-    return order_id
+    return response.get_json()["order"]["id"]
 
 
 def test_invoice_approval_status_constants_are_explicit():
@@ -26,7 +22,7 @@ def test_invoice_approval_status_constants_are_explicit():
 
 def test_invoice_payment_requires_manager_approval_and_audit(logged_in_client_a, make_order, db):
     client = logged_in_client_a
-    order_id = _create_sent_order(client, make_order)
+    order_id = _create_order(client, make_order)
     created = client.post(
         f"/api/orders/{order_id}/invoices",
         json={"invoice_number": "INV-APPROVAL-001", "amount": 10},
