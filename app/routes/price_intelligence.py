@@ -3,6 +3,7 @@ from flask_login import current_user, login_required
 from werkzeug.exceptions import BadRequest, HTTPException, ServiceUnavailable
 
 from app.extensions import db
+from app.services.permission_service import PermissionService
 from app.services.ai_service import AIService
 from app.services.data_readiness_service import ProcurementDataReadinessService
 from app.services.inventory_planning_service import InventoryPlanningService
