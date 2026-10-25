@@ -3,6 +3,11 @@ from datetime import datetime, timezone
 from app.extensions import db
 
 
+INVOICE_APPROVAL_PENDING = "pending_approval"
+INVOICE_APPROVAL_APPROVED = "approved_for_payment"
+VALID_INVOICE_APPROVAL_STATUSES = (INVOICE_APPROVAL_PENDING, INVOICE_APPROVAL_APPROVED)
+
+
 class SupplierInvoice(db.Model):
     """Tenant-scoped supplier invoice linked to a purchase order and optionally a receipt."""
     __tablename__ = "supplier_invoices"
@@ -23,6 +28,10 @@ class SupplierInvoice(db.Model):
     amount = db.Column(db.Numeric(12, 2), nullable=False)
     currency = db.Column(db.String(3), nullable=False, default="ILS")
     notes = db.Column(db.Text, nullable=True)
+    approval_status = db.Column(db.String(32), nullable=False, default=INVOICE_APPROVAL_PENDING, index=True)
+    approved_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+    approval_note = db.Column(db.Text, nullable=True)
     attachment_filename = db.Column(db.String(255), nullable=True)
     attachment_mime_type = db.Column(db.String(100), nullable=True)
     attachment_size = db.Column(db.Integer, nullable=True)
@@ -51,6 +60,10 @@ class SupplierInvoice(db.Model):
             "due_date": self.due_date.isoformat() if self.due_date else None,
             "amount": amount, "paid_amount": paid, "balance": round(amount - paid, 2),
             "currency": self.currency, "status": "paid" if paid >= amount else ("partially_paid" if paid > 0 else "unpaid"),
+            "approval_status": self.approval_status or INVOICE_APPROVAL_PENDING,
+            "approved_by": self.approved_by,
+            "approved_at": self.approved_at.isoformat() if self.approved_at else None,
+            "approval_note": self.approval_note,
             "notes": self.notes, "attachment_filename": self.attachment_filename, "attachment_mime_type": self.attachment_mime_type, "attachment_size": self.attachment_size, "line_comparison": self.line_comparison or [], "created_at": self.created_at.isoformat() if self.created_at else None,
             "payments": [payment.to_dict() for payment in self.payments],
         }
