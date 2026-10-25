@@ -9,6 +9,7 @@ from app.extensions import db
 from app.models.inventory_movement import InventoryMovement
 from app.models.product import Product
 from app.services.inventory_planning_service import InventoryPlanningService
+from app.services.permission_service import PermissionService
 
 inventory_count_bp = Blueprint("inventory_count", __name__, url_prefix="/api/inventory/count")
 
