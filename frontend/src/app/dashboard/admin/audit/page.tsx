@@ -91,7 +91,14 @@ export default function AdminAuditHealthPage() {
         ) : (
           <div className="overflow-hidden rounded-xl border bg-white">
             <Table>
-              <TableHead><tr><TableHeaderCell>תאריך ושעה</TableHeaderCell><TableHeaderCell>פעולה</TableHeaderCell><TableHeaderCell>פרטים</TableHeaderCell><TableHeaderCell>מזהה משתמש</TableHeader></tr></TableHead>
+              <TableHead>
+                <TableRow>
+                  <TableHeaderCell>תאריך ושעה</TableHeaderCell>
+                  <TableHeaderCell>פעולה</TableHeaderCell>
+                  <TableHeaderCell>פרטים</TableHeaderCell>
+                  <TableHeaderCell>מזהה משתמש</TableHeaderCell>
+                </TableRow>
+              </TableHead>
               <TableBody>
                 {logs.map((log) => (
                   <TableRow key={log.id}>
