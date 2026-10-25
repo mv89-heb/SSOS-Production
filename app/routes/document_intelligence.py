@@ -7,6 +7,7 @@ from flask_login import current_user, login_required
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.services.document_intelligence_service import DocumentIntelligenceService
+from app.services.permission_service import PermissionService
 
 
 document_intelligence_bp = Blueprint("document_intelligence", __name__, url_prefix="/api/document-intelligence")
@@ -41,6 +42,7 @@ def _delete_file(path):
 def upload_document():
     storage_path = None
     try:
+        PermissionService.require_permission("documents.upload")
         if "file" not in request.files or not request.files["file"].filename:
             raise BadRequest("file is required")
         upload = request.files["file"]
@@ -93,6 +95,7 @@ def upload_document():
 @login_required
 def analyze_document(analysis_id):
     try:
+        PermissionService.require_permission("documents.process")
         row = DocumentIntelligenceService(current_user.tenant_id, current_user.id).analyze(analysis_id)
         return jsonify({"success": True, "analysis": row.to_dict()})
     except HTTPException as exc:
@@ -105,6 +108,7 @@ def analyze_document(analysis_id):
 @login_required
 def rematch_document(analysis_id):
     try:
+        PermissionService.require_permission("documents.process")
         row = DocumentIntelligenceService(current_user.tenant_id, current_user.id).rematch(analysis_id)
         return jsonify({"success": True, "analysis": row.to_dict()}), 200
     except HTTPException as exc:
@@ -119,6 +123,7 @@ def rematch_document(analysis_id):
 @login_required
 def apply_document(analysis_id):
     try:
+        PermissionService.require_permission("documents.process")
         payload = request.get_json(silent=True) or {}
         lines = payload.get("lines")
         row = DocumentIntelligenceService(current_user.tenant_id, current_user.id).apply(analysis_id, lines)
@@ -135,6 +140,7 @@ def apply_document(analysis_id):
 @login_required
 def create_product_from_document_line(analysis_id):
     try:
+        PermissionService.require_permission("documents.process")
         payload = request.get_json(silent=True) or {}
         line_index = payload.get("line_index")
         if not isinstance(line_index, int) or isinstance(line_index, bool):
@@ -154,6 +160,7 @@ def create_product_from_document_line(analysis_id):
 @login_required
 def get_document_analysis(analysis_id):
     try:
+        PermissionService.require_permission("documents.view")
         row = DocumentIntelligenceService(current_user.tenant_id, current_user.id).get(analysis_id)
         return jsonify({"success": True, "analysis": row.to_dict()}), 200
     except HTTPException as exc:
