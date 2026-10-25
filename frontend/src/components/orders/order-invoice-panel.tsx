@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Order } from "@/types";
 
 type Payment = { id: number; amount: number; payment_date: string; reference: string | null; notes: string | null };
-type Invoice = { id: number; order_id: number; receipt_id: number | null; invoice_number: string; invoice_date: string | null; due_date: string | null; amount: number; paid_amount: number; balance: number; currency: string; status: string; notes: string | null; attachment_filename: string | null; attachment_size: number | null; line_comparison: Array<{ order_index: number; product_name: string; ordered_quantity: number; invoiced_quantity: number; ordered_unit_price: number; invoiced_unit_price: number; quantity_difference: number; unit_price_difference: number; amount_difference: number }>; payments: Payment[] };
+type Invoice = { id: number; order_id: number; approval_status: "pending_approval" | "approved_for_payment"; approved_by: number | null; approved_at: string | null; approval_note: string | null; receipt_id: number | null; invoice_number: string; invoice_date: string | null; due_date: string | null; amount: number; paid_amount: number; balance: number; currency: string; status: string; notes: string | null; attachment_filename: string | null; attachment_size: number | null; line_comparison: Array<{ order_index: number; product_name: string; ordered_quantity: number; invoiced_quantity: number; ordered_unit_price: number; invoiced_unit_price: number; quantity_difference: number; unit_price_difference: number; amount_difference: number }>; payments: Payment[] };
 type InvoiceListResponse = { success: boolean; invoices: Invoice[] };
 
 function todayLocal() {
@@ -53,6 +53,21 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
     onError: (error: unknown) => {
       const e = error as { response?: { data?: { message?: string } }; message?: string };
       setMessage(e.response?.data?.message ?? e.message ?? "רישום החשבונית נכשל.");
+    },
+  });
+  const updateApproval = useMutation({
+    mutationFn: async ({ invoiceId, approvalStatus }: { invoiceId: number; approvalStatus: "pending_approval" | "approved_for_payment" }) =>
+      (await apiClient.post<{ success: boolean; invoice: Invoice }>(
+        `/api/supplier-invoices/${invoiceId}/approval`,
+        { approval_status: approvalStatus },
+      )).data.invoice,
+    onSuccess: async (invoice) => {
+      setMessage(invoice.approval_status === "approved_for_payment" ? "החשבונית אושרה לתשלום ונרשמה ביומן הפעולות." : "החשבונית הוחזרה לבדיקה.");
+      await invalidate();
+    },
+    onError: (error: unknown) => {
+      const e = error as { response?: { data?: { message?: string } }; message?: string };
+      setMessage(e.response?.data?.message ?? e.message ?? "עדכון אישור החשבונית נכשל.");
     },
   });
   const addPayment = useMutation({
@@ -118,7 +133,22 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
                 } finally { setUploadingInvoiceId(null); }
               }}>{uploadingInvoiceId === invoice.id ? "מעלה..." : "שמירת קובץ"}</Button></>}
             </div></div><div className="text-left text-sm"><div>סכום: <strong>{invoice.amount.toLocaleString("he-IL", { minimumFractionDigits: 2 })} {invoice.currency}</strong></div><div>שולם: {invoice.paid_amount.toLocaleString("he-IL", { minimumFractionDigits: 2 })} {invoice.currency}</div><div className={invoice.balance > 0 ? "font-black text-amber-700" : "font-black text-emerald-700"}>יתרה: {invoice.balance.toLocaleString("he-IL", { minimumFractionDigits: 2 })} {invoice.currency}</div></div></div>
-            {invoice.balance > 0 && <div className="grid grid-cols-1 gap-2 sm:grid-cols-4"><input aria-label="סכום תשלום" type="number" min="0.01" max={invoice.balance} step="0.01" placeholder="סכום תשלום" value={draft.amount} onChange={(e) => setPaymentDrafts((current) => ({ ...current, [invoice.id]: { ...draft, amount: e.target.value } }))} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" /><input aria-label="תאריך תשלום" type="date" value={draft.date} onChange={(e) => setPaymentDrafts((current) => ({ ...current, [invoice.id]: { ...draft, date: e.target.value } }))} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" /><input aria-label="אסמכתא לתשלום" placeholder="אסמכתא / מספר העברה" value={draft.reference} onChange={(e) => setPaymentDrafts((current) => ({ ...current, [invoice.id]: { ...draft, reference: e.target.value } }))} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" /><Button onClick={() => { setMessage(null); addPayment.mutate({ invoiceId: invoice.id }); }} disabled={addPayment.isPending || !(Number(draft.amount) > 0) || Number(draft.amount) > invoice.balance || !draft.date}><Wallet size={15} /> {addPayment.isPending ? "שומר..." : "רישום תשלום"}</Button></div>}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
+              <div className="space-y-1">
+                <div className="text-sm font-bold">אישור לתשלום</div>
+                <div className={invoice.approval_status === "approved_for_payment" ? "text-sm font-bold text-emerald-700" : "text-sm font-bold text-amber-700"}>
+                  {invoice.approval_status === "approved_for_payment" ? "מאושרת לתשלום" : "ממתינה לאישור"}
+                </div>
+                {invoice.approved_at && <div className="text-xs text-slate-500">אושרה בתאריך {new Date(invoice.approved_at).toLocaleString("he-IL")}</div>}
+                {invoice.approval_note && <div className="text-xs text-slate-500">{invoice.approval_note}</div>}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {invoice.approval_status !== "approved_for_payment" && <Button disabled={updateApproval.isPending || invoice.paid_amount > 0} onClick={() => { setMessage(null); updateApproval.mutate({ invoiceId: invoice.id, approvalStatus: "approved_for_payment" }); }}>{updateApproval.isPending ? "מעדכן..." : "אישור לתשלום"}</Button>}
+                {invoice.approval_status === "approved_for_payment" && invoice.paid_amount === 0 && <Button variant="outline" disabled={updateApproval.isPending} onClick={() => { setMessage(null); updateApproval.mutate({ invoiceId: invoice.id, approvalStatus: "pending_approval" }); }}>החזרה לבדיקה</Button>}
+              </div>
+            </div>
+            {invoice.balance > 0 && invoice.approval_status === "approved_for_payment" && <div className="grid grid-cols-1 gap-2 sm:grid-cols-4"><input aria-label="סכום תשלום" type="number" min="0.01" max={invoice.balance} step="0.01" placeholder="סכום תשלום" value={draft.amount} onChange={(e) => setPaymentDrafts((current) => ({ ...current, [invoice.id]: { ...draft, amount: e.target.value } }))} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" /><input aria-label="תאריך תשלום" type="date" value={draft.date} onChange={(e) => setPaymentDrafts((current) => ({ ...current, [invoice.id]: { ...draft, date: e.target.value } }))} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" /><input aria-label="אסמכתא לתשלום" placeholder="אסמכתא / מספר העברה" value={draft.reference} onChange={(e) => setPaymentDrafts((current) => ({ ...current, [invoice.id]: { ...draft, reference: e.target.value } }))} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" /><Button onClick={() => { setMessage(null); addPayment.mutate({ invoiceId: invoice.id }); }} disabled={addPayment.isPending || !(Number(draft.amount) > 0) || Number(draft.amount) > invoice.balance || !draft.date}><Wallet size={15} /> {addPayment.isPending ? "שומר..." : "רישום תשלום"}</Button></div>}
+            {invoice.balance > 0 && invoice.approval_status !== "approved_for_payment" && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">אפשר לרשום תשלום רק לאחר אישור החשבונית לתשלום.</p>}
             <div className="space-y-2 border-t pt-3">
               <div className="font-bold text-sm">השוואת שורות החשבונית להזמנה</div>
               <p className="text-xs text-slate-500">הזן ידנית את הכמות והמחיר שמופיעים בחשבונית. ההשוואה מחושבת מול צילום מצב פריטי ההזמנה.</p>
