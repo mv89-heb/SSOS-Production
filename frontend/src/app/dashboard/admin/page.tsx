@@ -27,9 +27,6 @@ const permissionLabels: Array<{key: string; label: string}> = [
   { key: "documents.upload", label: "העלאה וניתוח מסמכים" },
   { key: "reports.view", label: "צפייה בדוחות" },
   { key: "reports.export", label: "ייצוא דוחות" },
-  { key: "users.manage", label: "ניהול משתמשים" },
-  { key: "permissions.manage", label: "ניהול הרשאות" },
-  { key: "audit.view", label: "צפייה ביומן הביקורת" },
 ];
 const rolePermissionDefaults: Record<AdminUser["role"], Record<string, boolean>> = {
   employee: Object.fromEntries(permissionLabels.map(p => [p.key, ["orders.view","orders.create","orders.approve","orders.mark_sent","orders.complete","catalog.view","inventory.view","inventory.count","documents.view","documents.upload","reports.view"].includes(p.key)])),
