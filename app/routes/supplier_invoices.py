@@ -106,6 +106,55 @@ def create_order_invoice(order_id):
         raise
 
 
+@supplier_invoices_bp.route("/supplier-invoices/<int:invoice_id>/approval", methods=["POST"])
+@login_required
+def update_supplier_invoice_approval(invoice_id):
+    try:
+        PermissionService.require_role_at_least("manager")
+        invoice = db.session.scalar(select(SupplierInvoice).where(
+            SupplierInvoice.id == invoice_id,
+            SupplierInvoice.tenant_id == current_user.tenant_id,
+        ).with_for_update())
+        if invoice is None:
+            raise NotFound("Supplier invoice not found")
+        if invoice.paid_amount > 0:
+            raise Conflict("Approval cannot be changed after a payment has been recorded")
+        data = request.get_json(silent=True) or {}
+        target = str(data.get("approval_status") or "").strip()
+        if target not in VALID_INVOICE_APPROVAL_STATUSES:
+            raise BadRequest("approval_status must be pending_approval or approved_for_payment")
+        note = str(data.get("approval_note") or "").strip()
+        if len(note) > 2000:
+            raise BadRequest("approval_note must not exceed 2000 characters")
+        previous = invoice.approval_status or INVOICE_APPROVAL_PENDING
+        invoice.approval_status = target
+        invoice.approval_note = note or None
+        invoice.approved_by = current_user.id if target == INVOICE_APPROVAL_APPROVED else None
+        invoice.approved_at = datetime.now(timezone.utc) if target == INVOICE_APPROVAL_APPROVED else None
+        AuditService.log_event(
+            current_user.tenant_id,
+            current_user.id,
+            "supplier_invoice.approval_changed",
+            f"Supplier invoice {invoice.invoice_number} approval changed",
+            {
+                "invoice_id": invoice.id,
+                "order_id": invoice.order_id,
+                "previous_status": previous,
+                "approval_status": target,
+                "approval_note": note or None,
+            },
+        )
+        result = invoice.to_dict()
+        db.session.commit()
+        return jsonify({"success": True, "invoice": result}), 200
+    except HTTPException as exc:
+        db.session.rollback()
+        return _error(exc)
+    except Exception:
+        db.session.rollback()
+        raise
+
+
 @supplier_invoices_bp.route("/supplier-invoices/<int:invoice_id>/payments", methods=["POST"])
 @login_required
 def record_invoice_payment(invoice_id):
@@ -118,6 +167,8 @@ def record_invoice_payment(invoice_id):
         if invoice is None:
             raise NotFound("Supplier invoice not found")
         data = request.get_json(silent=True) or {}
+        if invoice.approval_status != INVOICE_APPROVAL_APPROVED:
+            raise Conflict("Invoice must be approved for payment before recording a payment")
         amount = _amount(data.get("amount"))
         paid = sum((Decimal(str(payment.amount)) for payment in invoice.payments), Decimal("0"))
         if paid + amount > Decimal(str(invoice.amount)):
