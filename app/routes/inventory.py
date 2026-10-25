@@ -105,6 +105,11 @@ def _parse_label_items(payload):
 @inventory_bp.route("/summary", methods=["GET"])
 @login_required
 def summary():
+    try:
+        PermissionService.require_permission("inventory.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     products = db.session.scalars(
         select(Product)
         .where(Product.tenant_id == current_user.tenant_id, Product.active.is_(True))
@@ -143,6 +148,11 @@ def summary():
 @inventory_bp.route("/barcodes/generate", methods=["POST"])
 @login_required
 def generate_barcodes():
+    try:
+        PermissionService.require_permission("catalog.manage")
+    except HTTPException as exc:
+        return _handle(exc)
+
     """Generate stable internal barcodes for products that do not have one."""
     try:
         PermissionService.require_role_at_least("manager")
@@ -187,6 +197,11 @@ def generate_barcodes():
 @inventory_bp.route("/barcodes/labels", methods=["POST"])
 @login_required
 def barcode_labels():
+    try:
+        PermissionService.require_permission("catalog.manage")
+    except HTTPException as exc:
+        return _handle(exc)
+
     """Generate an A4 PDF containing printable Code 128 labels."""
     try:
         PermissionService.require_role_at_least("manager")
@@ -282,6 +297,11 @@ def barcode_labels():
 @inventory_bp.route("/products/lookup", methods=["GET"])
 @login_required
 def lookup_product():
+    try:
+        PermissionService.require_permission("inventory.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     """Find one active tenant product by exact barcode or SKU."""
     value = str(request.args.get("value") or "").strip()
     if not value:
@@ -307,6 +327,11 @@ def lookup_product():
 @inventory_bp.route("/movements", methods=["GET"])
 @login_required
 def list_movements():
+    try:
+        PermissionService.require_permission("inventory.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     product_id = request.args.get("product_id", type=int)
     movement_type = (request.args.get("movement_type") or "").strip().lower()
     limit = max(1, min(request.args.get("limit", default=100, type=int), 500))
@@ -327,6 +352,11 @@ def list_movements():
 @inventory_bp.route("/products/<int:product_id>/movements", methods=["GET"])
 @login_required
 def product_movements(product_id):
+    try:
+        PermissionService.require_permission("inventory.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     limit = max(1, min(request.args.get("limit", default=100, type=int), 500))
     product = db.session.scalar(
         select(Product).where(Product.id == product_id, Product.tenant_id == current_user.tenant_id)
@@ -349,6 +379,11 @@ def product_movements(product_id):
 @inventory_bp.route("/movements", methods=["POST"])
 @login_required
 def create_movement():
+    try:
+        PermissionService.require_permission("inventory.count")
+    except HTTPException as exc:
+        return _handle(exc)
+
     payload = request.get_json(silent=True) or {}
     product_id = payload.get("product_id")
     movement_type = str(payload.get("movement_type") or "").strip().lower()
@@ -392,6 +427,11 @@ def create_movement():
 @inventory_bp.route("/count/bulk", methods=["POST"])
 @login_required
 def bulk_count():
+    try:
+        PermissionService.require_permission("inventory.count")
+    except HTTPException as exc:
+        return _handle(exc)
+
     """Save one physical inventory-count session as grouped count movements."""
     from uuid import uuid4
 
@@ -470,6 +510,11 @@ def bulk_count():
 @inventory_bp.route("/count/latest", methods=["GET"])
 @login_required
 def latest_inventory_count():
+    try:
+        PermissionService.require_permission("inventory.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     """Return all product rows from the most recently saved physical count session."""
     latest = db.session.scalar(
         select(InventoryMovement).where(
@@ -535,6 +580,11 @@ def latest_inventory_count():
 @inventory_bp.route("/count/history", methods=["GET"])
 @login_required
 def inventory_count_history():
+    try:
+        PermissionService.require_permission("inventory.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     """Return one inventory-count record per Israel-local calendar day.
 
     A day may contain multiple saves/session IDs. Merge them into one daily
