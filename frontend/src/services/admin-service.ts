@@ -1,6 +1,6 @@
 import { apiClient } from "./api-client";
 
-export type AdminUser = { id: number; email: string; full_name: string; role: "admin" | "manager" | "employee"; active: boolean; created_at: string };
+export type AdminUser = { id: number; email: string; full_name: string; role: "admin" | "manager" | "employee"; active: boolean; created_at: string; permissions?: Record<string, boolean> };
 export type AdminSupplier = { id: number; name: string; contact_name?: string | null; email?: string | null; phone?: string | null; phone2?: string | null; customer_number?: string | null; delivery_days?: string | null; order_days?: string | null; active: boolean; created_at: string };
 export type AdminProduct = { id: number; name: string; sku?: string | null; active: boolean; current_price: number; supplier_id: number };
 export type AdminOrder = { id: number; order_number: string; status: string; final_total: number; created_at: string; notes?: string | null };
