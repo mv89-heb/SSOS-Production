@@ -129,7 +129,7 @@ def delete_order(order_id):
     deletion.
     """
     try:
-        PermissionService.require_role_at_least("employee")
+        PermissionService.require_permission("orders.delete")
     except HTTPException as exc:
         return _handle(exc)
 
