@@ -5,6 +5,7 @@ from sqlalchemy.orm import aliased
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.extensions import db
+from app.services.permission_service import PermissionService
 from app.models.price_observation import PriceObservation
 from app.models.master_product import MasterProduct
 from app.models.supplier_product import SupplierProduct
