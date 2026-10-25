@@ -202,7 +202,7 @@ def update_user(user_id: int):
     if new_permissions is not None:
         if not isinstance(new_permissions, dict):
             return jsonify({"success": False, "error": "invalid_permissions", "message": "ההרשאות חייבות להיות אובייקט."}), 400
-        known_permissions = set(ROLE_DEFAULTS.get(ROLE_EMPLOYEE, {}).keys())
+        known_permissions = set(ROLE_DEFAULTS.get(ROLE_EMPLOYEE, {}).keys()) - {"users.manage", "permissions.manage", "audit.view"}
         unknown = set(new_permissions.keys()) - known_permissions
         if unknown:
             return jsonify({"success": False, "error": "unknown_permissions", "message": "נשלחו מפתחות הרשאה לא מוכרים.", "keys": sorted(unknown)}), 400
