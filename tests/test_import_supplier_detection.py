@@ -44,3 +44,20 @@ def test_known_supplier_header_keeps_supplier_specific_column_semantics():
     assert len(result) == 1
     assert result[0]["matched_supplier_id"] == 1
     assert result[0]["ambiguous"] is False
+
+def test_supplier_column_checks_values_beyond_the_first_five_samples():
+    analyzer = WorkbookAnalyzer({"ספק א": (1, "ספק א"), "ספק ב": (2, "ספק ב")})
+    rows = [[ "ספק א" ] for _ in range(18)]
+    rows.append(["ספק ב"])
+
+    columns = analyzer._detect_columns(["שם ספק"], rows, [])
+    result = analyzer._detect_suppliers(columns)
+
+    assert columns[0]["sample_values"] == ["ספק א"] * 5
+    assert columns[0]["supplier_values"] == ["ספק א", "ספק ב"]
+    assert len(result) == 1
+    assert result[0]["ambiguous"] is True
+    assert result[0]["matched_supplier_id"] is None
+    assert result[0]["detected_supplier_name"] is None
+    assert result[0]["candidate_supplier_names"] == ["ספק א", "ספק ב"]
+

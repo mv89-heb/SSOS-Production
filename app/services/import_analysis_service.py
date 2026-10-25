@@ -264,6 +264,27 @@ class WorkbookAnalyzer:
 
             group_label = group_labels[idx] if idx < len(group_labels) else None
             col_type, confidence, reason = self._classify_column(header, samples)
+
+            # Supplier inference must not rely on the first five display samples:
+            # a different supplier may appear later in the file. Scan the full
+            # bounded worksheet and keep distinct values (case-insensitive).
+            # Twenty distinct values are enough to prove ambiguity without
+            # retaining an unbounded list from a large import.
+            supplier_values = []
+            if col_type == "SUPPLIER":
+                seen_supplier_values = set()
+                for row in data_rows:
+                    if idx >= len(row):
+                        continue
+                    value = _clean_str(row[idx])
+                    normalized = value.casefold()
+                    if not value or normalized in seen_supplier_values:
+                        continue
+                    seen_supplier_values.add(normalized)
+                    supplier_values.append(value)
+                    if len(supplier_values) >= 20:
+                        break
+
             columns.append({
                 "index": idx,
                 "header": header,
@@ -272,6 +293,7 @@ class WorkbookAnalyzer:
                 "confidence": confidence,
                 "reason": reason,
                 "sample_values": [_clean_str(v) for v in samples[:5]],
+                "supplier_values": supplier_values,
             })
         return columns
 
@@ -346,7 +368,13 @@ class WorkbookAnalyzer:
                 seen_columns.add(idx)
                 continue
 
-            samples = [_clean_str(v) for v in col.get("sample_values", []) if _clean_str(v)]
+            # Prefer the full-column distinct values captured by
+            # _detect_columns; retain sample_values as a compatibility fallback
+            # for callers/tests that construct column records directly.
+            source_values = col.get("supplier_values")
+            if source_values is None:
+                source_values = col.get("sample_values", [])
+            samples = [_clean_str(v) for v in source_values if _clean_str(v)]
             unique = {}
             for value in samples:
                 unique.setdefault(value.casefold(), value)
