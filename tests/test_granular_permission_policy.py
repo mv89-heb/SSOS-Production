@@ -53,3 +53,13 @@ def test_boolean_overrides_apply_only_to_known_permissions():
 def test_inactive_or_unauthenticated_users_have_no_permissions():
     assert has_permission("orders.view", user(active=False)) is False
     assert has_permission("orders.view", user(authenticated=False)) is False
+
+
+
+def test_per_user_override_changes_effective_access():
+    employee = user("employee", permissions={
+        "orders.approve": False,
+        "catalog.manage": True,
+    })
+    assert has_permission("orders.approve", employee) is False
+    assert has_permission("catalog.manage", employee) is True
