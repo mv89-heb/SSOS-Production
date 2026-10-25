@@ -1,24 +1,16 @@
 """Supplier detection enrichment for import analysis.
 
-The workbook analyzer already identifies a SUPPLIER column and captures sample
-values. This module enriches that result from the values themselves, so a
-header such as "שם ספק" is never mistaken for the supplier's actual name.
+Do not infer a whole-column supplier from its most common sample value:
+mixed supplier values must be surfaced for manual review.
 """
-from collections import Counter
-
-
 def install_supplier_detection_patch():
     from app.services.import_analysis_service import WorkbookAnalyzer
-
     if getattr(WorkbookAnalyzer, "_supplier_detection_values_patch", False):
         return
-
     original = WorkbookAnalyzer._detect_suppliers
 
     def _detect_suppliers(self, columns):
         found = original(self, columns)
-        seen_columns = {item.get("column_index") for item in found}
-
         for col in columns:
             if col.get("detected_type") != "SUPPLIER":
                 continue
@@ -27,31 +19,39 @@ def install_supplier_detection_patch():
             if not samples:
                 continue
 
-            counts = Counter(samples)
-            value = counts.most_common(1)[0][0]
-            normalized = value.lower()
-            match = self.known_supplier_names.get(normalized)
+            unique = {}
+            for value in samples:
+                unique.setdefault(value.casefold(), value)
+            values = list(unique.values())
+            existing = next((item for item in found if item.get("column_index") == idx and item.get("source") in ("header", "column_values")), None)
 
-            # Replace the header-only result with the actual supplier value.
-            for item in found:
-                if item.get("column_index") == idx and item.get("source") == "header":
-                    item.update({
-                        "source": "column_values",
-                        "detected_supplier_name": value,
-                        "matched_supplier_id": match[0] if match else None,
-                        "matched_supplier_name": match[1] if match else value,
-                    })
-                    break
-            else:
-                found.append({
-                    "column_index": idx,
-                    "header": col.get("header"),
+            if len(values) != 1:
+                if existing is None:
+                    existing = {"column_index": idx, "header": col.get("header")}
+                    found.append(existing)
+                existing.update({
                     "source": "column_values",
-                    "detected_supplier_name": value,
-                    "matched_supplier_id": match[0] if match else None,
-                    "matched_supplier_name": match[1] if match else value,
+                    "detected_supplier_name": None,
+                    "matched_supplier_id": None,
+                    "matched_supplier_name": None,
+                    "ambiguous": True,
+                    "candidate_supplier_names": values[:10],
                 })
+                continue
 
+            value = values[0]
+            match = self.known_supplier_names.get(value.casefold())
+            if existing is None:
+                existing = {"column_index": idx, "header": col.get("header")}
+                found.append(existing)
+            existing.update({
+                "source": "column_values",
+                "detected_supplier_name": value,
+                "matched_supplier_id": match[0] if match else None,
+                "matched_supplier_name": match[1] if match else value,
+                "ambiguous": False,
+                "candidate_supplier_names": [value],
+            })
         return found
 
     WorkbookAnalyzer._detect_suppliers = _detect_suppliers
