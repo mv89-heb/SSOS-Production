@@ -26,6 +26,11 @@ function escapePrintHtml(value: unknown) {
   })[character] ?? character);
 }
 
+function actionErrorMessage(error: unknown, fallback: string) {
+  const details = error as { response?: { data?: { message?: string; error?: string } }; message?: string };
+  return details.response?.data?.message || details.response?.data?.error || details.message || fallback;
+}
+
 function printPurchaseOrder(order: import("@/types").Order) {
   const printWindow = window.open("", "_blank", "width=900,height=700");
   if (!printWindow) {
@@ -52,7 +57,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [plannedOrderDateDraft, setPlannedOrderDateDraft] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [isRejecting, setIsRejecting] = useState(false);
-  const [approvalError, setApprovalError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [manualReminderAt, setManualReminderAt] = useState("");
   const [manualReminderNote, setManualReminderNote] = useState("");
   const [showManualReminder, setShowManualReminder] = useState(false);
@@ -84,15 +89,39 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   const startEditingDraft = () => { setNotesDraft(order.notes ?? ""); setPlannedOrderDateDraft(order.planned_order_date ?? ""); setIsEditingDraft(true); };
   const saveDraft = () => updateDraft.mutate({ notes: notesDraft, planned_order_date: plannedOrderDateDraft || null }, { onSuccess: () => setIsEditingDraft(false) });
-  const handleReject = () => reject.mutate(rejectReason, { onSuccess: () => { setIsRejecting(false); setRejectReason(""); } });
+  const handleSubmit = () => {
+    setActionError("");
+    submit.mutate(undefined, {
+      onSuccess: () => setActionError(""),
+      onError: (error: unknown) => setActionError(actionErrorMessage(error, "שליחת ההזמנה נכשלה. בדוק את מצב ההזמנה ונסה שוב.")),
+    });
+  };
+  const handleReject = () => {
+    setActionError("");
+    reject.mutate(rejectReason, {
+      onSuccess: () => { setIsRejecting(false); setRejectReason(""); setActionError(""); },
+      onError: (error: unknown) => setActionError(actionErrorMessage(error, "דחיית ההזמנה נכשלה. נסה שוב.")),
+    });
+  };
   const handleApprove = () => {
-    setApprovalError("");
+    setActionError("");
     approve.mutate(undefined, {
-      onSuccess: () => setApprovalError(""),
-      onError: (error: unknown) => {
-        const details = error as { response?: { data?: { message?: string; error?: string } }; message?: string };
-        setApprovalError(details.response?.data?.message || details.response?.data?.error || details.message || "האישור נכשל. בדוק את מצב ההזמנה ונסה שוב.");
-      },
+      onSuccess: () => setActionError(""),
+      onError: (error: unknown) => setActionError(actionErrorMessage(error, "האישור נכשל. בדוק את מצב ההזמנה ונסה שוב.")),
+    });
+  };
+  const handleMarkSent = () => {
+    setActionError("");
+    markSent.mutate(undefined, {
+      onSuccess: () => setActionError(""),
+      onError: (error: unknown) => setActionError(actionErrorMessage(error, "סימון ההזמנה כשלוחה נכשל. נסה שוב.")),
+    });
+  };
+  const handleComplete = () => {
+    setActionError("");
+    complete.mutate(undefined, {
+      onSuccess: () => setActionError(""),
+      onError: (error: unknown) => setActionError(actionErrorMessage(error, "השלמת ההזמנה נכשלה. נסה שוב.")),
     });
   };
   const openReminderEditor = () => { setManualReminderAt(order.next_reminder_at ?? ""); setManualReminderNote(""); setShowManualReminder(true); };
@@ -136,12 +165,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             : <p className="text-sm text-slate-500">ההזמנה סגורה, לכן אין צורך בתזכורת.</p>}
         </CardContent>
       </Card>
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:p-5"><div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-sm font-extrabold text-slate-800 dark:text-white">פעולות</span><Button variant="secondary" onClick={() => printPurchaseOrder(order)}><Printer size={16} /> הדפסה / שמירה כ־PDF</Button>{canCreateOrEdit && <Button variant="secondary" onClick={() => duplicateOrder.mutate(orderId, { onSuccess: (newOrder) => router.push(`/dashboard/orders/${newOrder.id}`) })} disabled={isMutating}><FileText size={16} /> {duplicateOrder.isPending ? "משכפל..." : "שכפול הזמנה"}</Button>}{canCreateOrEdit && order.status === "draft" && !isEditingDraft && <Button variant="secondary" onClick={startEditingDraft} disabled={isMutating}>עריכת טיוטה</Button>}{canCreateOrEdit && order.status === "draft" && <Button onClick={() => submit.mutate()} disabled={isMutating}>{submit.isPending ? "שולח..." : "שליחה לאישור"}</Button>}{canCreateOrEdit && order.status === "submitted" && !isRejecting && <><Button onClick={handleApprove} disabled={isMutating}>{approve.isPending ? "מאשר..." : "אישור הזמנה"}</Button>{isManagerOrAdmin && <Button variant="danger" onClick={() => setIsRejecting(true)} disabled={isMutating}>דחייה</Button>}</>}{canCreateOrEdit && order.status === "approved" && <Button onClick={() => markSent.mutate()} disabled={isMutating}><Send size={16} /> {markSent.isPending ? "מסמן..." : "סימון כנשלח לספק"}</Button>}{canCreateOrEdit && order.status === "sent" && <Button onClick={() => complete.mutate()} disabled={isMutating}><CheckCircle2 size={16} /> {complete.isPending ? "משלים..." : "סימון כהושלמה"}</Button>}{canDelete && <Button variant="danger" onClick={handleDelete} disabled={isMutating}><Trash2 size={16} /> {deleteOrder.isPending ? "מוחק..." : "מחיקת הזמנה"}</Button>}{isMutating && <span className="inline-flex items-center gap-1 text-xs text-slate-400"><Loader2 size={13} className="animate-spin" /> מעדכן...</span>}</div></section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:p-5"><div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-sm font-extrabold text-slate-800 dark:text-white">פעולות</span><Button variant="secondary" onClick={() => printPurchaseOrder(order)}><Printer size={16} /> הדפסה / שמירה כ־PDF</Button>{canCreateOrEdit && <Button variant="secondary" onClick={() => duplicateOrder.mutate(orderId, { onSuccess: (newOrder) => router.push(`/dashboard/orders/${newOrder.id}`) })} disabled={isMutating}><FileText size={16} /> {duplicateOrder.isPending ? "משכפל..." : "שכפול הזמנה"}</Button>}{canCreateOrEdit && order.status === "draft" && !isEditingDraft && <Button variant="secondary" onClick={startEditingDraft} disabled={isMutating}>עריכת טיוטה</Button>}{canCreateOrEdit && order.status === "draft" && <Button onClick={handleSubmit} disabled={isMutating}>{submit.isPending ? "שולח..." : "שליחה לאישור"}</Button>}{canCreateOrEdit && order.status === "submitted" && !isRejecting && <><Button onClick={handleApprove} disabled={isMutating}>{approve.isPending ? "מאשר..." : "אישור הזמנה"}</Button>{isManagerOrAdmin && <Button variant="danger" onClick={() => setIsRejecting(true)} disabled={isMutating}>דחייה</Button>}</>}{canCreateOrEdit && order.status === "approved" && <Button onClick={handleMarkSent} disabled={isMutating}><Send size={16} /> {markSent.isPending ? "מסמן..." : "סימון כנשלח לספק"}</Button>}{canCreateOrEdit && order.status === "sent" && <Button onClick={handleComplete} disabled={isMutating}><CheckCircle2 size={16} /> {complete.isPending ? "משלים..." : "סימון כהושלמה"}</Button>}{canDelete && <Button variant="danger" onClick={handleDelete} disabled={isMutating}><Trash2 size={16} /> {deleteOrder.isPending ? "מוחק..." : "מחיקת הזמנה"}</Button>}{isMutating && <span className="inline-flex items-center gap-1 text-xs text-slate-400"><Loader2 size={13} className="animate-spin" /> מעדכן...</span>}</div></section>
       <WhatsAppOrderShare order={order} />
       <OrderReceivingPanel order={order} />
       <OrderInvoicePanel order={order} />
       <OrderTrackingLogPanel order={order} />
-      {approvalError && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">{approvalError}</div>}
+      {actionError && <div role="alert" aria-live="polite" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">{actionError}</div>}
       {isRejecting && <Card className="border-red-200 dark:border-red-900/50"><CardContent className="space-y-3 pt-6"><label className="block text-sm font-bold text-slate-700 dark:text-slate-200">סיבת דחייה</label><textarea autoFocus className="block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900" rows={3} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="כתוב בקצרה למה ההזמנה נדחית..." /><div className="flex flex-wrap gap-2"><Button variant="danger" onClick={handleReject} disabled={isMutating || !rejectReason.trim()}>{reject.isPending ? "דוחה..." : "אישור דחייה"}</Button><Button variant="ghost" onClick={() => setIsRejecting(false)} disabled={isMutating}>ביטול</Button></div></CardContent></Card>}
       {isEditingDraft && <Card><CardHeader><CardTitle className="text-base text-slate-900 dark:text-white">עריכת טיוטה</CardTitle></CardHeader><CardContent className="space-y-3 pt-0"><label className="block text-sm font-bold text-slate-700 dark:text-slate-200">מועד ביצוע ההזמנה<input type="date" className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900" value={plannedOrderDateDraft} onChange={(e) => setPlannedOrderDateDraft(e.target.value)} /></label><textarea className="block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900" rows={4} value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} placeholder="הערות להזמנה..." /><div className="flex flex-wrap gap-2"><Button onClick={saveDraft} disabled={isMutating}>{updateDraft.isPending ? "שומר..." : "שמירת טיוטה"}</Button><Button variant="ghost" onClick={() => setIsEditingDraft(false)} disabled={isMutating}>ביטול</Button></div></CardContent></Card>}
       <Card className="overflow-hidden border-slate-200/80 shadow-sm dark:border-slate-800"><CardHeader className="border-b bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/30"><div className="flex items-center justify-between gap-3"><CardTitle className="text-base text-slate-900 dark:text-white">פריטי הזמנה</CardTitle><span className="text-xs font-bold text-slate-400">{order.items.length} פריטים</span></div></CardHeader><CardContent className="pt-0"><div className="overflow-x-auto overscroll-x-contain"><table className="w-full min-w-[720px] text-right text-sm"><thead className="border-b text-slate-500 dark:border-slate-800"><tr>{["מק\"ט", "מוצר", "כמות", "מחיר יחידה", "סה\"כ"].map((h) => <th key={h} className="px-2 py-3 font-bold">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{order.items.map((item, idx) => <tr key={`${item.product_id}-${idx}`} className="transition hover:bg-slate-50 dark:hover:bg-slate-800/50"><td className="px-2 py-4 text-slate-500">{item.sku || "—"}</td><td className="px-2 py-4 font-bold text-slate-900 dark:text-white">{item.product_name}</td><td className="px-2 py-4 font-semibold">{item.quantity}</td><td className="px-2 py-4">{money(order.currency, item.unit_price)}</td><td className="px-2 py-4 font-black">{money(order.currency, item.total_price)}</td></tr>)}</tbody></table></div><div className="mt-5 flex min-w-0 flex-col gap-5 border-t pt-5 dark:border-slate-800 md:flex-row md:justify-between"><div className="max-w-xl">{order.notes && !isEditingDraft && <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300"><p className="mb-1 font-bold text-slate-800 dark:text-slate-100">הערות</p><p className="whitespace-pre-line">{order.notes}</p></div>}{order.snapshot_taken_at && <div className="mt-3 flex items-start gap-2 text-xs text-slate-400"><ShieldCheck size={15} className="mt-0.5 shrink-0 text-emerald-500" /><span>תמונת המחירים והפריטים הוקפאה ב־{new Date(order.snapshot_taken_at).toLocaleString("he-IL")}.</span></div>}</div></div></CardContent></Card>
