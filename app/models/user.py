@@ -27,6 +27,7 @@ class User(UserMixin, db.Model):
     full_name = db.Column(db.String(150), nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default=ROLE_EMPLOYEE)
+    permissions = db.Column(db.JSON, nullable=True)
     active = db.Column(db.Boolean, default=True, nullable=False)
 
     failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)
@@ -63,6 +64,7 @@ class User(UserMixin, db.Model):
             "email": self.email,
             "full_name": self.full_name,
             "role": self.role,
+            "permissions": self.permissions or {},
             "active": self.active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
