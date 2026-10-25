@@ -32,24 +32,43 @@ export const documentIntelligenceService = {
         return null;
       });
     let active = true;
+    let terminalResult: DocumentAnalysis | null = null;
+    const pollingStartedAt = Date.now();
+    const maxPollingDurationMs = 15 * 60 * 1000;
     while (active) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       try {
         const current = await documentIntelligenceService.get(uploaded.id);
         onAnalysisStatus?.(current);
         active = !["ANALYZED", "PARTIALLY_APPLIED", "FAILED", "AI_UNAVAILABLE", "APPLIED"].includes(current.status);
-      } catch { /* The analyze request remains authoritative. */ }
-      if (analyzeError) throw analyzeError;
+        if (!active) terminalResult = current;
+      } catch { /* Continue polling: the status endpoint may recover before analysis completes. */ }
+
+      // A proxy can return 502/504 while the server-side analysis continues.
+      // Trust a persisted terminal status over the outcome of the long-running POST.
+      if (terminalResult) return terminalResult;
+
+      if (Date.now() - pollingStartedAt >= maxPollingDurationMs) {
+        if (analyzeError) throw analyzeError;
+        throw new Error("הניתוח עדיין לא הסתיים לאחר 15 דקות. אפשר לרענן את הרשומה ולבדוק את הסטטוס לפני ניסיון נוסף.");
+      }
+      if (analyzeError) {
+        // Do not mark the file failed just because the analyze request failed:
+        // keep checking whether the backend finished and persisted a result.
+        continue;
+      }
       if (analyzeFinished && active) {
         const result = await analyzePromise;
         if (result) {
           onAnalysisStatus?.(result);
-          return result;
+          if (["ANALYZED", "PARTIALLY_APPLIED", "FAILED", "AI_UNAVAILABLE", "APPLIED"].includes(result.status)) return result;
+          continue;
         }
         throw new Error("בקשת הניתוח הסתיימה ללא תוצאה");
       }
       if (!active) break;
     }
+    if (terminalResult) return terminalResult;
     const result = await analyzePromise;
     if (analyzeError) throw analyzeError;
     if (!result) throw new Error("בקשת הניתוח הסתיימה ללא תוצאה");
