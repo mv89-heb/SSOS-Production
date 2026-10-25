@@ -80,15 +80,15 @@ def test_inactive_user_invalidates_existing_session(logged_in_client_a, db):
     assert logged_in_client_a.get("/api/auth/me").status_code == 401
 
 
-def test_order_creator_cannot_approve_own_order(logged_in_client_a, make_order):
+def test_order_creator_can_approve_own_order(logged_in_client_a, make_order):
     resp, _, _ = make_order(logged_in_client_a)
     assert resp.status_code == 201
     order_id = resp.get_json()["order"]["id"]
 
     assert logged_in_client_a.post(f"/api/orders/{order_id}/submit").status_code == 200
-    blocked = logged_in_client_a.post(f"/api/orders/{order_id}/approve")
-    assert blocked.status_code == 409
-    assert "creator" in blocked.get_json()["message"].lower()
+    approved = logged_in_client_a.post(f"/api/orders/{order_id}/approve")
+    assert approved.status_code == 200
+    assert approved.get_json()["order"]["status"] == "approved"
 
 
 def test_invalid_order_quantities_are_rejected(logged_in_client_a, make_order):

@@ -30,7 +30,7 @@ def test_employee_cannot_delete_orders(client_a, tenant_a_admin, make_order):
     assert resp.status_code == 403
 
 
-def test_employee_cannot_approve_orders(client_a, tenant_a_admin, make_order):
+def test_employee_can_approve_orders(client_a, tenant_a_admin, make_order):
     tenant_data, creds = tenant_a_admin
     slug = tenant_data["tenant"]["slug"]
     client_a.post("/api/auth/login", json=creds)
@@ -41,7 +41,8 @@ def test_employee_cannot_approve_orders(client_a, tenant_a_admin, make_order):
     client_a.post("/api/auth/logout")
     client_a.post("/api/auth/login", json={"email": "worker@acme.test", "password": "Passw0rd1"})
     resp = client_a.post(f"/api/orders/{order_id}/approve")
-    assert resp.status_code == 403
+    assert resp.status_code == 200
+    assert resp.get_json()["order"]["status"] == "approved"
 
 
 def test_employee_can_create_orders(client_a, tenant_a_admin):
