@@ -1,15 +1,11 @@
-from app.services.import_supplier_detection import install_supplier_detection_patch
 from app.services.import_analysis_service import WorkbookAnalyzer
 
 
 def test_mixed_supplier_column_is_flagged_ambiguous_not_majority_voted():
-    install_supplier_detection_patch()
     analyzer = WorkbookAnalyzer({"ספק א": (1, "ספק א"), "ספק ב": (2, "ספק ב")})
     columns = [{
-        "index": 0,
-        "header": "שם ספק",
-        "detected_type": "SUPPLIER",
-        "sample_values": ["ספק א", "ספק א", "ספק ב"],
+        "index": 0, "header": "שם ספק", "detected_type": "SUPPLIER",
+        "sample_values": ["ספק א", "ספק א", "ספק ב"], "group_label": None,
     }]
 
     result = analyzer._detect_suppliers(columns)
@@ -22,13 +18,10 @@ def test_mixed_supplier_column_is_flagged_ambiguous_not_majority_voted():
 
 
 def test_single_supplier_value_is_matched_exactly():
-    install_supplier_detection_patch()
     analyzer = WorkbookAnalyzer({"ספק א": (1, "ספק א")})
     columns = [{
-        "index": 0,
-        "header": "שם ספק",
-        "detected_type": "SUPPLIER",
-        "sample_values": ["ספק א", "ספק א", "ספק א"],
+        "index": 0, "header": "שם ספק", "detected_type": "SUPPLIER",
+        "sample_values": ["ספק א", "ספק א", "ספק א"], "group_label": None,
     }]
 
     result = analyzer._detect_suppliers(columns)
@@ -37,3 +30,17 @@ def test_single_supplier_value_is_matched_exactly():
     assert result[0]["ambiguous"] is False
     assert result[0]["matched_supplier_id"] == 1
     assert result[0]["detected_supplier_name"] == "ספק א"
+
+
+def test_known_supplier_header_keeps_supplier_specific_column_semantics():
+    analyzer = WorkbookAnalyzer({"ספק א": (1, "ספק א")})
+    columns = [{
+        "index": 0, "header": "ספק א", "detected_type": "SUPPLIER",
+        "sample_values": ["10.00", "11.00", "9.50"], "group_label": None,
+    }]
+
+    result = analyzer._detect_suppliers(columns)
+
+    assert len(result) == 1
+    assert result[0]["matched_supplier_id"] == 1
+    assert result[0]["ambiguous"] is False

@@ -315,42 +315,86 @@ class WorkbookAnalyzer:
     # Supplier / unit detection
     # ------------------------------------------------------------------
     def _detect_suppliers(self, columns: list) -> list:
-        """A column can indicate a supplier two ways: its own header text
-        matches a known supplier (single-tier headers, e.g. a plain
-        "גידרון" column), or its recovered group_label does (multi-tier
-        headers, e.g. "לפני מע\"מ" sitting under a merged "גידרון" cell).
-        Both are reported; a header-level SUPPLIER match is also always
-        surfaced even without a catalog match, at lower confidence."""
+        """Detect suppliers from exact supplier headers, explicit supplier
+        columns, or recovered multi-tier group labels.
+
+        For a generic SUPPLIER column, infer a value only when all sampled
+        non-empty values identify the same name. Mixed values are ambiguous,
+        never majority-voted.
+        """
         found = []
         seen_columns = set()
 
         for col in columns:
-            if col["detected_type"] == "SUPPLIER" and col["index"] not in seen_columns:
-                header_norm = col["header"].strip().lower()
-                match = self.known_supplier_names.get(header_norm)
+            if col.get("detected_type") != "SUPPLIER" or col.get("index") in seen_columns:
+                continue
+
+            idx = col["index"]
+            header = _clean_str(col.get("header"))
+            header_norm = header.casefold()
+            # A known supplier used as the header identifies a supplier-specific
+            # price column; its cell values are prices, not supplier names.
+            header_match = self.known_supplier_names.get(header_norm)
+            if header_match:
+                name = header_match[1]
                 found.append({
-                    "column_index": col["index"],
-                    "header": col["header"],
-                    "source": "header",
-                    "matched_supplier_id": match[0] if match else None,
-                    "matched_supplier_name": match[1] if match else None,
+                    "column_index": idx, "header": header, "source": "header",
+                    "matched_supplier_id": header_match[0], "matched_supplier_name": name,
+                    "detected_supplier_name": name, "ambiguous": False,
+                    "candidate_supplier_names": [name],
                 })
-                seen_columns.add(col["index"])
+                seen_columns.add(idx)
+                continue
+
+            samples = [_clean_str(v) for v in col.get("sample_values", []) if _clean_str(v)]
+            unique = {}
+            for value in samples:
+                unique.setdefault(value.casefold(), value)
+            candidates = list(unique.values())
+
+            if len(candidates) == 1:
+                value = candidates[0]
+                match = self.known_supplier_names.get(value.casefold())
+                found.append({
+                    "column_index": idx, "header": header, "source": "column_values",
+                    "detected_supplier_name": value,
+                    "matched_supplier_id": match[0] if match else None,
+                    "matched_supplier_name": match[1] if match else value,
+                    "ambiguous": False, "candidate_supplier_names": [value],
+                })
+                seen_columns.add(idx)
+            elif len(candidates) > 1:
+                found.append({
+                    "column_index": idx, "header": header, "source": "column_values",
+                    "detected_supplier_name": None, "matched_supplier_id": None,
+                    "matched_supplier_name": None, "ambiguous": True,
+                    "candidate_supplier_names": candidates[:10],
+                })
+                seen_columns.add(idx)
+            else:
+                found.append({
+                    "column_index": idx, "header": header, "source": "header",
+                    "matched_supplier_id": None, "matched_supplier_name": None,
+                    "detected_supplier_name": None, "ambiguous": False,
+                    "candidate_supplier_names": [],
+                })
+                seen_columns.add(idx)
 
         for col in columns:
-            if col["index"] in seen_columns or not col.get("group_label"):
+            idx = col.get("index")
+            if idx in seen_columns or not col.get("group_label"):
                 continue
-            group_norm = col["group_label"].strip().lower()
-            match = self.known_supplier_names.get(group_norm)
+            group_label = _clean_str(col["group_label"])
+            match = self.known_supplier_names.get(group_label.casefold())
             if match:
+                name = match[1]
                 found.append({
-                    "column_index": col["index"],
-                    "header": col["group_label"],
-                    "source": "group_label",
-                    "matched_supplier_id": match[0],
-                    "matched_supplier_name": match[1],
+                    "column_index": idx, "header": group_label, "source": "group_label",
+                    "matched_supplier_id": match[0], "matched_supplier_name": name,
+                    "detected_supplier_name": name, "ambiguous": False,
+                    "candidate_supplier_names": [name],
                 })
-                seen_columns.add(col["index"])
+                seen_columns.add(idx)
 
         return found
 
