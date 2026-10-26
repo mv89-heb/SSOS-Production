@@ -275,6 +275,63 @@ export default function SupplierOverviewPage() {
             </div>
           ) : (
             <div className="space-y-2">
+              <div className="space-y-3 md:hidden">
+                {visibleRows.map((row) => (
+                  <article key={rowKey(row)} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <Link href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="break-words font-black hover:text-violet-600">{row.product_name}</Link>
+                        <p className="mt-1 break-words text-xs text-slate-500">{row.category || "ללא קטגוריה"} · {row.sku || "ללא מק״ט"}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-bold dark:bg-slate-800">{row.supplier_count} ספקים</span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <div className="min-w-0 rounded-xl bg-slate-50 p-3 dark:bg-slate-900">
+                        <div className="text-xs text-slate-500">המחיר הזול ביותר</div>
+                        <div className="mt-1 break-words font-black text-emerald-700">{money(row.best_price, row.currency)}</div>
+                        <div className="mt-1 break-words text-xs text-slate-500">{row.best_supplier || "לא זוהה ספק"}</div>
+                      </div>
+                      <div className="min-w-0 rounded-xl bg-slate-50 p-3 dark:bg-slate-900">
+                        <div className="text-xs text-slate-500">פער ליחידה</div>
+                        <div className="mt-1 font-black">{row.savings_per_unit > 0 ? money(row.savings_per_unit, row.currency) : "אין"}</div>
+                        <div className="mt-1 text-xs text-slate-500">{row.savings_per_unit > 0 ? row.savings_percent + "% חיסכון" : "אין פער חיובי"}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-end gap-3">
+                      <label className="min-w-0 flex-1 text-xs font-bold text-slate-600 dark:text-slate-300">
+                        כמות לתכנון ({row.comparison_unit || "יחידה"})
+                        <input type="number" min="0" step="any" inputMode="decimal" aria-label={`כמות לתכנון עבור ${row.product_name}`} value={quantities[rowKey(row)] ?? "1"} onChange={(event) => setQuantities((previous) => ({ ...previous, [rowKey(row)]: event.target.value }))} className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-violet-500 dark:border-slate-700 dark:bg-slate-900" />
+                      </label>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs text-slate-500">חיסכון משוער</div>
+                        <div className="mt-1 break-words font-black text-emerald-700">{row.supplier_count >= 2 && quantityFor(row) > 0 ? money(row.savings_per_unit * quantityFor(row), row.currency) : "—"}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => setExpandedRows((previous) => ({ ...previous, [rowKey(row)]: !previous[rowKey(row)] }))} className="inline-flex min-h-10 items-center gap-1 rounded-lg bg-violet-50 px-3 py-2 text-xs font-black text-violet-700 dark:bg-violet-950/40 dark:text-violet-200">
+                        {expandedRows[rowKey(row)] ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {expandedRows[rowKey(row)] ? "הסתר הצעות" : "כל הצעות הספקים"}
+                      </button>
+                      <Link href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="inline-flex min-h-10 items-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-black dark:border-slate-700">פתח מוצר</Link>
+                    </div>
+                    {expandedRows[rowKey(row)] && (
+                      <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+                        {row.offers?.length ? [...row.offers].sort((a, b) => a.price - b.price).map((offer, index) => (
+                          <div key={`${offer.supplier_id}::${offer.currency}::${offer.unit}`} className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+                            <div className="min-w-0">
+                              <div className="break-words font-bold">{offer.supplier_name || `ספק #${offer.supplier_id}`}</div>
+                              <div className="mt-1 text-xs text-slate-500">לפי {offer.unit || row.comparison_unit || "יחידה"}</div>
+                              {index === 0 && <span className="mt-1 inline-block text-xs font-bold text-emerald-700">הזול ביותר</span>}
+                            </div>
+                            <div className="shrink-0 font-black">{money(offer.price, offer.currency)}</div>
+                          </div>
+                        )) : <p className="text-sm text-slate-500">אין פירוט הצעות זמין לשורה זו.</p>}
+                      </div>
+                    )}
+                  </article>
+                ))}
+                {!visibleRows.length && <div className="rounded-xl border border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-slate-800">לא נמצאו מחירים תואמים להשוואה.</div>}
+              </div>
+              <div className="hidden md:block">
               <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                 <span>ניתן לגלול אופקית כדי לראות את כל העמודות</span>
                 <div className="flex shrink-0 gap-2">
@@ -389,6 +446,7 @@ export default function SupplierOverviewPage() {
                   לא נמצאו מחירים תואמים להשוואה. ודא שמוצרי הספקים משויכים לאותו מוצר בקטלוג האחיד.
                 </div>
               )}
+              </div>
               </div>
             </div>
           )}
