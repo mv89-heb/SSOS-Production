@@ -3,6 +3,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import {
   AlertTriangle, ArrowDownToLine, ArrowUpFromLine, CheckCircle2,
   ClipboardCheck, History, Package, RefreshCw, ScanLine, Search,
@@ -10,7 +11,6 @@ import {
 } from "lucide-react";
 import { inventoryService, type InventoryMovement, type InventoryMovementType } from "@/services/inventory-service";
 import InventoryPlanningPanel from "@/components/inventory/inventory-planning-panel";
-import InventoryScannerModal from "@/components/inventory/inventory-scanner-modal";
 import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
 import { sortByHebrewName, type ProductSortDirection } from "@/lib/product-sorting";
 import type { Product } from "@/types";
@@ -58,7 +58,6 @@ export default function InventoryPage() {
   const [showMovement, setShowMovement] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showAllRecentMovements, setShowAllRecentMovements] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
 
@@ -191,7 +190,7 @@ export default function InventoryPage() {
             <div><div className="mb-2 flex items-center gap-2 text-sm font-bold text-indigo-100"><Warehouse size={18}/> מחסן ומלאי</div><h1 className="text-3xl font-black tracking-tight sm:text-4xl">ניהול מלאי</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-indigo-100">ספירה פיזית היא נקודת האמת. אין צורך לדווח על כל לקיחה מהמחסן; הרכישות והספירות משמשות לחישוב קצב הצריכה.</p></div>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
               <a href="/dashboard/inventory/count" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-black text-indigo-700 shadow-lg hover:bg-indigo-50"><ClipboardCheck size={19}/> ספירת מלאי</a>
-              <button onClick={() => setShowScanner(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-black text-indigo-700 shadow-lg hover:bg-indigo-50"><ScanLine size={19}/> סרוק ברקוד</button>
+              <Link href="/dashboard/inventory/scan" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-black text-indigo-700 shadow-lg hover:bg-indigo-50"><ScanLine size={19}/> סרוק ברקוד</Link>
               <a href="/dashboard/inventory/barcodes" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white/10 px-5 text-sm font-black text-white ring-1 ring-white/25 hover:bg-white/20">ברקודים ומדבקות <span aria-hidden="true">↗</span></a>
               <button onClick={() => qc.invalidateQueries({ queryKey: ["inventory"] })} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 text-sm font-black hover:bg-white/20"><RefreshCw size={18}/> רענן</button>
             </div>
@@ -242,7 +241,6 @@ export default function InventoryPage() {
       {showHistory && selected && <div className="fixed inset-0 z-[200] flex justify-end bg-slate-950/50 backdrop-blur-sm" onClick={() => setShowHistory(false)}><aside role="dialog" aria-modal="true" aria-label={`פרטי מוצר: ${selected.name}`} onClick={(event) => event.stopPropagation()} className="flex h-full w-full max-w-xl flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-950"><div className="flex items-start justify-between border-b border-slate-200 p-5 dark:border-slate-800"><div><div className="text-xs font-bold text-indigo-600">היסטוריית מחסן</div><h2 className="mt-1 text-2xl font-black">{selected.name}</h2><p className="mt-1 text-xs text-slate-500">הכמויות מוצגות ב{unitLabel(selected)}.</p></div><button onClick={()=>setShowHistory(false)} className="rounded-xl bg-slate-100 p-2"><X size={19}/></button></div><div className="overflow-y-auto p-4"><div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3"><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">מלאי נוכחי</div><div className="mt-1 text-xl font-black">{selected.current_stock == null ? "לא ידוע" : number(selected.current_stock)} <span className="text-xs font-normal">{unitLabel(selected)}</span></div></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">צריכה שבועית</div><div className="mt-1 text-xl font-black">{selectedForecast?.data_ready && selectedForecast?.carton_recommendation_ready && selectedForecast?.average_daily_usage_cartons != null ? cartonNumber(selectedForecast.average_daily_usage_cartons * 7) + " קרטונים" : "אין נתון אמין"}</div></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">מצב</div><div className="mt-2"><span className={`rounded-full px-2.5 py-1 text-xs font-black ${statusMeta[stockStatus(selected, selectedForecast)].className}`}>{statusMeta[stockStatus(selected, selectedForecast)].label}</span></div></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">יעד מלאי</div><div className="mt-1 font-black">{selectedForecast?.configured_stock_target != null ? cartonNumber(selectedForecast.configured_stock_target) : "לא הוגדר"}</div></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">ספירות בתקופה</div><div className="mt-1 font-black">{number(selectedForecast?.stock_checks_in_period ?? 0)}</div></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">המלצת רכש</div><div className="mt-1 font-black">{selectedForecast?.status === "insufficient_data" ? (selectedForecast?.needs_data_reason === "stock_target_not_configured" ? "יש להגדיר יעד מלאי" : "נדרשות ספירות נוספות") : selectedForecast?.recommended_order_cartons != null && Number(selectedForecast.recommended_order_cartons) > 0 ? number(selectedForecast.recommended_order_cartons) + " קרטונים" : "אין צורך בהזמנה"}</div></div></div>{history.isLoading && <div className="p-8 text-center text-sm text-slate-500"><RefreshCw className="mx-auto mb-2 animate-spin" size={22}/>טוען היסטוריה...</div>}{!history.isLoading && !(history.data?.movements ?? []).length && <div className="p-8 text-center text-sm text-slate-500">אין היסטוריה למוצר הזה.</div>}{(history.data?.movements ?? []).map((movement) => <MovementRow key={movement.id} movement={movement} products={products} detailed/>)}</div><div className="border-t border-slate-200 p-4"><button onClick={()=>{setShowHistory(false);openMovement(selected,"count");}} className="min-h-12 w-full rounded-xl bg-indigo-600 font-black text-white">בצע ספירה חדשה</button></div></aside></div>}
 
       
-      <InventoryScannerModal open={showScanner} onClose={()=>setShowScanner(false)}/>
     </div>
   );
 }
