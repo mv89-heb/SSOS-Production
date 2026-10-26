@@ -49,6 +49,10 @@ def _amount(value, field="amount"):
 @supplier_invoices_bp.route("/orders/<int:order_id>/invoices", methods=["GET"])
 @login_required
 def list_order_invoices(order_id):
+    try:
+        PermissionService.require_permission("orders.view")
+    except HTTPException as exc:
+        return _error(exc)
     order = db.session.scalar(select(Order).where(Order.id == order_id, Order.tenant_id == current_user.tenant_id))
     if order is None:
         return _error(NotFound("Order not found"))
@@ -344,6 +348,7 @@ def upload_supplier_invoice_attachment(invoice_id):
 @login_required
 def download_supplier_invoice_attachment(invoice_id):
     try:
+        PermissionService.require_permission("orders.view")
         invoice = _invoice_for_tenant(invoice_id)
         if not invoice.attachment_data or not invoice.attachment_filename or not invoice.attachment_mime_type:
             raise NotFound("No attachment is stored for this invoice")
