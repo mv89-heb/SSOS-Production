@@ -9,6 +9,7 @@ from app.extensions import db
 from app.models.inventory_movement import InventoryMovement
 from app.models.product import Product
 from app.services.inventory_planning_service import InventoryPlanningService
+from app.services.permission_service import PermissionService
 
 inventory_count_bp = Blueprint("inventory_count", __name__, url_prefix="/api/inventory/count")
 
@@ -28,6 +29,11 @@ def _latest_count_query(tenant_id):
 @inventory_count_bp.route("/latest", methods=["GET"])
 @login_required
 def latest_count():
+    try:
+        PermissionService.require_permission("inventory.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     latest = db.session.scalars(_latest_count_query(current_user.tenant_id).limit(1)).first()
     if latest is None:
         return jsonify({"success": True, "has_count": False, "count_id": None, "counted_at": None, "counted": 0, "movements": []})
@@ -78,6 +84,11 @@ def latest_count():
 @inventory_count_bp.route("/bulk", methods=["POST"])
 @login_required
 def bulk_count():
+    try:
+        PermissionService.require_permission("inventory.count")
+    except HTTPException as exc:
+        return _handle(exc)
+
     payload = request.get_json(silent=True) or {}
     items = payload.get("items")
     if not isinstance(items, list) or not items:

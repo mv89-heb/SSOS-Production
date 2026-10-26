@@ -3,6 +3,7 @@ from flask_login import current_user, login_required
 from werkzeug.exceptions import BadRequest, HTTPException, ServiceUnavailable
 
 from app.extensions import db
+from app.services.permission_service import PermissionService
 from app.services.ai_service import AIService
 from app.services.data_readiness_service import ProcurementDataReadinessService
 from app.services.inventory_planning_service import InventoryPlanningService
@@ -19,6 +20,11 @@ def _handle(exc: HTTPException):
 @login_required
 def product_comparison(product_id):
     try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
+    try:
         result = PriceIntelligenceService(current_user.tenant_id).compare_product(product_id)
         return jsonify({"success": True, **result})
     except HTTPException as exc:
@@ -28,6 +34,11 @@ def product_comparison(product_id):
 @price_intelligence_bp.route("/products/<int:product_id>/savings", methods=["GET"])
 @login_required
 def product_savings(product_id):
+    try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     try:
         raw_quantity = request.args.get("quantity")
         if raw_quantity is None:
@@ -48,6 +59,11 @@ def product_savings(product_id):
 @login_required
 def product_history(product_id):
     try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
+    try:
         supplier_id = request.args.get("supplier_id", type=int)
         limit = max(1, min(request.args.get("limit", default=100, type=int), 500))
         history = PriceIntelligenceService(current_user.tenant_id).get_price_history(product_id, supplier_id, limit)
@@ -60,6 +76,11 @@ def product_history(product_id):
 @login_required
 def product_observations(product_id):
     try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
+    try:
         supplier_id = request.args.get("supplier_id", type=int)
         limit = max(1, min(request.args.get("limit", default=100, type=int), 500))
         observations = PriceIntelligenceService(current_user.tenant_id).get_price_observations(product_id, supplier_id, limit)
@@ -71,6 +92,11 @@ def product_observations(product_id):
 @price_intelligence_bp.route("/changes", methods=["GET"])
 @login_required
 def price_changes():
+    try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     limit = max(1, min(request.args.get("limit", default=100, type=int), 500))
     changes = PriceIntelligenceService(current_user.tenant_id).get_price_changes(limit)
     return jsonify({"success": True, "changes": changes})
@@ -79,6 +105,11 @@ def price_changes():
 @price_intelligence_bp.route("/summary", methods=["GET"])
 @login_required
 def portfolio_summary():
+    try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     try:
         limit = max(1, min(request.args.get("limit", default=10, type=int), 50))
         result = PriceIntelligenceService(current_user.tenant_id).get_portfolio_summary(opportunity_limit=limit)
@@ -93,6 +124,11 @@ def portfolio_summary():
 @login_required
 def supplier_price_scores():
     try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
+    try:
         limit = max(1, min(request.args.get("limit", default=10, type=int), 50))
         result = PriceIntelligenceService(current_user.tenant_id).get_supplier_price_scores(limit=limit)
         return jsonify({"success": True, **result})
@@ -105,6 +141,11 @@ def supplier_price_scores():
 @price_intelligence_bp.route("/data-readiness", methods=["GET"])
 @login_required
 def procurement_data_readiness():
+    try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     result = ProcurementDataReadinessService(current_user.tenant_id).snapshot()
     return jsonify({"success": True, **result})
 
@@ -112,6 +153,11 @@ def procurement_data_readiness():
 @price_intelligence_bp.route("/basket/analyze", methods=["POST"])
 @login_required
 def analyze_basket():
+    try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     try:
         payload = request.get_json(silent=True) or {}
         items = payload.get("items")
@@ -170,6 +216,11 @@ def record_inventory_movement():
 @login_required
 def inventory_recommendation(product_id):
     try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
+    try:
         service = InventoryPlanningService(current_user.tenant_id)
         result = service.recommendation(
             product_id,
@@ -187,6 +238,11 @@ def inventory_recommendation(product_id):
 @price_intelligence_bp.route("/inventory/recommendations", methods=["GET"])
 @login_required
 def inventory_recommendations():
+    try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     try:
         service = InventoryPlanningService(current_user.tenant_id)
         rows = service.recommendations(
@@ -216,6 +272,11 @@ def _build_briefing_prompt(summary: dict, supplier_scores: dict) -> str:
 @price_intelligence_bp.route("/ai-briefing", methods=["POST"])
 @login_required
 def portfolio_ai_briefing():
+    try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     try:
         intelligence = PriceIntelligenceService(current_user.tenant_id)
         summary = intelligence.get_portfolio_summary(opportunity_limit=10)
@@ -275,6 +336,11 @@ def _build_gemini_prompt(comparison: dict, history: list[dict], quantity: float)
 @price_intelligence_bp.route("/products/<int:product_id>/ai-insight", methods=["POST"])
 @login_required
 def product_ai_insight(product_id):
+    try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     try:
         payload = request.get_json(silent=True) or {}
         raw_quantity = payload.get("quantity", 100)

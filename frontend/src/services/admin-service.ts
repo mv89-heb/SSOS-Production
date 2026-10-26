@@ -9,6 +9,7 @@ export type AdminAuditLog = { id: number; action: string; title: string; metadat
 
 export const adminService = {
   async listUsers() { const { data } = await apiClient.get<{ success: boolean; users: AdminUser[] }>("/api/users"); return data.users; },
+  async createUser(payload: { full_name: string; email: string; password: string; role: AdminUser["role"] }) { const { data } = await apiClient.post<{ success: boolean; user: AdminUser }>("/api/users", payload); return data.user; },
   async updateUser(id: number, payload: Record<string, unknown>) { const { data } = await apiClient.put<{ success: boolean; user: AdminUser }>(`/api/users/${id}`, payload); return data.user; },
   async activateUser(id: number) { const { data } = await apiClient.post<{ success: boolean; user: AdminUser }>(`/api/admin/users/${id}/activate`); return data.user; },
   async deactivateUser(id: number) { const { data } = await apiClient.post<{ success: boolean; user: AdminUser }>(`/api/admin/users/${id}/deactivate`); return data.user; },

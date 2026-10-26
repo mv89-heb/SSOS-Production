@@ -5,6 +5,7 @@ from sqlalchemy.orm import aliased
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.extensions import db
+from app.services.permission_service import PermissionService
 from app.models.price_observation import PriceObservation
 from app.models.master_product import MasterProduct
 from app.models.supplier_product import SupplierProduct
@@ -178,6 +179,11 @@ def _master_catalog_overview(tenant_id, search, limit, only_opportunities):
 @price_overview_bp.route("/overview", methods=["GET"])
 @login_required
 def overview():
+    try:
+        PermissionService.require_permission("reports.view")
+    except HTTPException as exc:
+        return _handle(exc)
+
     """Return a tenant-scoped supplier comparison without per-product query loops."""
     try:
         tenant_id = current_user.tenant_id
