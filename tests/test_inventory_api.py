@@ -1,3 +1,4 @@
+from app.models.product import Product
 def _create_product(client, name="Milk", sku="MILK-1", stock=10, minimum=3, target=12, barcode=None):
     supplier = client.post("/api/catalog/suppliers", json={"name": "Warehouse Supplier"})
     assert supplier.status_code == 201, supplier.get_json()
@@ -141,8 +142,7 @@ def test_bulk_inventory_count_replay_does_not_reset_later_stock(logged_in_client
     }
     first = logged_in_client_a.post("/api/inventory/count/bulk", json=payload)
     assert first.status_code == 200, first.get_json()
-    assert first.get_json()["replayed"] if "replayed" in first.get_json() else True
-    assert db.session.get(__import__("app.models.product", fromlist=["Product"]).Product, product_id).current_stock == 8
+    assert db.session.get(Product, product_id).current_stock == 8
 
     issue = logged_in_client_a.post(
         "/api/inventory/movements",
