@@ -6,6 +6,7 @@ import os
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_login import current_user, login_required
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import BadRequest, Conflict, NotFound, HTTPException
 from werkzeug.utils import secure_filename
 
@@ -85,6 +86,13 @@ def create_order_invoice(order_id):
             ))
             if receipt is None:
                 raise NotFound("Receipt not found for this order")
+        duplicate_invoice = db.session.scalar(select(SupplierInvoice.id).where(
+            SupplierInvoice.tenant_id == current_user.tenant_id,
+            SupplierInvoice.supplier_id == order.supplier_id,
+            SupplierInvoice.invoice_number == invoice_number,
+        ).limit(1))
+        if duplicate_invoice is not None:
+            raise Conflict("Invoice number already exists for this supplier")
         invoice = SupplierInvoice(
             tenant_id=current_user.tenant_id, order_id=order.id, supplier_id=order.supplier_id,
             receipt_id=int(receipt_id) if receipt_id not in (None, "") else None,
@@ -95,12 +103,35 @@ def create_order_invoice(order_id):
         )
         db.session.add(invoice)
         db.session.flush()
+        AuditService.log_event(
+            current_user.tenant_id,
+            current_user.id,
+            "supplier_invoice.created",
+            f"Supplier invoice {invoice.invoice_number} recorded",
+            {
+                "invoice_id": invoice.id,
+                "order_id": order.id,
+                "supplier_id": order.supplier_id,
+                "amount": str(invoice.amount),
+                "currency": invoice.currency,
+            },
+        )
         result = invoice.to_dict()
         db.session.commit()
         return jsonify({"success": True, "invoice": result}), 201
     except HTTPException as exc:
         db.session.rollback()
         return _error(exc)
+    except IntegrityError as exc:
+        db.session.rollback()
+        # The database uniqueness constraint is the final protection against
+        # concurrent duplicate invoice submissions.
+        original = getattr(exc, "orig", exc)
+        constraint_name = getattr(getattr(original, "diag", None), "constraint_name", "")
+        message = str(original)
+        if constraint_name == "uq_supplier_invoice_number" or "UNIQUE constraint failed: supplier_invoices.tenant_id" in message:
+            return _error(Conflict("Invoice number already exists for this supplier"))
+        raise
     except Exception:
         db.session.rollback()
         raise
@@ -217,6 +248,21 @@ def record_invoice_payment(invoice_id):
                     if paid_unit_price.is_finite() and paid_unit_price >= 0:
                         offer.last_paid_price = paid_unit_price.quantize(Decimal("0.01"))
                         offer.last_paid_at = datetime.combine(payment_date, datetime.min.time(), tzinfo=timezone.utc)
+        AuditService.log_event(
+            current_user.tenant_id,
+            current_user.id,
+            "supplier_invoice.payment_recorded",
+            f"Payment recorded for supplier invoice {invoice.invoice_number}",
+            {
+                "invoice_id": invoice.id,
+                "payment_id": payment.id,
+                "order_id": invoice.order_id,
+                "amount": str(amount),
+                "currency": invoice.currency,
+                "payment_date": payment_date.isoformat(),
+                "fully_paid": paid + amount >= Decimal(str(invoice.amount)),
+            },
+        )
         result = invoice.to_dict()
         db.session.commit()
         return jsonify({"success": True, "invoice": result}), 201
@@ -272,6 +318,18 @@ def upload_supplier_invoice_attachment(invoice_id):
         invoice.attachment_mime_type = mime_type
         invoice.attachment_size = len(data)
         invoice.attachment_data = data
+        AuditService.log_event(
+            current_user.tenant_id,
+            current_user.id,
+            "supplier_invoice.attachment_uploaded",
+            f"Attachment uploaded for supplier invoice {invoice.invoice_number}",
+            {
+                "invoice_id": invoice.id,
+                "filename": filename,
+                "mime_type": mime_type,
+                "size_bytes": len(data),
+            },
+        )
         db.session.commit()
         return jsonify({"success": True, "invoice": invoice.to_dict()}), 200
     except HTTPException as exc:
@@ -356,6 +414,21 @@ def save_invoice_reconciliation(invoice_id):
                 "amount_difference": float(amount_diff),
             })
         invoice.line_comparison = saved
+        AuditService.log_event(
+            current_user.tenant_id,
+            current_user.id,
+            "supplier_invoice.reconciliation_saved",
+            f"Reconciliation saved for supplier invoice {invoice.invoice_number}",
+            {
+                "invoice_id": invoice.id,
+                "order_id": order.id,
+                "line_count": len(saved),
+                "lines_with_quantity_or_price_difference": sum(
+                    1 for line in saved
+                    if line["quantity_difference"] != 0 or line["unit_price_difference"] != 0
+                ),
+            },
+        )
         db.session.commit()
         return jsonify({"success": True, "invoice": invoice.to_dict()}), 200
     except HTTPException as exc:
