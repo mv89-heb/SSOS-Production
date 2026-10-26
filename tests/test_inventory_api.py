@@ -129,3 +129,37 @@ def test_generate_barcodes_is_tenant_scoped(logged_in_client_a, logged_in_client
     assert response.status_code == 200, response.get_json()
     assert response.get_json()["generated_count"] == 0
     assert response.get_json()["products"] == []
+
+
+
+def test_bulk_inventory_count_replay_does_not_reset_later_stock(logged_in_client_a, db):
+    product_id = _create_product(logged_in_client_a, sku="COUNT-IDEMPOTENCY", stock=3)
+    payload = {
+        "count_id": "count-session-replay-001",
+        "note": "ספירה שבועית",
+        "items": [{"product_id": product_id, "quantity": 8}],
+    }
+    first = logged_in_client_a.post("/api/inventory/count/bulk", json=payload)
+    assert first.status_code == 200, first.get_json()
+    assert first.get_json()["replayed"] if "replayed" in first.get_json() else True
+    assert db.session.get(__import__("app.models.product", fromlist=["Product"]).Product, product_id).current_stock == 8
+
+    issue = logged_in_client_a.post(
+        "/api/inventory/movements",
+        json={"product_id": product_id, "movement_type": "issue", "quantity": 2},
+    )
+    assert issue.status_code == 201, issue.get_json()
+    assert db.session.get(__import__("app.models.product", fromlist=["Product"]).Product, product_id).current_stock == 6
+
+    replay = logged_in_client_a.post("/api/inventory/count/bulk", json=payload)
+    assert replay.status_code == 200, replay.get_json()
+    assert replay.get_json()["replayed"] is True
+    assert db.session.get(__import__("app.models.product", fromlist=["Product"]).Product, product_id).current_stock == 6
+
+    changed = {
+        **payload,
+        "items": [{"product_id": product_id, "quantity": 9}],
+    }
+    conflict = logged_in_client_a.post("/api/inventory/count/bulk", json=changed)
+    assert conflict.status_code == 409, conflict.get_json()
+    assert db.session.get(__import__("app.models.product", fromlist=["Product"]).Product, product_id).current_stock == 6
