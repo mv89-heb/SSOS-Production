@@ -77,7 +77,7 @@ export default function InventoryPage() {
       const matches = !query || [product.name, product.sku, product.barcode, product.category, product.supplier_sku, recommendationByProduct.get(product.id)?.supplier_schedule?.supplier_name].filter(Boolean).some((v) => String(v).toLocaleLowerCase("he").includes(query));
       const status = stockStatus(product, recommendationByProduct.get(product.id));
       const matchesStatus = statusFilter === "all" || status === statusFilter;
-      const matchesTab = inventoryTab === "all" || (inventoryTab === "urgent" ? status === "urgent" || status === "reorder" : status === "insufficient_data");
+      const matchesTab = inventoryTab === "all" || (inventoryTab === "urgent" ? status === "urgent" : status === "insufficient_data");
       const matchesSupplier = supplierFilter === "all" || String(product.supplier_id ?? "") === supplierFilter;
       const matchesCategory = categoryFilter === "all" || (product.category || "ללא קטגוריה") === categoryFilter;
       return matches && matchesStatus && matchesTab && matchesSupplier && matchesCategory;
@@ -94,7 +94,7 @@ export default function InventoryPage() {
     }
     return [...found.entries()].sort((a,b)=>a[1].localeCompare(b[1],"he"));
   }, [products, recommendationByProduct]);
-  const urgentCount = useMemo(() => products.filter((product) => { const status = stockStatus(product, recommendationByProduct.get(product.id)); return status === "urgent" || status === "reorder"; }).length, [products, recommendationByProduct]);
+  const urgentCount = useMemo(() => products.filter((product) => stockStatus(product, recommendationByProduct.get(product.id)) === "urgent").length, [products, recommendationByProduct]);
   const needsDataCount = useMemo(() => products.filter((product) => stockStatus(product, recommendationByProduct.get(product.id)) === "insufficient_data").length, [products, recommendationByProduct]);
   const healthyCount = useMemo(() => products.filter((product) => stockStatus(product, recommendationByProduct.get(product.id)) === "healthy").length, [products, recommendationByProduct]);
   const selected = products.find((product) => product.id === selectedId) ?? null;
@@ -200,7 +200,7 @@ export default function InventoryPage() {
       <section aria-label="סיכום מצב המלאי" className="grid gap-3 md:grid-cols-3">
         <button type="button" onClick={() => { setInventoryTab("urgent"); setStatusFilter("all"); }} className={`rounded-2xl border p-5 text-right shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${inventoryTab === "urgent" ? "border-red-300 bg-red-50 ring-2 ring-red-100 dark:border-red-900 dark:bg-red-950/30" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"}`}>
           <div className="flex items-center justify-between"><span className="text-sm font-bold text-red-700 dark:text-red-300">רכש דחוף / דורש טיפול</span><span className="rounded-xl bg-red-100 p-2 text-red-700 dark:bg-red-900/40"><AlertTriangle size={20}/></span></div>
-          <div className="mt-3 text-3xl font-black">{number(urgentCount)}</div><div className="mt-1 text-xs text-slate-500">מחסור או צורך בהזמנה לפי נתונים תקינים</div>
+          <div className="mt-3 text-3xl font-black">{number(urgentCount)}</div><div className="mt-1 text-xs text-slate-500">רק מחסור דחוף לאחר אימות הנתונים</div>
         </button>
         <button type="button" onClick={() => { setInventoryTab("needs_data"); setStatusFilter("all"); }} className={`rounded-2xl border p-5 text-right shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${inventoryTab === "needs_data" ? "border-amber-300 bg-amber-50 ring-2 ring-amber-100 dark:border-amber-900 dark:bg-amber-950/30" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"}`}>
           <div className="flex items-center justify-between"><span className="text-sm font-bold text-amber-800 dark:text-amber-300">דורש השלמת נתונים</span><span className="rounded-xl bg-amber-100 p-2 text-amber-800 dark:bg-amber-900/40"><ClipboardCheck size={20}/></span></div>
