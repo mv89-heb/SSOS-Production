@@ -52,14 +52,14 @@ class ReceiptService:
         return receipt
 
     def create_receipt(self, user, order_id: int, payload: dict, idempotency_key: str | None = None) -> tuple[Receipt, bool]:
+        if not isinstance(payload, dict):
+            raise BadRequest("Receipt payload must be an object")
         idempotency_key = self._validate_idempotency_key(idempotency_key)
         request_hash = self._request_hash(order_id, payload)
+        # Replays must be resolved before lifecycle validation: the original
+        # request remains replayable even after the order changes status.
         if idempotency_key:
-            existing = self._claim_or_replay_idempotency_key(
-                user_id=user.id,
-                key=idempotency_key,
-                request_hash=request_hash,
-            )
+            existing = self._get_idempotency_key(idempotency_key)
             if existing:
                 return self._replay_or_conflict(existing, request_hash)
 
@@ -107,22 +107,14 @@ class ReceiptService:
         if len(products_by_id) != len(product_ids):
             raise NotFound("One or more products in the order are no longer available")
 
+        # Complete all expected business validation before claiming a new
+        # idempotency key. Otherwise a rejected over-receipt can leave the key
+        # reserved in transaction configurations that release nested savepoints.
         receipt_number = self._receipt_number(payload.get("receipt_number"))
-        receipt = Receipt(
-            tenant_id=self.tenant_id,
-            order_id=order.id,
-            receipt_number=receipt_number,
-            status=RECEIPT_POSTED,
-            received_by=user.id,
-            received_at=datetime.now(timezone.utc),
-            notes=self._notes(payload.get("notes")),
-        )
-        db.session.add(receipt)
-        db.session.flush()
-
+        notes = self._notes(payload.get("notes"))
         for order_item_id, quantity in parsed.items():
             order_item = by_id[order_item_id]
-            received_before = self._received_quantity(order_item.id)
+            received_before = self._received_quantity(order_item_id)
             remaining = Decimal(order_item.quantity) - received_before
             if quantity > remaining:
                 raise Conflict(
@@ -130,6 +122,29 @@ class ReceiptService:
                     f"({remaining})"
                 )
 
+        if idempotency_key:
+            existing = self._claim_or_replay_idempotency_key(
+                user_id=user.id,
+                key=idempotency_key,
+                request_hash=request_hash,
+            )
+            if existing:
+                return self._replay_or_conflict(existing, request_hash)
+
+        receipt = Receipt(
+            tenant_id=self.tenant_id,
+            order_id=order.id,
+            receipt_number=receipt_number,
+            status=RECEIPT_POSTED,
+            received_by=user.id,
+            received_at=datetime.now(timezone.utc),
+            notes=notes,
+        )
+        db.session.add(receipt)
+        db.session.flush()
+
+        for order_item_id, quantity in parsed.items():
+            order_item = by_id[order_item_id]
             product = products_by_id[order_item.product_id]
             current_stock = Decimal(product.current_stock or 0)
             new_balance = current_stock + quantity

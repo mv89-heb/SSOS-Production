@@ -1,4 +1,5 @@
 from app.models.inventory_movement import InventoryMovement
+from app.models.product import Product
 from app.models.receipt import Receipt
 
 
@@ -33,7 +34,7 @@ def test_receipt_idempotency_replays_without_duplicate_stock(logged_in_client_a,
     assert second.get_json()["receipt"]["id"] == first.get_json()["receipt"]["id"]
     assert db.session.query(Receipt).filter_by(order_id=order["id"]).count() == 1
     assert db.session.query(InventoryMovement).filter_by(product_id=product_id).count() == 1
-    assert db.session.get(__import__("app.models.product", fromlist=["Product"]).Product, product_id).current_stock == 5
+    assert db.session.get(Product, product_id).current_stock == 5
 
 
 def test_receipt_idempotency_rejects_same_key_with_different_payload(logged_in_client_a, make_order, db):
@@ -56,3 +57,56 @@ def test_receipt_idempotency_rejects_same_key_with_different_payload(logged_in_c
     assert first.status_code == 201, first.get_json()
     assert conflict.status_code == 409, conflict.get_json()
     assert db.session.query(Receipt).filter_by(order_id=order["id"]).count() == 1
+
+
+def test_partial_receipts_accumulate_stock_without_exceeding_order_quantity(
+    logged_in_client_a, make_order, db
+):
+    response, _, product_id = make_order(logged_in_client_a, quantity=5, price=10.0)
+    order = response.get_json()["order"]
+    order_item_id = order["order_items"][0]["id"]
+    _send_order(db, order["id"])
+
+    first = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={"items": [{"order_item_id": order_item_id, "quantity": 2}]},
+        headers={"Idempotency-Key": "partial-receipt-1"},
+    )
+    second = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={"items": [{"order_item_id": order_item_id, "quantity": 3}]},
+        headers={"Idempotency-Key": "partial-receipt-2"},
+    )
+
+    assert first.status_code == 201, first.get_json()
+    assert second.status_code == 201, second.get_json()
+    assert db.session.query(Receipt).filter_by(order_id=order["id"]).count() == 2
+    assert db.session.query(InventoryMovement).filter_by(product_id=product_id).count() == 2
+    assert db.session.get(Product, product_id).current_stock == 5
+
+
+def test_failed_over_receipt_rolls_back_idempotency_key_and_stock(
+    logged_in_client_a, make_order, db
+):
+    response, _, product_id = make_order(logged_in_client_a, quantity=5, price=10.0)
+    order = response.get_json()["order"]
+    order_item_id = order["order_items"][0]["id"]
+    _send_order(db, order["id"])
+
+    too_much = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={"items": [{"order_item_id": order_item_id, "quantity": 6}]},
+        headers={"Idempotency-Key": "retry-after-rejected-receipt"},
+    )
+    retry = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={"items": [{"order_item_id": order_item_id, "quantity": 5}]},
+        headers={"Idempotency-Key": "retry-after-rejected-receipt"},
+    )
+
+    assert too_much.status_code == 409, too_much.get_json()
+    assert retry.status_code == 201, retry.get_json()
+    assert retry.get_json()["replayed"] is False
+    assert db.session.query(Receipt).filter_by(order_id=order["id"]).count() == 1
+    assert db.session.query(InventoryMovement).filter_by(product_id=product_id).count() == 1
+    assert db.session.get(Product, product_id).current_stock == 5
