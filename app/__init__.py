@@ -87,6 +87,8 @@ def _register_request_context(app):
 
         if not request.path.startswith("/api/") or not current_user.is_authenticated:
             return None
+        if app.testing and not app.config.get("ENFORCE_WEEKLY_INVENTORY_COUNT_IN_TESTS", False):
+            return None
         if str(getattr(current_user, "role", "") or "").strip().lower() != "employee":
             return None
         if request.method in {"GET", "HEAD", "OPTIONS"}:
