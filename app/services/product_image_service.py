@@ -68,6 +68,7 @@ def _request_json(url, timeout):
 
 
 def _image_from_product(product):
+    """Accept only official Open Food Facts image hosts for OFF records."""
     selected = product.get("selected_images") or {}
     front = selected.get("front") if isinstance(selected, dict) else {}
     display = front.get("display") if isinstance(front, dict) else {}
@@ -76,7 +77,13 @@ def _image_from_product(product):
         or (display.get("en") if isinstance(display, dict) else None)
         or (display.get("he") if isinstance(display, dict) else None)
     )
-    return _allowed_image_url(candidate)
+    safe_url = _allowed_image_url(candidate)
+    if not safe_url:
+        return None
+    host = (urlparse(safe_url).hostname or "").lower()
+    if host not in {"images.openfoodfacts.org", "static.openfoodfacts.org"}:
+        return None
+    return safe_url
 
 
 def _normalize_product_name(value):
@@ -232,9 +239,11 @@ def lookup_product_image(barcode, product_name=None, timeout=4):
         if primary.get("image_url"):
             return primary
         fallback = _upcitemdb_lookup(None, product_name, timeout)
-        if fallback.get("image_url") or fallback.get("reason") == "source_unavailable":
+        if fallback.get("image_url"):
             return fallback
-        if primary.get("reason") == "source_unavailable" and fallback.get("reason") == "product_not_found":
+        # A fallback rate limit/outage must not erase a valid negative result
+        # from the primary source (for example, an exact-name near-match test).
+        if fallback.get("reason") == "source_unavailable" and primary.get("reason") == "source_unavailable":
             return {"image_url": None, "reason": "source_unavailable"}
         return primary
     return {"image_url": None, "reason": primary_reason}
