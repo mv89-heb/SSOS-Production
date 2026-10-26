@@ -170,16 +170,21 @@ class InventoryCalendarService:
         days_until_order = (date.fromisoformat(schedule["next_order_date"]) - today).days if schedule.get("next_order_date") else None
         active_periods = [p for p in periods if p.end_date >= today and p.start_date <= target_end]
 
-        if current_stock <= 0:
-            status = "urgent"
-        elif stock_checks < 2 and product.min_stock is not None and current_stock <= Decimal(str(product.min_stock)):
-            status = "reorder"
-        elif stock_checks < 2:
+        if stock_checks < 2:
             status = "insufficient_data"
+            needs_data_reason = "insufficient_physical_counts"
+        elif configured_target <= 0:
+            status = "insufficient_data"
+            needs_data_reason = "stock_target_not_configured"
+        elif current_stock <= 0:
+            status = "urgent"
+            needs_data_reason = None
         elif current_stock <= target_stock:
             status = "reorder"
+            needs_data_reason = None
         else:
             status = "healthy"
+            needs_data_reason = None
 
         row.update({
             "current_stock": float(current_stock),
@@ -199,6 +204,8 @@ class InventoryCalendarService:
             "days_until_next_order": days_until_order,
             "planning_horizon_days": max(0, (target_end - today).days),
             "status": status,
+            "configured_stock_target": float(configured_target) if configured_target > 0 else None,
+            "needs_data_reason": needs_data_reason,
             "data_ready": stock_checks >= 2,
             "supplier_schedule": schedule,
             "active_planning_periods": [p.to_dict() for p in active_periods],
@@ -285,14 +292,21 @@ class InventoryCalendarService:
                 target = max(target, configured_target)
             recommended = max(Decimal("0"), target - stock - inbound_qty)
             coverage = stock / rate if rate > 0 else None
-            if stock <= 0:
-                status = "urgent"
-            elif len(counts) < 2 and product.min_stock is not None and stock <= Decimal(str(product.min_stock)):
-                status = "reorder"
-            elif len(counts) < 2:
+            if len(counts) < 2:
                 status = "insufficient_data"
+                needs_data_reason = "insufficient_physical_counts"
+            elif configured_target <= 0:
+                status = "insufficient_data"
+                needs_data_reason = "stock_target_not_configured"
+            elif stock <= 0:
+                status = "urgent"
+                needs_data_reason = None
+            elif stock <= target:
+                status = "reorder"
+                needs_data_reason = None
             else:
-                status = "reorder" if stock <= target else "healthy"
+                status = "healthy"
+                needs_data_reason = None
             row.update({
                 "current_stock": float(stock), "stock_checks_in_period": len(counts),
                 "observed_days": round(float(elapsed), 1), "estimated_depletion": round(float(used), 3),
@@ -303,7 +317,9 @@ class InventoryCalendarService:
                 "holiday_adjusted_target_stock": round(float(target), 3), "safety_stock": round(float(safety), 3),
                 "reorder_point": round(float(target), 3), "recommended_order": round(float(recommended), 3),
                 "coverage_days": round(float(coverage), 1) if coverage is not None else None,
-                "planning_horizon_days": horizon, "status": status, "data_ready": len(counts) >= 2,
+                "planning_horizon_days": horizon, "status": status,
+                "configured_stock_target": float(configured_target) if configured_target > 0 else None,
+                "needs_data_reason": needs_data_reason, "data_ready": len(counts) >= 2,
                 "supplier_schedule": schedule, "active_planning_periods": [p.to_dict() for p in periods if p.end_date >= today and p.start_date <= horizon_end],
                 "planning_notes": ["הצריכה מחושבת מספירות פיזיות ורכישות בין הספירות.", "ספירות חוזרות באותו יום מאוחדות ונשמרת האחרונה.", "התחזית מתחשבת בתקופות תכנון פעילות ובמלאי נכנס מאושר או שנשלח."]
             })
