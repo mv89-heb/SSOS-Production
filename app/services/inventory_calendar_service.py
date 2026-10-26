@@ -199,7 +199,7 @@ class InventoryCalendarService:
         ))
         return row
 
-    def recommendations(self, *, lookback_days=60, safety_days=2, limit=500):
+    def recommendations(self, *, lookback_days=60, safety_days=2, limit=2000):
         """Calculate all product recommendations with bulk database reads."""
         lookback_days = max(7, min(int(lookback_days), 365))
         safety_days = max(0, min(int(safety_days), 90))
