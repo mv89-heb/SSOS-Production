@@ -62,7 +62,14 @@ export default function InventoryCountPage() {
     queryFn: () => inventoryService.getRecommendations({ lookback_days: 30, safety_days: 2, limit: 500 }),
     staleTime: 60_000,
   });
-  const products = data?.products ?? [];
+  const countStatus = useQuery({
+    queryKey: ["inventory", "count-status"],
+    queryFn: async () => (await apiClient.get<{ due: boolean; due_product_ids: number[]; assigned_products: number; completion_percent: number; priority_products: number; rotation_cycle_weeks: number }>("/api/inventory/planning/count-status")).data,
+    staleTime: 15_000,
+  });
+  const allProducts = data?.products ?? [];
+  const assignedIds = useMemo(() => new Set(countStatus.data?.due_product_ids ?? []), [countStatus.data?.due_product_ids]);
+  const products = allProducts.filter((product) => assignedIds.has(product.id));
 
   useEffect(() => {
     try {
