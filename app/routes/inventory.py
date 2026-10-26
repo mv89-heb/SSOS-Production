@@ -512,7 +512,7 @@ def bulk_count():
         ).all()
         if existing:
             existing_quantities = {movement.product_id: int(movement.quantity) for movement in existing}
-            if existing_quantities != dict(parsed) or any((movement.note or None) != note for movement in existing):
+            if len(existing_quantities) != len(existing) or existing_quantities != dict(parsed) or any((movement.note or None) != note for movement in existing):
                 db.session.rollback()
                 return _handle(Conflict("count_id was already used for a different inventory count"))
             response = jsonify({
