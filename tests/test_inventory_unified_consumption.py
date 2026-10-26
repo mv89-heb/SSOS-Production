@@ -58,6 +58,7 @@ def test_recommendations_deduplicate_same_day_counts_and_expose_carton_usage(db,
     assert row["estimated_depletion"] == 50.0
     assert row["observed_days"] == 9.0
     assert row["average_daily_usage_cartons"] == row["average_daily_usage"]
-    assert row["weekly_usage_cartons"] == round(row["average_daily_usage"] * 7, 3)
+    # Weekly usage is rounded from the underlying rate, not from the already-rounded daily display.
+    assert row["weekly_usage_cartons"] == round(row["estimated_depletion"] / row["observed_days"] * 7, 3)
     assert row["current_stock_cartons"] == 50.0
     assert row["carton_recommendation_ready"] is True
