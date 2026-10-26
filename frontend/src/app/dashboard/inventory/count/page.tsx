@@ -441,40 +441,22 @@ export default function InventoryCountPage() {
 
       <section className="overflow-hidden rounded-3xl border border-emerald-200 bg-white shadow-sm dark:border-emerald-900/60 dark:bg-slate-950">
         <div className="border-b border-emerald-100 p-5 dark:border-emerald-950">
-          <h2 className="text-lg font-black">צריכה שבועית והמלצות להזמנה</h2>
-          <p className="mt-1 text-sm text-slate-500">הערכת הצריכה מבוססת על ספירות פיזיות ב-30 הימים האחרונים, לאחר איחוד ספירות חוזרות באותו יום. זו תחזית ולא תחליף לבדיקה לפני אישור ההזמנה.</p>
+          <h2 className="text-lg font-black">יצירת טיוטות הזמנה לפי ספק</h2>
+          <p className="mt-1 text-sm text-slate-500">פירוט הצריכה השבועית, ימי הכיסוי והמלצת הכמות מוצג במסך ניהול מלאי. כאן נשארה רק הפעולה הייחודית: יצירת טיוטת הזמנה לפי ספק, כדי לא להציג את אותה טבלת המלצות פעמיים.</p>
+          <a href="/dashboard/inventory" className="mt-3 inline-flex min-h-10 items-center rounded-xl border border-emerald-200 px-3 py-2 text-sm font-bold text-emerald-800 hover:bg-emerald-50 dark:border-emerald-900 dark:text-emerald-300 dark:hover:bg-emerald-950/30">לצפייה בהמלצות המלאי לפי מוצר ←</a>
         </div>
-        {recommendations.isLoading ? <div className="p-5 text-sm text-slate-500">מחשב צריכה והמלצות לפי הספירות…</div> :
-          recommendations.isError ? <div className="p-5 text-sm text-red-600">לא ניתן לחשב כרגע צריכה והמלצות. בדוק את חיבור השירות ורענן.</div> :
+        {recommendations.isLoading ? <div className="p-5 text-sm text-slate-500">בודק אילו ספקים מתאימים ליצירת טיוטה…</div> :
+          recommendations.isError ? <div className="p-5 text-sm text-red-600">לא ניתן לטעון את המלצות ההזמנה. אפשר לעבור למסך ניהול מלאי ולנסות שוב.</div> :
           <div className="space-y-3 p-4">
             {orderMessage && <div className="rounded-xl bg-indigo-50 p-3 text-sm font-bold text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300">{orderMessage}</div>}
-            <div className="w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-              <table className="w-full min-w-[760px] text-right text-sm">
-                <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-3 py-3">מוצר</th><th className="px-3 py-3">מלאי נוכחי</th><th className="px-3 py-3">צריכה שבועית משוערת</th><th className="px-3 py-3">ימי כיסוי</th><th className="px-3 py-3">כמות מומלצת להזמנה</th><th className="px-3 py-3">מצב נתונים</th></tr></thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {(recommendations.data ?? []).map((row) => {
-                    const product = products.find((item) => item.id === row.product_id);
-                    const weekly = Number(row.average_daily_usage || 0) * 7;
-                    const statusLabel = !row.data_ready ? "אין מספיק ספירות" : row.status === "urgent" ? "דחוף" : row.status === "reorder" ? "מומלץ להזמין" : "מלאי מספק";
-                    return <tr key={row.product_id}>
-                      <td className="px-3 py-3 font-bold">{row.product_name}</td>
-                      <td className="px-3 py-3">{fmt(Number(row.current_stock || 0))} {product ? productUnit(product) : ""}</td>
-                      <td className="px-3 py-3 font-black">{row.data_ready ? fmt(Math.ceil(weekly)) : "—"}</td>
-                      <td className="px-3 py-3">{row.coverage_days == null ? "—" : fmt(Math.floor(row.coverage_days))}</td>
-                      <td className="px-3 py-3 font-black">{row.data_ready ? fmt(Math.ceil(Number(row.recommended_order || 0))) : "—"}</td>
-                      <td className="px-3 py-3"><span className={row.status === "urgent" || row.status === "reorder" ? "font-black text-red-600" : "text-slate-500"}>{statusLabel}</span></td>
-                    </tr>;
-                  })}
-                </tbody>
-              </table>
-            </div>
             <div className="flex flex-wrap gap-2">
               {[...new Set((recommendations.data ?? []).filter((row) => row.data_ready && (row.status === "urgent" || row.status === "reorder") && Number(row.recommended_order) > 0).map((row) => Number(products.find((p) => p.id === row.product_id)?.supplier_id ?? row.supplier_schedule?.supplier_id)).filter((id) => Number.isInteger(id) && id > 0))].map((supplierId) => {
                 const count = (recommendations.data ?? []).filter((row) => Number(products.find((p) => p.id === row.product_id)?.supplier_id ?? row.supplier_schedule?.supplier_id) === supplierId && row.data_ready && (row.status === "urgent" || row.status === "reorder") && Number(row.recommended_order) > 0 && Number(products.find((p) => p.id === row.product_id)?.current_price ?? 0) > 0).length;
                 return <button key={supplierId} disabled={creatingOrderFor !== null} onClick={() => createSuggestedOrder(supplierId)} className="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50">{creatingOrderFor === supplierId ? "יוצר טיוטה…" : `צור טיוטת הזמנה · ספק #${supplierId} · ${count} מוצרים`}</button>;
               })}
+              {![...new Set((recommendations.data ?? []).filter((row) => row.data_ready && (row.status === "urgent" || row.status === "reorder") && Number(row.recommended_order) > 0).map((row) => Number(products.find((p) => p.id === row.product_id)?.supplier_id ?? row.supplier_schedule?.supplier_id)).filter((id) => Number.isInteger(id) && id > 0))].length > 0 ? null : <p className="text-sm text-slate-500">אין כרגע ספקים עם מוצרים שעומדים בתנאים ליצירת טיוטה.</p>}
             </div>
-            <p className="text-xs leading-5 text-slate-500">מוצרים ללא לפחות שתי ספירות בתאריכים שונים לא מקבלים המלצת כמות. הזמנה נוצרת כטיוטה בלבד; המערכת לא שולחת אותה לספק ולא מאשרת אותה אוטומטית. מוצרים ללא ספק או מחיר תקין לא ייכללו.</p>
+            <p className="text-xs leading-5 text-slate-500">הטיוטה אינה נשלחת לספק ואינה מאושרת אוטומטית. מוצרים ללא נתוני צריכה מספקים, ספק תקין או מחיר תקין לא ייכללו.</p>
           </div>}
       </section>
 
