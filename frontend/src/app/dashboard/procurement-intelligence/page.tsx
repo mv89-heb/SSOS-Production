@@ -212,32 +212,39 @@ export default function ProcurementIntelligencePage() {
       .map((row) => {
         const product = productById.get(row.product_id)!;
         const opportunity = opportunityByProduct.get(row.product_id);
-        const unitPrice = opportunity?.best_price ?? Number(product.current_price ?? 0);
-        const currency = opportunity?.currency ?? product.currency ?? "ILS";
+        const opportunityPrice = Number(opportunity?.best_price);
         const currentUnitPrice = Number(product.current_price ?? 0);
-        const savingsPerUnit = opportunity?.savings_per_unit ?? 0;
+        const hasOpportunityPrice = Number.isFinite(opportunityPrice) && opportunityPrice > 0;
+        const hasCurrentPrice = Number.isFinite(currentUnitPrice) && currentUnitPrice > 0;
+        const hasKnownPrice = hasOpportunityPrice || hasCurrentPrice;
+        const unitPrice = hasOpportunityPrice ? opportunityPrice : hasCurrentPrice ? currentUnitPrice : null;
+        const currency = opportunity?.currency ?? product.currency ?? "ILS";
+        const savingsPerUnit = hasOpportunityPrice && hasCurrentPrice ? Math.max(0, Number(opportunity?.savings_per_unit ?? 0)) : 0;
         return {
           ...row,
           supplierName: opportunity?.best_supplier ?? supplierNames.get(product.supplier_id) ?? null,
           quantity: Math.ceil(row.recommended_order),
           unitPrice,
           currentUnitPrice,
+          hasKnownPrice,
           savingsPerUnit,
-          estimatedCost: Math.ceil(row.recommended_order) * unitPrice,
+          estimatedCost: unitPrice == null ? null : Math.ceil(row.recommended_order) * unitPrice,
           estimatedSavings: Math.ceil(row.recommended_order) * savingsPerUnit,
           currency,
         };
       })
       .filter((row) => row.quantity > 0)
-      .sort((a, b) => b.estimatedCost - a.estimatedCost);
+      .sort((a, b) => (b.estimatedCost ?? 0) - (a.estimatedCost ?? 0));
   }, [actionRows, opportunityByProduct, productById, supplierNames]);
 
   // Never aggregate monetary values across currencies: show each currency independently.
   const basketTotalsByCurrency = purchaseBasket.reduce((totals, row) => {
+    if (row.estimatedCost == null) return totals;
     const currency = row.currency || "ILS";
     totals[currency] = (totals[currency] || 0) + row.estimatedCost;
     return totals;
   }, {} as Record<string, number>);
+  const basketRowsMissingPrice = purchaseBasket.filter((row) => !row.hasKnownPrice).length;
   const basketSavingsByCurrency = purchaseBasket.reduce((totals, row) => {
     const currency = row.currency || "ILS";
     totals[currency] = (totals[currency] || 0) + row.estimatedSavings;
@@ -415,15 +422,15 @@ export default function ProcurementIntelligencePage() {
                 {purchaseBasket.slice(0, 7).map((row) => (
                   <div key={row.product_id} className="p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0"><div className="truncate font-bold">{row.product_name}</div><div className="mt-1 text-xs text-slate-500">{row.quantity} יח׳ × {money(row.unitPrice, row.currency)} · {row.supplierName || "ללא ספק"}</div></div>
-                      <div className="shrink-0 text-left font-black">{money(row.estimatedCost, row.currency)}</div>
+                      <div className="min-w-0"><div className="truncate font-bold">{row.product_name}</div><div className="mt-1 text-xs text-slate-500">{row.unitPrice == null ? `מחיר חסר · ${row.quantity} יח׳` : `${row.quantity} יח׳ × ${money(row.unitPrice, row.currency)}`} · {row.supplierName || "ללא ספק"}</div></div>
+                      <div className="shrink-0 text-left font-black">{row.estimatedCost == null ? "לא ניתן לחשב" : money(row.estimatedCost, row.currency)}</div>
                     </div>
                     {row.estimatedSavings > 0 && <div className="mt-2 text-xs font-bold text-emerald-600">חיסכון משוער מול המחיר הנוכחי: {money(row.estimatedSavings, row.currency)}</div>}
                   </div>
                 ))}
               </div>
               <div className="grid gap-3 border-t border-slate-100 p-4 dark:border-slate-800 sm:grid-cols-2">
-                <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">עלות סל משוערת</div><div className="mt-1 text-lg font-black">{formatCurrencyTotals(basketTotalsByCurrency)}</div><div className="mt-1 text-xs text-slate-500">כל מטבע מחושב בנפרד</div></div>
+                <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">עלות סל משוערת</div><div className="mt-1 text-lg font-black">{formatCurrencyTotals(basketTotalsByCurrency)}</div><div className="mt-1 text-xs text-slate-500">כל מטבע מחושב בנפרד; מוצרים ללא מחיר אינם נכללים בסכום</div>{basketRowsMissingPrice > 0 && <div className="mt-1 text-xs font-bold text-amber-600">{number(basketRowsMissingPrice)} מוצרים ללא מחיר ידוע</div>}</div>
                 <div className="rounded-xl bg-emerald-50 p-3 dark:bg-emerald-950/20"><div className="text-xs text-emerald-700 dark:text-emerald-300">פער מול המחיר הנוכחי בסל</div><div className="mt-1 text-lg font-black text-emerald-700 dark:text-emerald-300">{formatCurrencyTotals(basketSavingsByCurrency)}</div><div className="mt-1 text-xs text-emerald-700/80 dark:text-emerald-300/80">אומדן בלבד; לא כולל עלויות נלוות או תנאי ספק</div></div>
               </div>
               <div className="border-t border-slate-100 p-4 dark:border-slate-800"><a href="/dashboard/orders" className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700">פתח הזמנות רכש <ArrowLeft size={15} /></a></div>
