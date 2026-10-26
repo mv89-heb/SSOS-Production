@@ -205,7 +205,7 @@ class InventoryCalendarService:
         safety_days = max(0, min(int(safety_days), 90))
         products = db.session.scalars(
             select(Product).where(Product.tenant_id == self.tenant_id, Product.active.is_(True))
-            .order_by(Product.name.asc()).limit(max(1, min(int(limit), 500)))
+            .order_by(Product.name.asc()).limit(max(1, min(int(limit), 2000)))
         ).all()
         if not products:
             return []
