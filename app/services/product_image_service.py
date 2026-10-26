@@ -191,10 +191,12 @@ def lookup_product_image(barcode, product_name=None, timeout=4):
     normalized = _digits(barcode)
     usable_barcode = bool(normalized and not _is_synthetic_barcode(normalized))
     primary_reason = "missing_or_synthetic_barcode"
+    off_unavailable = False
     if usable_barcode:
         endpoint = f"{SOURCE_BASE}/api/v2/product/{quote(normalized, safe='')}.json?fields=code,product_name,brands,quantity,image_front_url,selected_images"
         payload = _request_json(endpoint, timeout)
-        primary_reason = "source_unavailable" if payload is None else "product_not_found"
+        off_unavailable = payload is None
+        primary_reason = "source_unavailable" if off_unavailable else "product_not_found"
         if payload is not None and isinstance(payload, dict) and payload.get("status") == 1 and isinstance(payload.get("product"), dict):
             product = payload["product"]
             returned_code = _digits(product.get("code"))
@@ -209,17 +211,24 @@ def lookup_product_image(barcode, product_name=None, timeout=4):
                     "match_method": "exact_barcode",
                 }
             primary_reason = "image_not_available"
-        # If OFF returned no result or was unavailable, try the fallback source.
+        # Try the fallback after an OFF miss/outage. Do not query OFF a second
+        # time after a failed barcode request to the same unavailable host.
         fallback = _upcitemdb_lookup(normalized, product_name, timeout)
         if fallback.get("image_url") or fallback.get("reason") == "source_unavailable":
             return fallback
         if fallback.get("reason") not in {"product_not_found", "image_not_available"}:
             return fallback
+        if off_unavailable:
+            if product_name:
+                fallback = _upcitemdb_lookup(None, product_name, timeout)
+                if fallback.get("image_url") or fallback.get("reason") == "source_unavailable":
+                    return fallback
+                return fallback
+            return {"image_url": None, "reason": "source_unavailable"}
     if product_name:
         primary = _name_lookup(product_name, timeout)
         if primary.get("image_url"):
             return primary
-        # A primary-source outage should not prevent trying the fallback.
         fallback = _upcitemdb_lookup(None, product_name, timeout)
         if fallback.get("image_url") or fallback.get("reason") == "source_unavailable":
             return fallback
