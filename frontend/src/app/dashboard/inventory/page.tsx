@@ -53,7 +53,7 @@ export default function InventoryPage() {
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
 
   const summary = useQuery({ queryKey: ["inventory", "summary"], queryFn: inventoryService.getSummary, staleTime: 20_000 });
-  const recommendations = useQuery({ queryKey: ["inventory", "recommendations"], queryFn: () => inventoryService.getRecommendations({ limit: 500 }), staleTime: 30_000 });
+  const recommendations = useQuery({ queryKey: ["inventory", "recommendations"], queryFn: () => inventoryService.getRecommendations({ limit: 2000 }), staleTime: 30_000 });
   const history = useQuery({ queryKey: ["inventory", "history", selectedId], queryFn: () => inventoryService.getProductMovements(selectedId!, 100), enabled: selectedId != null && showHistory });
   const products = summary.data?.products ?? [];
   const recommendationByProduct = useMemo(() => new Map((recommendations.data ?? []).map((row) => [row.product_id, row])), [recommendations.data]);
