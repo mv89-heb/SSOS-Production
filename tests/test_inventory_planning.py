@@ -139,6 +139,53 @@ def test_recommendation_is_insufficient_without_two_checks(db, tenant_a_admin):
 
 
 
+
+def test_zero_stock_without_target_is_not_urgent(db, tenant_a_admin):
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="Supplier")
+    db.session.add(supplier)
+    db.session.flush()
+    product = _make_product(db, tenant_id, supplier.id, name="Unknown stock target")
+    now = datetime.now(timezone.utc)
+    product.current_stock = 0
+    db.session.add_all([
+        InventoryMovement(tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_COUNT,
+                          quantity=8, balance_after=8, occurred_at=now - timedelta(days=7)),
+        InventoryMovement(tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_COUNT,
+                          quantity=0, balance_after=0, occurred_at=now),
+    ])
+    db.session.commit()
+
+    result = InventoryCalendarService(tenant_id).recommendation(product.id)
+
+    assert result["status"] == "insufficient_data"
+    assert result["needs_data_reason"] == "stock_target_not_configured"
+    assert result["configured_stock_target"] is None
+
+
+def test_zero_stock_with_counts_and_configured_target_is_urgent(db, tenant_a_admin):
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="Supplier")
+    db.session.add(supplier)
+    db.session.flush()
+    product = _make_product(db, tenant_id, supplier.id, name="Confirmed shortage")
+    product.current_stock = 0
+    product.min_stock = 10
+    now = datetime.now(timezone.utc)
+    db.session.add_all([
+        InventoryMovement(tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_COUNT,
+                          quantity=8, balance_after=8, occurred_at=now - timedelta(days=7)),
+        InventoryMovement(tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_COUNT,
+                          quantity=0, balance_after=0, occurred_at=now),
+    ])
+    db.session.commit()
+
+    result = InventoryCalendarService(tenant_id).recommendation(product.id)
+
+    assert result["status"] == "urgent"
+    assert result["needs_data_reason"] is None
+    assert result["configured_stock_target"] == 10
+
 def test_carton_metrics_round_up_piece_orders():
     from decimal import Decimal
 
