@@ -122,8 +122,32 @@ export default function OrdersPage() {
         ) : filteredOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-14 text-center"><div className="mb-4 rounded-2xl bg-slate-100 p-4 text-slate-400 dark:bg-slate-800"><ShoppingCart size={28} /></div><h2 className="font-bold text-slate-800 dark:text-white">{hasFilters ? "לא נמצאו הזמנות תואמות" : "אין הזמנות עדיין"}</h2><p className="mt-1 text-sm text-slate-500">{hasFilters ? "נסה לשנות את החיפוש או הסינון." : "צור את ההזמנה הראשונה כדי להתחיל."}</p>{hasFilters ? <Button variant="secondary" className="mt-4" onClick={clearFilters}>נקה סינון</Button> : <Link href="/dashboard/orders/new" className="mt-4"><Button><Plus size={16} /> הזמנה חדשה</Button></Link>}</div>
         ) : (
-          <div dir="rtl" className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
-            <table dir="rtl" className="w-max min-w-[950px] text-right text-sm">
+          <>
+            <div className="grid gap-3 p-3 md:hidden">
+              {filteredOrders.map((order) => {
+                const reminderAt = formatReminder(order.next_reminder_at);
+                const reminderDue = !!order.next_reminder_at && new Date(order.next_reminder_at).getTime() <= Date.now() && order.reminder_state !== "complete";
+                return (
+                  <article key={order.id} className="min-w-0 rounded-xl border border-slate-200 p-4 shadow-sm dark:border-slate-800">
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <Link href={`/dashboard/orders/${order.id}`} className="break-words font-extrabold text-indigo-600 hover:underline dark:text-indigo-400">{order.order_number}</Link>
+                        <p className="mt-1 break-words text-sm font-semibold text-slate-700 dark:text-slate-200">{order.supplier_name}</p>
+                      </div>
+                      <div className="shrink-0"><OrderStatusBadge status={order.status} /></div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-sm dark:border-slate-800">
+                      <div className="min-w-0"><p className="text-xs text-slate-500">סה״כ</p><p className="mt-1 break-words font-extrabold text-slate-900 dark:text-white">{order.currency} {order.final_total.toLocaleString("he-IL")}</p></div>
+                      <div className="min-w-0"><p className="text-xs text-slate-500">נוצר בתאריך</p><p className="mt-1 text-slate-700 dark:text-slate-200">{formatDate(order.created_at)}</p></div>
+                      <div className="col-span-2 min-w-0"><p className="text-xs text-slate-500">תזכורת</p>{order.reminder_state !== "complete" && reminderAt ? <p className={`mt-1 break-words text-xs font-bold ${reminderDue ? "text-amber-700 dark:text-amber-300" : "text-indigo-700 dark:text-indigo-300"}`}>{reminderDue ? "דורשת טיפול" : reminderAt}</p> : <p className="mt-1 text-xs text-slate-400">אין תזכורת</p>}</div>
+                    </div>
+                    <Link href={`/dashboard/orders/${order.id}`} className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/70">פתיחת הזמנה <ArrowLeft size={15} /></Link>
+                  </article>
+                );
+              })}
+            </div>
+            <div dir="rtl" className="hidden w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain md:block">
+              <table dir="rtl" className="w-max min-w-[950px] text-right text-sm">
               <thead className="border-b border-slate-100 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/40"><tr>{["מס' הזמנה", "ספק", "סטטוס", "תזכורת", "סה\"כ", "נוצר בתאריך", ""].map((heading, index) => <th key={heading || index} className="px-5 py-3 text-xs font-extrabold text-slate-500">{heading}</th>)}</tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredOrders.map((order) => {
@@ -148,8 +172,9 @@ export default function OrdersPage() {
                   );
                 })}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+          </>
         )}
       </section>
     </div>
