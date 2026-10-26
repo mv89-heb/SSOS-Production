@@ -62,7 +62,7 @@ export default function ReportsInsightsPage() {
   const maxSpend = Math.max(1,...monthlySpend.map(x=>x.amount));
   const categoryStats = useMemo(() => {
     const groups = new Map<string,number>();
-    visibleProducts.forEach(p=>{const key=p.category?.trim()||"ללא קטגוריה";groups.set(key,(groups.get(key)||0)+Math.max(0,Number(p.current_stock??0))*Math.max(0,Number(p.current_price??0));});
+    visibleProducts.forEach(p=>{const key=p.category?.trim()||"ללא קטגוריה";groups.set(key,(groups.get(key)||0)+Math.max(0,Number(p.current_stock??0))*Math.max(0,Number(p.current_price??0)));});
     return Array.from(groups.entries()).map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value).slice(0,7);
   }, [visibleProducts]);
   const maxCategory = Math.max(1,...categoryStats.map(x=>x.value));
