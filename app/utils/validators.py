@@ -53,7 +53,12 @@ def is_strong_password(password: str) -> bool:
 
 def validate_product_payload(data: dict) -> str | None:
     """Return an error message for invalid product fields, otherwise None."""
-    for field in ("units_per_carton", "current_stock", "min_stock", "recommended_stock"):
+    if "units_per_carton" in data and data["units_per_carton"] is not None:
+        value = data["units_per_carton"]
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            return "units_per_carton must be a positive integer"
+
+    for field in ("current_stock", "min_stock", "recommended_stock"):
         if field in data and data[field] is not None:
             value = data[field]
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
