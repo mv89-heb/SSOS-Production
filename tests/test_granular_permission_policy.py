@@ -15,13 +15,13 @@ def user(role="employee", active=True, authenticated=True, permissions=None):
     )
 
 
-def test_employee_defaults_allow_order_preparation_but_not_approval_or_sending():
+def test_employee_defaults_support_internal_order_workflow():
     permissions = effective_permissions(user("employee"))
     assert permissions["orders.view"] is True
     assert permissions["orders.create"] is True
     assert permissions["orders.edit"] is True
-    assert permissions["orders.approve"] is False
-    assert permissions["orders.mark_sent"] is False
+    assert permissions["orders.approve"] is True
+    assert permissions["orders.mark_sent"] is True
     assert permissions["orders.complete"] is True
     assert permissions["orders.delete"] is False
     assert permissions["permissions.manage"] is False
