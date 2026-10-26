@@ -9,6 +9,7 @@ import { apiClient } from "@/services/api-client";
 
 type CountStatus = {
   active_products: number;
+  assigned_products: number;
   counted_products_last_7_days: number;
   completion_percent: number;
   completed: boolean;
@@ -47,8 +48,8 @@ export default function WeeklyInventoryCountGate({ children }: { children: React
           <div className="rounded-2xl bg-amber-100 p-3 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"><AlertTriangle size={26} /></div>
           <div>
             <h2 className="text-xl font-black">נדרשת ספירת מלאי שבועית</h2>
-            <p className="mt-2 leading-7">מועד הספירה הגיע. יש לספור את כל המוצרים הפעילים ולשמור את הספירה לפני שממשיכים בפעולות במערכת.</p>
-            <p className="mt-2 text-sm font-bold">הושלמו {status.data?.completion_percent ?? 0}% מתוך {status.data?.active_products ?? 0} מוצרים.</p>
+            <p className="mt-2 leading-7">מועד הספירה השבועית הגיע. יש להשלים את קבוצת המוצרים שהוקצתה לשבוע הזה לפני שממשיכים בפעולות במערכת.</p>
+            <p className="mt-2 text-sm font-bold">הושלמו {status.data?.completion_percent ?? 0}% מתוך {status.data?.assigned_products ?? 0} מוצרים שהוקצו השבוע.</p>
             <Link href="/dashboard/inventory/count" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-black text-white hover:bg-indigo-700">
               <ClipboardCheck size={18} /> להתחלת ספירת מלאי
             </Link>
