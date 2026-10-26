@@ -141,7 +141,18 @@ class ReceiptService:
             notes=notes,
         )
         db.session.add(receipt)
-        db.session.flush()
+        try:
+            db.session.flush()
+        except IntegrityError as exc:
+            original = getattr(exc, "orig", exc)
+            constraint_name = getattr(getattr(original, "diag", None), "constraint_name", "")
+            message = str(original)
+            if (
+                constraint_name == "uq_receipts_tenant_receipt_number"
+                or "UNIQUE constraint failed: receipts.tenant_id, receipts.receipt_number" in message
+            ):
+                raise Conflict("Receipt number already exists for this tenant") from exc
+            raise
 
         for order_item_id, quantity in parsed.items():
             order_item = by_id[order_item_id]
