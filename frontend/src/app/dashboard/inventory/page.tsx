@@ -66,7 +66,7 @@ export default function InventoryPage() {
   const rows = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("he");
     const filtered = products.filter((product) => {
-      const matches = !query || [product.name, product.sku, product.barcode, product.category].filter(Boolean).some((v) => String(v).toLocaleLowerCase("he").includes(query));
+      const matches = !query || [product.name, product.sku, product.barcode, product.category, product.supplier_sku, recommendationByProduct.get(product.id)?.supplier_schedule?.supplier_name].filter(Boolean).some((v) => String(v).toLocaleLowerCase("he").includes(query));
       const status = stockStatus(product);
       const matchesStatus = statusFilter === "all" || status === statusFilter;
       const matchesTab = inventoryTab === "all" || (inventoryTab === "urgent" ? status === "urgent" : status === "reorder");
