@@ -249,7 +249,7 @@ class GeminiProvider:
         detail = str(exc).lower()
         return any(marker in detail for marker in (
             "model not found", "not found for api version", "unknown model",
-            "unsupported model", "model is not supported", "does not support the requested",
+            "unsupported model", "model is not supported", "not supported for generatecontent", "does not support the requested",
         ))
 
     @staticmethod
