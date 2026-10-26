@@ -73,3 +73,41 @@ def test_name_lookup_rejects_near_match():
         result = lookup_product_image("990000010000123", "תנובה חלב 3% 1 ליטר")
     assert result["image_url"] is None
     assert result["reason"] == "product_not_found"
+
+
+
+def test_falls_back_to_upcitemdb_for_exact_barcode_after_off_outage():
+    fallback_payload = {"code": "OK", "items": [{
+        "ean": "0123456789012", "title": "חלב תנובה 3% 1 ליטר",
+        "images": ["https://images.example-cdn.com/milk.jpg"],
+    }]}
+    with patch("app.services.product_image_service._request_json", side_effect=[None, fallback_payload]):
+        result = lookup_product_image("0123456789012", "חלב תנובה 3% 1 ליטר")
+    assert result["reason"] == "matched"
+    assert result["source"] == "UPCitemdb"
+    assert result["match_method"] == "exact_barcode"
+    assert result["image_url"] == "https://images.example-cdn.com/milk.jpg"
+
+
+def test_fallback_name_search_requires_exact_normalized_title():
+    payload = {"code": "OK", "total": 1, "items": [{
+        "ean": "0123456789012", "title": "חלב תנובה 3% 1 ליטר",
+        "images": ["https://images.example-cdn.com/milk.jpg"],
+    }]}
+    with patch("app.services.product_image_service._request_json", return_value={"products": []}), \
+         patch("app.services.product_image_service._upcitemdb_request", return_value=payload):
+        result = lookup_product_image("990000010000123", "תנובה חלב 3% 1 ליטר")
+    assert result["reason"] == "matched_by_exact_name"
+    assert result["source"] == "UPCitemdb"
+    assert result["match_method"] == "exact_normalized_name"
+
+
+def test_fallback_rejects_untrusted_non_https_image_url():
+    payload = {"code": "OK", "items": [{
+        "ean": "0123456789012", "title": "Milk",
+        "images": ["http://images.example-cdn.com/milk.jpg"],
+    }]}
+    with patch("app.services.product_image_service._request_json", side_effect=[None, payload]):
+        result = lookup_product_image("0123456789012")
+    assert result["image_url"] is None
+    assert result["reason"] == "product_not_found"
