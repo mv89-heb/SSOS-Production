@@ -280,7 +280,7 @@ export default function SupplierOverviewPage() {
                   <article key={rowKey(row)} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <Link href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="break-words font-black hover:text-violet-600">{row.product_name}</Link>
+                        <Link href={row.master_product_id ? "/dashboard/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="break-words font-black hover:text-violet-600">{row.product_name}</Link>
                         <p className="mt-1 break-words text-xs text-slate-500">{row.category || "ללא קטגוריה"} · {row.sku || "ללא מק״ט"}</p>
                       </div>
                       <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-bold dark:bg-slate-800">{row.supplier_count} ספקים</span>
@@ -311,7 +311,7 @@ export default function SupplierOverviewPage() {
                       <button type="button" onClick={() => setExpandedRows((previous) => ({ ...previous, [rowKey(row)]: !previous[rowKey(row)] }))} className="inline-flex min-h-10 items-center gap-1 rounded-lg bg-violet-50 px-3 py-2 text-xs font-black text-violet-700 dark:bg-violet-950/40 dark:text-violet-200">
                         {expandedRows[rowKey(row)] ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {expandedRows[rowKey(row)] ? "הסתר הצעות" : "כל הצעות הספקים"}
                       </button>
-                      <Link href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="inline-flex min-h-10 items-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-black dark:border-slate-700">פתח מוצר</Link>
+                      <Link href={row.master_product_id ? "/dashboard/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="inline-flex min-h-10 items-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-black dark:border-slate-700">פתח מוצר</Link>
                     </div>
                     {expandedRows[rowKey(row)] && (
                       <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 dark:border-slate-800">
@@ -361,7 +361,7 @@ export default function SupplierOverviewPage() {
                     <Fragment key={rowKey(row)}>
                     <tr className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
                       <td className="px-4 py-4">
-                        <Link href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="font-black hover:text-violet-600">
+                        <Link href={row.master_product_id ? "/dashboard/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="font-black hover:text-violet-600">
                           {row.product_name}
                         </Link>
                         <span className="mt-1 block text-xs text-slate-400">
@@ -407,7 +407,7 @@ export default function SupplierOverviewPage() {
                           <button type="button" onClick={() => setExpandedRows((previous) => ({ ...previous, [rowKey(row)]: !previous[rowKey(row)] }))} className="inline-flex items-center gap-1 rounded-lg bg-violet-50 px-3 py-2 text-xs font-black text-violet-700 dark:bg-violet-950/40 dark:text-violet-200">
                             {expandedRows[rowKey(row)] ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {expandedRows[rowKey(row)] ? "הסתר" : "כל ההצעות"}
                           </button>
-                          <Link href={row.master_product_id ? "/dashboard/catalog/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-black dark:border-slate-700">
+                          <Link href={row.master_product_id ? "/dashboard/master-products" : "/dashboard/price-intelligence?product=" + row.product_id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-black dark:border-slate-700">
                             פתח
                           </Link>
                         </div>
