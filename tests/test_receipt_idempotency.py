@@ -110,3 +110,47 @@ def test_failed_over_receipt_rolls_back_idempotency_key_and_stock(
     assert db.session.query(Receipt).filter_by(order_id=order["id"]).count() == 1
     assert db.session.query(InventoryMovement).filter_by(product_id=product_id).count() == 1
     assert db.session.get(Product, product_id).current_stock == 5
+
+
+
+def test_duplicate_receipt_number_returns_conflict_without_changing_stock(
+    logged_in_client_a, make_order, db
+):
+    first_response, _, first_product_id = make_order(
+        logged_in_client_a, quantity=1, price=10.0, sku="SKU-RECEIPT-A"
+    )
+    first_order = first_response.get_json()["order"]
+    first_item_id = first_order["order_items"][0]["id"]
+    _send_order(db, first_order["id"])
+
+    first_receipt = logged_in_client_a.post(
+        f"/api/orders/{first_order['id']}/receipts",
+        json={
+            "receipt_number": "RCPT-DUPLICATE-001",
+            "items": [{"order_item_id": first_item_id, "quantity": 1}],
+        },
+        headers={"Idempotency-Key": "duplicate-receipt-number-first"},
+    )
+    assert first_receipt.status_code == 201, first_receipt.get_json()
+    assert db.session.get(Product, first_product_id).current_stock == 1
+
+    second_response, _, second_product_id = make_order(
+        logged_in_client_a, quantity=1, price=12.0, sku="SKU-RECEIPT-B"
+    )
+    second_order = second_response.get_json()["order"]
+    second_item_id = second_order["order_items"][0]["id"]
+    _send_order(db, second_order["id"])
+
+    duplicate = logged_in_client_a.post(
+        f"/api/orders/{second_order['id']}/receipts",
+        json={
+            "receipt_number": "RCPT-DUPLICATE-001",
+            "items": [{"order_item_id": second_item_id, "quantity": 1}],
+        },
+        headers={"Idempotency-Key": "duplicate-receipt-number-second"},
+    )
+
+    assert duplicate.status_code == 409, duplicate.get_json()
+    assert "receipt number already exists" in duplicate.get_json()["message"].lower()
+    assert db.session.query(Receipt).filter_by(order_id=second_order["id"]).count() == 0
+    assert db.session.get(Product, second_product_id).current_stock in (None, 0)
