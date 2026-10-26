@@ -81,6 +81,36 @@ def _init_extensions(app):
 
 def _register_request_context(app):
     @app.before_request
+    def enforce_weekly_inventory_count():
+        """Require employees to finish a full weekly count before changing operational data."""
+        from flask_login import current_user
+
+        if not request.path.startswith("/api/") or not current_user.is_authenticated:
+            return None
+        if str(getattr(current_user, "role", "") or "").strip().lower() != "employee":
+            return None
+        if request.method in {"GET", "HEAD", "OPTIONS"}:
+            return None
+        # Employees must always be able to submit the count and log out, even while overdue.
+        if request.path == "/api/inventory/count/bulk" and request.method == "POST":
+            return None
+        if request.path == "/api/auth/logout" and request.method == "POST":
+            return None
+
+        from app.services.inventory_calendar_service import InventoryCalendarService
+
+        status = InventoryCalendarService(current_user.tenant_id).count_status()
+        if not status.get("due"):
+            return None
+        return jsonify({
+            "success": False,
+            "error": "weekly_inventory_count_required",
+            "message": "יש להשלים ספירת מלאי שבועית מלאה לפני ביצוע פעולות במערכת.",
+            "count_status": status,
+            "action_url": "/dashboard/inventory/count",
+        }), 423
+
+    @app.before_request
     def attach_request_id():
         request_id = request.headers.get("X-Request-ID", "").strip()
         if not request_id or len(request_id) > 128:
