@@ -4,12 +4,15 @@ Barcode matches are preferred. If no usable barcode exists, a name search is
 accepted only when the normalized product-name token sets match exactly.
 """
 import json
+import logging
 import re
 import unicodedata
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
+
+logger = logging.getLogger(__name__)
 
 SOURCE_NAME = "Open Food Facts"
 SOURCE_BASE = "https://world.openfoodfacts.org"
@@ -38,7 +41,22 @@ def _request_json(url, timeout):
     try:
         with urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, OSError, ValueError, UnicodeDecodeError):
+    except HTTPError as exc:
+        # Log only the status and host, never product names or barcodes.
+        from urllib.parse import urlparse
+        logger.warning("Product image source returned HTTP %s from %s", exc.code, urlparse(url).hostname)
+        return None
+    except URLError as exc:
+        from urllib.parse import urlparse
+        reason = getattr(exc, "reason", None)
+        logger.warning("Product image source connection failed at %s (%s)", urlparse(url).hostname, type(reason).__name__ if reason is not None else "URLError")
+        return None
+    except (TimeoutError, OSError) as exc:
+        from urllib.parse import urlparse
+        logger.warning("Product image source request failed at %s (%s)", urlparse(url).hostname, type(exc).__name__)
+        return None
+    except (ValueError, UnicodeDecodeError) as exc:
+        logger.warning("Product image source returned invalid JSON (%s)", type(exc).__name__)
         return None
 
 
@@ -112,6 +130,10 @@ def lookup_product_image(barcode, product_name=None, timeout=4):
         endpoint = f"{SOURCE_BASE}/api/v2/product/{quote(normalized, safe='')}.json?fields=code,product_name,brands,quantity,image_front_url,selected_images"
         payload = _request_json(endpoint, timeout)
         barcode_reason = "source_unavailable" if payload is None else "product_not_found"
+        # A failed barcode request indicates a source/network problem, not a
+        # product mismatch. Avoid a second request to the same unavailable host.
+        if payload is None:
+            return {"image_url": None, "reason": "source_unavailable"}
         if isinstance(payload, dict) and payload.get("status") == 1 and isinstance(payload.get("product"), dict):
             product = payload["product"]
             returned_code = _digits(product.get("code"))
