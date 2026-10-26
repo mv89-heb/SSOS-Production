@@ -219,12 +219,9 @@ def lookup_product_image(barcode, product_name=None, timeout=4):
         if fallback.get("reason") not in {"product_not_found", "image_not_available"}:
             return fallback
         if off_unavailable:
-            if product_name:
-                fallback = _upcitemdb_lookup(None, product_name, timeout)
-                if fallback.get("image_url") or fallback.get("reason") == "source_unavailable":
-                    return fallback
-                return fallback
-            return {"image_url": None, "reason": "source_unavailable"}
+            # The fallback call above already attempted both barcode and, when
+            # supplied, exact-name lookup. Do not spend a second search quota.
+            return fallback
     if product_name:
         primary = _name_lookup(product_name, timeout)
         if primary.get("image_url"):
