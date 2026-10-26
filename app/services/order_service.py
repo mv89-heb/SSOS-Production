@@ -321,7 +321,7 @@ class OrderService:
             if quantity_unit == "carton":
                 if not isinstance(pack_size, int) or isinstance(pack_size, bool) or pack_size <= 0:
                     raise BadRequest(f"Product {p_id} requires a valid units_per_carton value for carton ordering")
-                if offer is not None and str(stock_unit or "").strip() != "יחידה" and product.units_per_carton and pack_size != product.units_per_carton:
+                if offer is not None and str(stock_unit or "").strip() != "יחידה" and pack_size != product.units_per_carton:
                     raise Conflict("This supplier's carton size differs from the product's stock carton size; carton ordering is not safe")
                 unit_price = source_unit_price * pack_size if str(source_unit or "").strip() == "יחידה" else source_unit_price
                 order_unit = "קרטון"
