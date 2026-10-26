@@ -911,6 +911,7 @@ def enrich_missing_product_images():
     name_searches = 0
     missing_or_synthetic_barcode = 0
     source_unavailable = 0
+    attempted = 0
     reasons = {}
     for product in candidates:
         barcode = str(product.barcode or "").strip()
@@ -918,14 +919,17 @@ def enrich_missing_product_images():
             missing_or_synthetic_barcode += 1
             name_searches += 1
         result = lookup_product_image(product.barcode, product.name)
+        attempted += 1
         reason = result.get("reason") or "unknown"
         reasons[reason] = reasons.get(reason, 0) + 1
-        # Do not suppress this product for 30 days when the external source failed.
-        # Leave it eligible so a later batch can retry once the source is reachable.
+        # A source outage affects every product in this batch. Do not hammer
+        # the unavailable provider with one request per product; leave this
+        # product and all unprocessed candidates eligible for a later retry.
         if reason == "source_unavailable":
             source_unavailable += 1
-        else:
-            product.image_checked_at = now
+            no_match += 1
+            break
+        product.image_checked_at = now
         if result.get("image_url"):
             # Only blank image URLs are queried, so manual/curated images remain intact.
             product.image_url = result["image_url"]
@@ -946,7 +950,8 @@ def enrich_missing_product_images():
     )
     return jsonify({
         "success": True,
-        "attempted": len(candidates),
+        "attempted": attempted,
+        "deferred_due_to_source_outage": max(0, len(candidates) - attempted) if source_unavailable else 0,
         "matched": len(matched),
         "no_match": no_match,
         "source_unavailable": source_unavailable,

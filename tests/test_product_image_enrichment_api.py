@@ -67,3 +67,19 @@ def test_image_enrichment_does_not_mark_source_outage_as_checked(logged_in_clien
     assert body["remaining_eligible"] >= 1
     product = db.session.get(Product, product_id)
     assert product.image_checked_at is None
+
+
+def test_image_enrichment_stops_batch_after_source_outage(logged_in_client_a, db):
+    first_id = _make_product(logged_in_client_a, "Offline Batch Supplier", "Offline product one", "IMG-OFFLINE-1", "1234567890126")
+    second_id = _make_product(logged_in_client_a, "Offline Batch Supplier", "Offline product two", "IMG-OFFLINE-2", "1234567890127")
+    unavailable = {"image_url": None, "reason": "source_unavailable"}
+    with patch("app.routes.catalog.lookup_product_image", return_value=unavailable) as lookup:
+        response = logged_in_client_a.post("/api/catalog/products/images/enrich", json={"limit": 10})
+    assert response.status_code == 200, response.get_json()
+    body = response.get_json()
+    assert body["attempted"] == 1
+    assert body["source_unavailable"] == 1
+    assert body["deferred_due_to_source_outage"] == 1
+    lookup.assert_called_once()
+    assert db.session.get(Product, first_id).image_checked_at is None
+    assert db.session.get(Product, second_id).image_checked_at is None
