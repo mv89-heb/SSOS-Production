@@ -141,7 +141,7 @@ def test_bulk_inventory_count_replay_does_not_reset_later_stock(logged_in_client
         "items": [{"product_id": product_id, "quantity": 8}],
     }
     first = logged_in_client_a.post("/api/inventory/count/bulk", json=payload)
-    assert first.status_code == 200, first.get_json()
+    assert first.status_code == 201, first.get_json()
     assert db.session.get(Product, product_id).current_stock == 8
 
     issue = logged_in_client_a.post(
@@ -149,7 +149,7 @@ def test_bulk_inventory_count_replay_does_not_reset_later_stock(logged_in_client
         json={"product_id": product_id, "movement_type": "issue", "quantity": 2},
     )
     assert issue.status_code == 201, issue.get_json()
-    assert db.session.get(__import__("app.models.product", fromlist=["Product"]).Product, product_id).current_stock == 6
+    assert db.session.get(Product, product_id).current_stock == 6
 
     replay = logged_in_client_a.post("/api/inventory/count/bulk", json=payload)
     assert replay.status_code == 200, replay.get_json()
