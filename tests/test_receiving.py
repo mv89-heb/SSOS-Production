@@ -124,3 +124,43 @@ def test_receipt_rejects_order_item_from_another_order(logged_in_client_a, make_
 
     assert rejected.status_code == 404, rejected.get_json()
     assert db.session.query(Receipt).filter_by(order_id=first_order["id"]).count() == 0
+
+
+
+def test_carton_receipt_converts_to_piece_stock(logged_in_client_a, db):
+    supplier_response = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "Carton Receipt Supplier"})
+    assert supplier_response.status_code == 201, supplier_response.get_json()
+    supplier_id = supplier_response.get_json()["supplier"]["id"]
+    product_response = logged_in_client_a.post("/api/catalog/products", json={
+        "supplier_id": supplier_id,
+        "name": "Carton receipt milk",
+        "sku": "MILK-CARTON-RECEIPT",
+        "current_price": 2,
+        "unit": "יחידה",
+        "units_per_carton": 12,
+        "current_stock": 0,
+    })
+    assert product_response.status_code == 201, product_response.get_json()
+    product_id = product_response.get_json()["product"]["id"]
+    order_response = logged_in_client_a.post("/api/orders", json={
+        "supplier_id": supplier_id,
+        "items": [{"product_id": product_id, "quantity": 3, "quantity_unit": "carton"}],
+    })
+    assert order_response.status_code == 201, order_response.get_json()
+    order = order_response.get_json()["order"]
+    order_item_id = order["order_items"][0]["id"]
+    _send_order(logged_in_client_a, db, order["id"])
+
+    received = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={"items": [{"order_item_id": order_item_id, "quantity": 2}]},
+    )
+    assert received.status_code == 201, received.get_json()
+    product = db.session.get(Product, product_id)
+    assert product.current_stock == 24
+
+    movement = db.session.query(InventoryMovement).filter_by(product_id=product_id).one()
+    assert float(movement.quantity) == 24
+    assert float(movement.balance_after) == 24
+    receipt_item = db.session.query(ReceiptItem).filter_by(order_item_id=order_item_id).one()
+    assert float(receipt_item.quantity) == 2
