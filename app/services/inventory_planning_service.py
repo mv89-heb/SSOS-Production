@@ -304,6 +304,7 @@ class InventoryPlanningService:
         current_stock = Decimal(str(product.current_stock or 0))
         recommended_order = max(Decimal("0"), reorder_point - current_stock)
         coverage_days = (current_stock / average_daily_usage) if average_daily_usage > 0 else None
+        carton_metrics = self._carton_metrics(product, current_stock, estimated_depletion, average_daily_usage, reorder_point, recommended_order)
         if len(counts) < 2:
             status = "insufficient_data"
         elif current_stock <= 0:
@@ -312,4 +313,4 @@ class InventoryPlanningService:
             status = "reorder"
         else:
             status = "healthy"
-        return {"product_id": product.id, "product_name": product.name, "current_stock": float(current_stock), "lookback_days": lookback_days, "stock_checks_in_period": len(counts), "observed_days": round(float(observed_days), 1), "estimated_depletion": float(estimated_depletion), "average_daily_usage": round(float(average_daily_usage), 3), "lead_time_days": effective_lead_time, "days_until_next_order": days_until_order, "planning_horizon_days": horizon_days, "lead_time_demand": round(float(lead_time_demand), 3), "safety_stock": round(float(safety_stock), 3), "reorder_point": round(float(reorder_point), 3), "recommended_order": round(float(recommended_order), 3), "coverage_days": round(float(coverage_days), 1) if coverage_days is not None else None, "status": status, "data_ready": len(counts) >= 2, "supplier_schedule": schedule}
+        return {"product_id": product.id, "product_name": product.name, "current_stock": float(current_stock), "lookback_days": lookback_days, "stock_checks_in_period": len(counts), "observed_days": round(float(observed_days), 1), "estimated_depletion": float(estimated_depletion), "average_daily_usage": round(float(average_daily_usage), 3), "lead_time_days": effective_lead_time, "days_until_next_order": days_until_order, "planning_horizon_days": horizon_days, "lead_time_demand": round(float(lead_time_demand), 3), "safety_stock": round(float(safety_stock), 3), "reorder_point": round(float(reorder_point), 3), "recommended_order": round(float(recommended_order), 3), "coverage_days": round(float(coverage_days), 1) if coverage_days is not None else None, "status": status, "data_ready": len(counts) >= 2, "supplier_schedule": schedule, **carton_metrics}
