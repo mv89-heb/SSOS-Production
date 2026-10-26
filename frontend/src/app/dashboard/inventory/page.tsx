@@ -212,7 +212,7 @@ export default function InventoryPage() {
           <div className="flex items-center justify-between"><span className="text-sm font-bold text-amber-800 dark:text-amber-300">דורש השלמת נתונים</span><span className="rounded-xl bg-amber-100 p-2 text-amber-800 dark:bg-amber-900/40"><ClipboardCheck size={20}/></span></div>
           <div className="mt-3 text-3xl font-black">{number(needsDataCount)}</div><div className="mt-1 text-xs text-slate-500">מוצרים שממתינים לספירות או ליעד מלאי</div>
         </button>
-        <button type="button" onClick={() => setStatusFilter("healthy")} className="rounded-2xl border border-slate-200 bg-white p-5 text-right shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-950">
+        <button type="button" onClick={() => setStatusFilter("healthy")} className={`rounded-2xl border p-5 text-right shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${statusFilter === "healthy" ? "border-emerald-300 bg-emerald-50 ring-2 ring-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/30" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"}`}>
           <div className="flex items-center justify-between"><span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">מלאי תקין</span><span className="rounded-xl bg-emerald-100 p-2 text-emerald-700 dark:bg-emerald-900/40"><CheckCircle2 size={20}/></span></div>
           <div className="mt-3 text-3xl font-black">{number(healthyCount)}</div><div className="mt-1 text-xs text-slate-500">מוצרים עם נתונים תקינים שאינם דורשים רכש</div>
         </button>
