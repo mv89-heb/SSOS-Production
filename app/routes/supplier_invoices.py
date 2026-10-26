@@ -300,6 +300,18 @@ def upload_supplier_invoice_attachment(invoice_id):
         invoice.attachment_mime_type = mime_type
         invoice.attachment_size = len(data)
         invoice.attachment_data = data
+        AuditService.log_event(
+            current_user.tenant_id,
+            current_user.id,
+            "supplier_invoice.attachment_uploaded",
+            f"Attachment uploaded for supplier invoice {invoice.invoice_number}",
+            {
+                "invoice_id": invoice.id,
+                "filename": filename,
+                "mime_type": mime_type,
+                "size_bytes": len(data),
+            },
+        )
         db.session.commit()
         return jsonify({"success": True, "invoice": invoice.to_dict()}), 200
     except HTTPException as exc:
@@ -384,6 +396,21 @@ def save_invoice_reconciliation(invoice_id):
                 "amount_difference": float(amount_diff),
             })
         invoice.line_comparison = saved
+        AuditService.log_event(
+            current_user.tenant_id,
+            current_user.id,
+            "supplier_invoice.reconciliation_saved",
+            f"Reconciliation saved for supplier invoice {invoice.invoice_number}",
+            {
+                "invoice_id": invoice.id,
+                "order_id": order.id,
+                "line_count": len(saved),
+                "lines_with_quantity_or_price_difference": sum(
+                    1 for line in saved
+                    if line["quantity_difference"] != 0 or line["unit_price_difference"] != 0
+                ),
+            },
+        )
         db.session.commit()
         return jsonify({"success": True, "invoice": invoice.to_dict()}), 200
     except HTTPException as exc:
