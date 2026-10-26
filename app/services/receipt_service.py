@@ -122,6 +122,17 @@ class ReceiptService:
                     f"({remaining})"
                 )
 
+        duplicate_receipt_id = db.session.scalar(
+            select(Receipt.id)
+            .where(
+                Receipt.tenant_id == self.tenant_id,
+                Receipt.receipt_number == receipt_number,
+            )
+            .limit(1)
+        )
+        if duplicate_receipt_id is not None:
+            raise Conflict("Receipt number already exists for this tenant")
+
         if idempotency_key:
             existing = self._claim_or_replay_idempotency_key(
                 user_id=user.id,
