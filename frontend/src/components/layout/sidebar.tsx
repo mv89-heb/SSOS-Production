@@ -5,7 +5,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3, FileSearch, CalendarDays, BrainCircuit, Warehouse } from "lucide-react";
+import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3, FileSearch, CalendarDays, BrainCircuit, Warehouse, FileText } from "lucide-react";
 
 const ORGANIZATION_NAME = "ישיבת אוהבי ירושלים - ראשית";
 const groups = [
@@ -19,6 +19,7 @@ const groups = [
   { label: "ניתוח וקבלת החלטות", items: [
     { name: "השוואת מחירים", href: "/dashboard/price-intelligence", icon: BarChart3 },
     { name: "תמונת מצב רכש", href: "/dashboard/procurement-intelligence", icon: BrainCircuit },
+    { name: "דוחות ותובנות", href: "/dashboard/reports", icon: FileText },
     { name: "מסמכים וקליטה", href: "/dashboard/document-intelligence", icon: FileSearch },
   ]},
   { label: "מעקב וניהול", items: [
