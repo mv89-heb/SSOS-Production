@@ -25,6 +25,7 @@ export default function InventoryCountPage() {
   const [search, setSearch] = useState("");
   const [quantities, setQuantities] = useState<Record<number, string>>({});
   const [note, setNote] = useState("");
+  const [countId, setCountId] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("remaining");
@@ -86,6 +87,7 @@ export default function InventoryCountPage() {
         const draft = JSON.parse(raw);
         if (draft.quantities && typeof draft.quantities === "object") setQuantities(draft.quantities);
         if (typeof draft.note === "string") setNote(draft.note);
+        if (typeof draft.countId === "string") setCountId(draft.countId);
       }
     } catch {
       // Ignore malformed local drafts.
@@ -97,13 +99,22 @@ export default function InventoryCountPage() {
   useEffect(() => {
     if (!draftRestored) return;
     const hasDraft = Object.keys(quantities).length > 0 || note.trim().length > 0;
+    if (!hasDraft && countId) {
+      setCountId("");
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* local storage may be unavailable */ }
+      return;
+    }
+    if (hasDraft && !countId) {
+      setCountId(crypto.randomUUID());
+      return;
+    }
     try {
-      if (hasDraft) localStorage.setItem(DRAFT_KEY, JSON.stringify({ quantities, note, savedAt: new Date().toISOString() }));
+      if (hasDraft) localStorage.setItem(DRAFT_KEY, JSON.stringify({ quantities, note, countId, savedAt: new Date().toISOString() }));
       else localStorage.removeItem(DRAFT_KEY);
     } catch {
       // Local storage may be unavailable; counting still works.
     }
-  }, [quantities, note, draftRestored]);
+  }, [quantities, note, countId, draftRestored]);
 
   useEffect(() => () => {
     if (scanTimer.current) window.clearTimeout(scanTimer.current);
@@ -180,11 +191,12 @@ export default function InventoryCountPage() {
       }
       const result = await apiClient.post<{ success: boolean; count_id: string; counted: number; counted_at: string; movements: any[] }>(
         "/api/inventory/count/bulk",
-        { items, note: note.trim() || undefined }
+        { items, note: note.trim() || undefined, count_id: countId || crypto.randomUUID() }
       );
       setMessage("נשמרה ספירה עבור " + result.data.counted + " מוצרים והמלאי עודכן.");
       setQuantities({});
       setNote("");
+      setCountId("");
       localStorage.removeItem(DRAFT_KEY);
       setFilter("remaining");
       await qc.invalidateQueries({ queryKey: ["inventory"] });
