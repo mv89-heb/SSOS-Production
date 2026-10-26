@@ -278,14 +278,21 @@ class InventoryUnifiedPlanningService:
             recommended = max(Decimal("0"), target_stock - available)
             coverage = current_stock / daily_rate if daily_rate > 0 else None
             checks = metric.get("stock_checks", 0)
-            if checks < 2:
+            minimum_target = Decimal(str(product.min_stock)) if product.min_stock is not None and Decimal(str(product.min_stock)) > 0 else None
+            recommended_target = Decimal(str(product.recommended_stock)) if product.recommended_stock is not None and Decimal(str(product.recommended_stock)) > 0 else None
+            configured_stock_target = recommended_target if recommended_target is not None else minimum_target
+            if checks < 2 or configured_stock_target is None:
                 status = "insufficient_data"
+                needs_data_reason = "insufficient_physical_counts" if checks < 2 else "stock_target_not_configured"
             elif current_stock <= 0:
                 status = "urgent"
+                needs_data_reason = None
             elif available <= target_stock:
                 status = "reorder"
+                needs_data_reason = None
             else:
                 status = "healthy"
+                needs_data_reason = None
             rows.append({
                 "product_id": product.id,
                 "product_name": product.name,
@@ -308,6 +315,8 @@ class InventoryUnifiedPlanningService:
                 "holiday_adjusted_demand": round(float(demand), 3),
                 "safety_stock": round(float(safety_stock), 3),
                 "target_stock": round(float(target_stock), 3),
+                "configured_stock_target": float(configured_stock_target) if configured_stock_target is not None else None,
+                "needs_data_reason": needs_data_reason,
                 "holiday_adjusted_target_stock": round(float(target_stock), 3),
                 "reorder_point": round(float(target_stock), 3),
                 "recommended_order": round(float(recommended), 3),
