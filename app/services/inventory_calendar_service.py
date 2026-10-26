@@ -327,11 +327,20 @@ class InventoryCalendarService:
             )
         ).all()
         counted_products = len(counted_ids)
-        completed = product_count > 0 and counted_products == product_count
+        # A weekly count is complete only when every active product has a physical
+        # count in the rolling seven-day window. Once the Sunday deadline passes,
+        # keep the requirement active on every subsequent day until completion.
+        completed = product_count == 0 or counted_products == product_count
         days_until_due = (self.DEFAULT_COUNT_WEEKDAY - today.weekday()) % 7
-        if days_until_due == 0 and completed:
-            days_until_due = 7
-        next_due = today + timedelta(days=days_until_due)
+        upcoming_due = today + timedelta(days=days_until_due)
+        if completed:
+            next_due = upcoming_due + (timedelta(days=7) if upcoming_due == today else timedelta(days=0))
+            due = False
+        else:
+            days_since_deadline = (today.weekday() - self.DEFAULT_COUNT_WEEKDAY) % 7
+            last_deadline = today - timedelta(days=days_since_deadline)
+            next_due = last_deadline
+            due = True
         return {
             "count_weekday": self.DEFAULT_COUNT_WEEKDAY,
             "count_time": f"{self.DEFAULT_COUNT_HOUR:02d}:00",
@@ -339,7 +348,7 @@ class InventoryCalendarService:
             "counted_products_last_7_days": counted_products,
             "completion_percent": round((counted_products / product_count) * 100, 1) if product_count else 0,
             "completed": completed,
-            "due": not completed and today >= next_due,
+            "due": due,
             "next_due_date": next_due.isoformat(),
             "window_start": window_start.isoformat(),
         }
