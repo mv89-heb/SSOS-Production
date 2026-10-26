@@ -30,7 +30,7 @@ type Pending = {
 };
 
 const money = (value: number | null | undefined, currency = "ILS") => {
-  if (value == null || !Number.isFinite(value)) return "אין מחיר";
+  if (value == null || !Number.isFinite(value) || value <= 0) return "אין מחיר";
   try { return new Intl.NumberFormat("he-IL", { style: "currency", currency, maximumFractionDigits: 2 }).format(value); }
   catch { return value.toFixed(2) + " " + currency; }
 };
