@@ -94,18 +94,15 @@ def test_submit_twice_rejected(logged_in_client_a, make_order):
     assert second.status_code == 409
 
 
-def test_full_lifecycle_can_be_completed_by_order_creator(logged_in_client_a, make_order):
+def test_order_creator_cannot_approve_own_order(logged_in_client_a, make_order):
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
     assert logged_in_client_a.post(f"/api/orders/{order_id}/submit").status_code == 200
     approved = logged_in_client_a.post(f"/api/orders/{order_id}/approve")
-    assert approved.status_code == 200, approved.get_json()
-    assert approved.get_json()["order"]["status"] == "approved"
-    sent = logged_in_client_a.post(f"/api/orders/{order_id}/sent")
-    assert sent.status_code == 200, sent.get_json()
-    completed = logged_in_client_a.post(f"/api/orders/{order_id}/complete")
-    assert completed.status_code == 200, completed.get_json()
-    assert completed.get_json()["order"]["status"] == "completed"
+    assert approved.status_code == 409, approved.get_json()
+    assert "creator" in approved.get_json()["message"].lower()
+    detail = logged_in_client_a.get(f"/api/orders/{order_id}")
+    assert detail.get_json()["order"]["status"] == "submitted"
 
 
 def test_approve_before_submit_rejected(logged_in_client_a, make_order):
