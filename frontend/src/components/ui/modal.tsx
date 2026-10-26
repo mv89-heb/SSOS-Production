@@ -24,7 +24,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center">
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-3 sm:p-4">
       <div
         className="absolute inset-0 bg-slate-900/40"
         onClick={onClose}
@@ -35,17 +35,17 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
         aria-modal="true"
         aria-labelledby="modal-title"
         className={cn(
-          "relative z-50 w-full max-w-lg rounded-xl bg-white p-6 shadow-xl",
+          "relative z-50 mx-0 max-h-[90vh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl bg-white p-4 shadow-xl sm:p-6",
           className
         )}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 id="modal-title" className="text-lg font-semibold text-slate-900">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 id="modal-title" className="min-w-0 break-words text-lg font-semibold text-slate-900">
             {title}
           </h2>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700"
+            className="shrink-0 text-slate-400 hover:text-slate-700"
             aria-label="סגירה"
           >
             <X size={20} />
