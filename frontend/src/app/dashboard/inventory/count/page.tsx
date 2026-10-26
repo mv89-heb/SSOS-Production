@@ -62,7 +62,22 @@ export default function InventoryCountPage() {
     queryFn: () => inventoryService.getRecommendations({ lookback_days: 30, safety_days: 2, limit: 500 }),
     staleTime: 60_000,
   });
-  const products = data?.products ?? [];
+  const currentUser = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: async () => (await apiClient.get<{ user: { role: string } }>("/api/auth/me")).data.user,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const countStatus = useQuery({
+    queryKey: ["inventory", "count-status"],
+    queryFn: async () => (await apiClient.get<{ due: boolean; due_product_ids: number[]; assigned_products: number; completion_percent: number; priority_products: number; rotation_cycle_weeks: number }>("/api/inventory/planning/count-status")).data,
+    staleTime: 15_000,
+  });
+  const allProducts = data?.products ?? [];
+  const assignedIds = useMemo(() => new Set(countStatus.data?.due_product_ids ?? []), [countStatus.data?.due_product_ids]);
+  const products = currentUser.data?.role === "employee"
+    ? allProducts.filter((product) => assignedIds.has(product.id))
+    : allProducts;
 
   useEffect(() => {
     try {
@@ -296,6 +311,19 @@ export default function InventoryCountPage() {
           <MiniStat label="נשארו" value={remainingCount} />
         </div>
       </header>
+
+      {currentUser.data?.role === "employee" && countStatus.data && (
+        <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-indigo-950 dark:border-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-100">
+          <div className="flex items-start gap-3">
+            <ClipboardCheck className="mt-1 shrink-0" size={22} />
+            <div>
+              <h2 className="font-black">המשימה השבועית שלך — ספירה מחזורית</h2>
+              <p className="mt-1 text-sm leading-6">אין צורך לספור את כל הקטלוג. השבוע הוקצו לך {countStatus.data.assigned_products} מוצרים מתוך {data?.products.length ?? 0}; מוצרים שאזלו או מתחת למינימום מקבלים עדיפות. הקטלוג הרגיל מסתובב במחזור של {countStatus.data.rotation_cycle_weeks} שבועות.</p>
+              <p className="mt-1 text-sm font-bold">התקדמות השבוע: {countStatus.data.completion_percent}% · נותרו {products.length} מוצרים לספירה.</p>
+            </div>
+          </div>
+        </section>
+      )}
 
       {message && (
         <div className="flex items-start gap-2 rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
