@@ -6,7 +6,7 @@ from app import create_app
 from app.extensions import db
 from app.models.notification import Notification, STATUS_UNREAD
 from app.models.tenant import Tenant
-from app.models.user import User, ROLE_ADMIN, ROLE_MANAGER
+from app.models.user import User
 from app.services.inventory_calendar_service import InventoryCalendarService
 from app.services.web_push_service import send_to_user
 
@@ -24,7 +24,6 @@ def process_inventory_count_reminders() -> int:
             select(User).where(
                 User.tenant_id == tenant.id,
                 User.active.is_(True),
-                User.role.in_((ROLE_ADMIN, ROLE_MANAGER)),
             )
         ).all()
         for user in users:
@@ -33,8 +32,8 @@ def process_inventory_count_reminders() -> int:
             if exists is not None:
                 continue
             title = "🔔 הגיע הזמן לספירת מלאי"
-            message = f"הגיע מועד הספירה השבועית. הושלמו {status['completion_percent']}% מהמוצרים ב-7 הימים האחרונים."
-            action_url = current_app.config.get("FRONTEND_PUBLIC_URL", "").rstrip("/") + "/dashboard/inventory"
+            message = f"ספירת המלאי השבועית היא חובה. הושלמו {status['completion_percent']}% מהמוצרים ב-7 הימים האחרונים; יש להשלים ספירה מלאה כדי להמשיך בפעולות במערכת."
+            action_url = current_app.config.get("FRONTEND_PUBLIC_URL", "").rstrip("/") + "/dashboard/inventory/count"
             notification = Notification(
                 tenant_id=tenant.id,
                 user_id=user.id,
