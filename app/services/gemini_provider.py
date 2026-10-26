@@ -24,7 +24,7 @@ def _safe_provider_error(exc: Exception) -> str:
         return "ai_provider_error"
     detail = re.sub(r"(?i)(api[_ -]?key|key)=?[^\s,;]+", r"\1=[REDACTED]", detail)
     detail = re.sub(r"AIza[0-9A-Za-z_-]{20,}", "[REDACTED_API_KEY]", detail)
-    detail = re.sub(r"(?i)bearer\\s+[A-Za-z0-9._~-]+", "Bearer [REDACTED]", detail)
+    detail = re.sub(r"(?i)bearer\s+[A-Za-z0-9._~-]+", "Bearer [REDACTED]", detail)
     detail = detail.replace("GEMINI_API_KEY", "Gemini API key")
     return f"ai_provider_error: {detail[:1500]}"
 
@@ -62,7 +62,7 @@ class GeminiProvider:
         return cls(api_key=api_key, model=model, timeout_seconds=timeout_seconds, fallback_model=fallback_model, thinking_level=thinking_level)
 
     def generate_text(self, prompt: str, *, system_instruction: str | None = None) -> AIResult:
-        contents = prompt if not system_instruction else f"System instruction:\\n{system_instruction}\\n\\nUser request:\\n{prompt}"
+        contents = prompt if not system_instruction else f"System instruction:\n{system_instruction}\n\nUser request:\n{prompt}"
         models_to_try = [self.model]
         if self.fallback_model:
             models_to_try.append(self.fallback_model)
