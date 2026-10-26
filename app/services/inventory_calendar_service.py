@@ -343,8 +343,8 @@ class InventoryCalendarService:
             )
         ).all())
 
-        iso_year, iso_week, _ = today.isocalendar()
-        rotation_group = (iso_year * 53 + iso_week) % 4
+        week_start = today - timedelta(days=today.weekday())
+        rotation_group = ((week_start - date(2020, 1, 6)).days // 7) % 4
         rotation_ids = {
             product_id for product_id in product_ids
             if product_id % 4 == rotation_group
