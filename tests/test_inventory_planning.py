@@ -198,3 +198,39 @@ def test_carton_metrics_do_not_guess_missing_pack_size():
     assert metrics["packaging_configured"] is False
     assert metrics["carton_recommendation_ready"] is False
     assert metrics["carton_recommendation_reason"] == "units_per_carton_required_for_piece_stock"
+
+
+
+def test_recommendation_accounts_for_receipts_between_counts(db, tenant_a_admin):
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="Supplier")
+    db.session.add(supplier)
+    db.session.flush()
+    product = _make_product(db, tenant_id, supplier.id, name="Receipt-aware product")
+    now = datetime.now(timezone.utc)
+    db.session.add_all([
+        InventoryMovement(
+            tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_COUNT,
+            quantity=100, balance_after=100, occurred_at=now - timedelta(days=10),
+        ),
+        InventoryMovement(
+            tenant_id=tenant_id, product_id=product.id, movement_type="receipt",
+            quantity=20, balance_after=90, occurred_at=now - timedelta(days=5),
+        ),
+        InventoryMovement(
+            tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_COUNT,
+            quantity=70, balance_after=70, occurred_at=now,
+        ),
+    ])
+    product.current_stock = 70
+    db.session.commit()
+
+    service = InventoryPlanningService(tenant_id)
+    single = service.recommendation(product.id, lookback_days=60, safety_days=0)
+    bulk = next(
+        row for row in service.recommendations(lookback_days=60, safety_days=0)
+        if row["product_id"] == product.id
+    )
+
+    assert single["estimated_depletion"] == 50
+    assert bulk["estimated_depletion"] == 50
