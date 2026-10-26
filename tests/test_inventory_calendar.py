@@ -157,6 +157,9 @@ def test_explicit_inbound_quantities_reduce_recommended_order(db, tenant_a_admin
     db.session.flush()
     product = _product(db, tenant_id, supplier.id, "Inbound Test Product")
     product.current_stock = 5
+    # Recommendation status now requires an explicit configured stock target.
+    # Keep this test focused on how inbound quantities change the order quantity.
+    product.min_stock = 1
     db.session.flush()
 
     service = InventoryCalendarService(tenant_id)
