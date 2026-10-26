@@ -575,3 +575,37 @@ def test_catalog_exposes_non_destructive_data_quality_diagnostics(logged_in_clie
     assert quality["barcode_kind"] == "synthetic"
     assert "category" in quality["missing_fields"]
     assert "unit" in quality["missing_fields"]
+
+
+
+def test_piece_product_requires_positive_carton_size_when_provided(logged_in_client_a):
+    supplier_id = logged_in_client_a.post(
+        "/api/catalog/suppliers", json={"name": "Carton Validation Supplier"}
+    ).get_json()["supplier"]["id"]
+    response = logged_in_client_a.post("/api/catalog/products", json={
+        "supplier_id": supplier_id,
+        "name": "Invalid carton size",
+        "sku": "INVALID-CARTON-SIZE",
+        "current_price": 1,
+        "unit": "יחידה",
+        "units_per_carton": 0,
+    })
+    assert response.status_code == 400
+    assert "positive integer" in response.get_json()["message"]
+
+
+def test_piece_product_without_carton_size_is_flagged_for_review(logged_in_client_a):
+    supplier_id = logged_in_client_a.post(
+        "/api/catalog/suppliers", json={"name": "Missing Carton Supplier"}
+    ).get_json()["supplier"]["id"]
+    response = logged_in_client_a.post("/api/catalog/products", json={
+        "supplier_id": supplier_id,
+        "name": "Missing carton configuration",
+        "sku": "MISSING-CARTON-SIZE",
+        "current_price": 1,
+        "unit": "יחידה",
+    })
+    assert response.status_code == 201, response.get_json()
+    product = response.get_json()["product"]
+    assert "units_per_carton" in product["data_quality"]["missing_fields"]
+    assert product["data_quality"]["needs_review"] is True
