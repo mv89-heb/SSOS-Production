@@ -126,7 +126,10 @@ def create_order_invoice(order_id):
         db.session.rollback()
         # The database uniqueness constraint is the final protection against
         # concurrent duplicate invoice submissions.
-        if "uq_supplier_invoice_number" in str(getattr(getattr(exc, "orig", None), "diag", None)) or "supplier_invoices.tenant_id" in str(getattr(exc, "orig", exc)):
+        original = getattr(exc, "orig", exc)
+        constraint_name = getattr(getattr(original, "diag", None), "constraint_name", "")
+        message = str(original)
+        if constraint_name == "uq_supplier_invoice_number" or "UNIQUE constraint failed: supplier_invoices.tenant_id" in message:
             return _error(Conflict("Invoice number already exists for this supplier"))
         raise
     except Exception:
