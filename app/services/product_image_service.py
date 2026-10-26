@@ -1,4 +1,4 @@
-""""Conservative product-image lookup with a free fallback source.
+"""Conservative product-image lookup with a free fallback source.
 
 Open Food Facts is preferred. UPCitemdb is a rate-limited fallback. Matches
 must be exact by barcode or normalized product title; existing images are
