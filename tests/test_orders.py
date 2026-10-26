@@ -216,3 +216,26 @@ def test_carton_order_converts_piece_price_to_carton_price(logged_in_client_a):
     assert line["unit_price"] == 24
     assert line["unit"] == "קרטון"
     assert line["units_per_carton"] == 12
+
+
+
+def test_carton_order_requires_pack_size(logged_in_client_a):
+    supplier_response = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "Missing Pack Supplier"})
+    supplier_id = supplier_response.get_json()["supplier"]["id"]
+    product_response = logged_in_client_a.post("/api/catalog/products", json={
+        "supplier_id": supplier_id,
+        "name": "Unknown pack size product",
+        "sku": "UNKNOWN-PACK-CARTON",
+        "current_price": 10,
+        "unit": "יחידה",
+    })
+    assert product_response.status_code == 201, product_response.get_json()
+    product_id = product_response.get_json()["product"]["id"]
+
+    response = logged_in_client_a.post("/api/orders", json={
+        "supplier_id": supplier_id,
+        "items": [{"product_id": product_id, "quantity": 2, "quantity_unit": "carton"}],
+    })
+
+    assert response.status_code == 400
+    assert "units_per_carton" in response.get_json()["message"]
