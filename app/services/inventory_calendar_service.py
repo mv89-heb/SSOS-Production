@@ -152,15 +152,30 @@ class InventoryCalendarService:
         holiday_adjusted_demand = self._forecast_demand(daily_rate, today, target_end, periods)
         safety_stock = self._forecast_demand(daily_rate, target_end + timedelta(days=1), target_end + timedelta(days=max(1, int(safety_days))), periods)
         target_stock = holiday_adjusted_demand + safety_stock
+        configured_targets = [
+            Decimal(str(value))
+            for value in (product.recommended_stock, product.min_stock)
+            if value is not None and Decimal(str(value)) > 0
+        ]
+        configured_target = max(configured_targets, default=Decimal("0"))
+        # Never hide a zero-stock product just because its count history is incomplete.
+        # When history is insufficient, use only an explicitly configured stock target;
+        # do not fabricate consumption from missing observations.
+        if stock_checks < 2 and (current_stock <= 0 or (
+            product.min_stock is not None and current_stock <= Decimal(str(product.min_stock))
+        )):
+            target_stock = max(target_stock, configured_target)
         recommended_order = max(Decimal("0"), target_stock - current_stock - inbound)
         coverage_days = current_stock / daily_rate if daily_rate > 0 else None
         days_until_order = (date.fromisoformat(schedule["next_order_date"]) - today).days if schedule.get("next_order_date") else None
         active_periods = [p for p in periods if p.end_date >= today and p.start_date <= target_end]
 
-        if stock_checks < 2:
-            status = "insufficient_data"
-        elif current_stock <= 0:
+        if current_stock <= 0:
             status = "urgent"
+        elif stock_checks < 2 and product.min_stock is not None and current_stock <= Decimal(str(product.min_stock)):
+            status = "reorder"
+        elif stock_checks < 2:
+            status = "insufficient_data"
         elif current_stock <= target_stock:
             status = "reorder"
         else:
@@ -258,9 +273,26 @@ class InventoryCalendarService:
             stock = Decimal(str(product.current_stock or 0))
             inbound_qty = inbound.get(product.id, Decimal("0"))
             target = demand + safety
+            configured_targets = [
+                Decimal(str(value))
+                for value in (product.recommended_stock, product.min_stock)
+                if value is not None and Decimal(str(value)) > 0
+            ]
+            configured_target = max(configured_targets, default=Decimal("0"))
+            if len(counts) < 2 and (stock <= 0 or (
+                product.min_stock is not None and stock <= Decimal(str(product.min_stock))
+            )):
+                target = max(target, configured_target)
             recommended = max(Decimal("0"), target - stock - inbound_qty)
             coverage = stock / rate if rate > 0 else None
-            status = "insufficient_data" if len(counts) < 2 else ("urgent" if stock <= 0 else ("reorder" if stock <= target else "healthy"))
+            if stock <= 0:
+                status = "urgent"
+            elif len(counts) < 2 and product.min_stock is not None and stock <= Decimal(str(product.min_stock)):
+                status = "reorder"
+            elif len(counts) < 2:
+                status = "insufficient_data"
+            else:
+                status = "reorder" if stock <= target else "healthy"
             row.update({
                 "current_stock": float(stock), "stock_checks_in_period": len(counts),
                 "observed_days": round(float(elapsed), 1), "estimated_depletion": round(float(used), 3),
