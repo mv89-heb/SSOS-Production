@@ -154,3 +154,18 @@ def test_duplicate_receipt_number_returns_conflict_without_changing_stock(
     assert "receipt number already exists" in duplicate.get_json()["message"].lower()
     assert db.session.query(Receipt).filter_by(order_id=second_order["id"]).count() == 0
     assert db.session.get(Product, second_product_id).current_stock in (None, 0)
+
+    # The rejected request must not reserve its idempotency key. A corrected
+    # receipt number can be retried with the same key without duplicating stock.
+    retry = logged_in_client_a.post(
+        f"/api/orders/{second_order['id']}/receipts",
+        json={
+            "receipt_number": "RCPT-DUPLICATE-002",
+            "items": [{"order_item_id": second_item_id, "quantity": 1}],
+        },
+        headers={"Idempotency-Key": "duplicate-receipt-number-second"},
+    )
+    assert retry.status_code == 201, retry.get_json()
+    assert retry.get_json()["replayed"] is False
+    assert db.session.query(Receipt).filter_by(order_id=second_order["id"]).count() == 1
+    assert db.session.get(Product, second_product_id).current_stock == 1
