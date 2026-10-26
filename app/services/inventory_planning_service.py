@@ -134,6 +134,38 @@ class InventoryPlanningService:
         return movement
 
     @staticmethod
+    def _estimate_depletion(counts, receipts):
+        """Estimate actual usage between physical counts, accounting for recorded receipts."""
+        estimated_depletion = Decimal("0")
+        observed_days = Decimal("0")
+        receipts = sorted(
+            receipts,
+            key=lambda movement: (
+                movement.occurred_at or datetime.min.replace(tzinfo=timezone.utc),
+                movement.id or 0,
+            ),
+        )
+        if len(counts) < 2:
+            return estimated_depletion, observed_days
+
+        for previous, current in zip(counts, counts[1:]):
+            if not previous.occurred_at or not current.occurred_at:
+                continue
+            days = Decimal(str(max((current.occurred_at - previous.occurred_at).total_seconds() / 86400, 0)))
+            if days <= 0:
+                continue
+            observed_days += days
+            received = sum(
+                (Decimal(str(movement.quantity or 0)) for movement in receipts
+                 if movement.occurred_at and previous.occurred_at < movement.occurred_at <= current.occurred_at),
+                Decimal("0"),
+            )
+            consumption = Decimal(str(previous.balance_after or 0)) + received - Decimal(str(current.balance_after or 0))
+            if consumption > 0:
+                estimated_depletion += consumption
+        return estimated_depletion, observed_days
+
+    @staticmethod
     def _carton_metrics(product, current_stock, estimated_depletion, average_daily_usage, reorder_point, recommended_order):
         """Expose planning quantities in cartons without changing the stored stock unit.
 
@@ -186,19 +218,15 @@ class InventoryPlanningService:
         else:
             counts = db.session.scalars(select(InventoryMovement).where(InventoryMovement.tenant_id == self.tenant_id, InventoryMovement.product_id == product.id, InventoryMovement.movement_type == MOVEMENT_COUNT, InventoryMovement.occurred_at >= since).order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())).all()
         counts = self._dedupe_daily_counts(counts)
-        estimated_depletion = Decimal("0")
-        observed_days = Decimal("0")
-        if len(counts) >= 2:
-            for previous, current in zip(counts, counts[1:]):
-                previous_balance = Decimal(str(previous.balance_after or 0))
-                current_balance = Decimal(str(current.balance_after or 0))
-                days = Decimal(str(max((current.occurred_at - previous.occurred_at).total_seconds() / 86400, 0)))
-                if days <= 0:
-                    continue
-                observed_days += days
-                decrease = previous_balance - current_balance
-                if decrease > 0:
-                    estimated_depletion += decrease
+        receipts = db.session.scalars(
+            select(InventoryMovement).where(
+                InventoryMovement.tenant_id == self.tenant_id,
+                InventoryMovement.product_id == product.id,
+                InventoryMovement.movement_type == MOVEMENT_RECEIPT,
+                InventoryMovement.occurred_at >= since,
+            ).order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
+        ).all()
+        estimated_depletion, observed_days = self._estimate_depletion(counts, receipts)
         average_daily_usage = (estimated_depletion / observed_days) if observed_days > 0 else Decimal("0")
         next_order_date = date.fromisoformat(schedule["next_order_date"]) if schedule["next_order_date"] else None
         today = now.date()
@@ -240,6 +268,15 @@ class InventoryPlanningService:
         counts_by_product = {}
         for movement in count_rows:
             counts_by_product.setdefault(movement.product_id, []).append(movement)
+        receipt_rows = db.session.scalars(select(InventoryMovement).where(
+            InventoryMovement.tenant_id == self.tenant_id,
+            InventoryMovement.product_id.in_(product_ids),
+            InventoryMovement.movement_type == MOVEMENT_RECEIPT,
+            InventoryMovement.occurred_at >= since,
+        ).order_by(InventoryMovement.product_id.asc(), InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())).all()
+        receipts_by_product = {}
+        for movement in receipt_rows:
+            receipts_by_product.setdefault(movement.product_id, []).append(movement)
         supplier_ids = {product.supplier_id for product in products if product.supplier_id is not None}
         suppliers = {}
         if supplier_ids:
@@ -248,7 +285,7 @@ class InventoryPlanningService:
         for product in products:
             supplier = suppliers.get(product.supplier_id)
             schedule = self._supplier_schedule_from_supplier(product, supplier)
-            rows.append(self._recommendation_from_product(product, schedule, counts_by_product.get(product.id, []), lookback_days=lookback_days, lead_time_days=lead_time_days, safety_days=safety_days))
+            rows.append(self._recommendation_from_product(product, schedule, counts_by_product.get(product.id, []), receipts_by_product.get(product.id, []), lookback_days=lookback_days, lead_time_days=lead_time_days, safety_days=safety_days))
         priority = {"urgent": 0, "reorder": 1, "healthy": 2, "insufficient_data": 3}
         rows.sort(key=lambda row: (priority[row["status"]], -(row["recommended_order"] or 0), row["product_name"]))
         return rows
@@ -265,24 +302,12 @@ class InventoryPlanningService:
             next_delivery = self._next_weekday(next_order + timedelta(days=1), delivery_weekdays)
         return {"supplier_id": supplier.id, "supplier_name": supplier.name, "order_days": sorted(order_weekdays), "delivery_days": sorted(delivery_weekdays), "next_order_date": next_order.isoformat() if next_order else None, "next_delivery_date": next_delivery.isoformat() if next_delivery else None, "recommended_check_date": next_order.isoformat() if next_order else None, "order_cutoff_time": None, "schedule_ready": bool(order_weekdays and delivery_weekdays)}
 
-    def _recommendation_from_product(self, product, schedule, counts, *, lookback_days=60, lead_time_days=None, safety_days=2):
+    def _recommendation_from_product(self, product, schedule, counts, receipts=None, *, lookback_days=60, lead_time_days=None, safety_days=2):
         lookback_days = max(7, min(int(lookback_days), 365))
         safety_days = max(0, min(int(safety_days), 90))
         now = datetime.now(timezone.utc)
         counts = self._dedupe_daily_counts(counts)
-        estimated_depletion = Decimal("0")
-        observed_days = Decimal("0")
-        if len(counts) >= 2:
-            for previous, current in zip(counts, counts[1:]):
-                previous_balance = Decimal(str(previous.balance_after or 0))
-                current_balance = Decimal(str(current.balance_after or 0))
-                days = Decimal(str(max((current.occurred_at - previous.occurred_at).total_seconds() / 86400, 0)))
-                if days <= 0:
-                    continue
-                observed_days += days
-                decrease = previous_balance - current_balance
-                if decrease > 0:
-                    estimated_depletion += decrease
+        estimated_depletion, observed_days = self._estimate_depletion(counts, receipts or [])
         average_daily_usage = (estimated_depletion / observed_days) if observed_days > 0 else Decimal("0")
         next_order_date = date.fromisoformat(schedule["next_order_date"]) if schedule["next_order_date"] else None
         today = now.date()
