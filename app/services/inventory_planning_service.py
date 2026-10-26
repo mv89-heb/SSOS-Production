@@ -138,13 +138,7 @@ class InventoryPlanningService:
         """Estimate actual usage between physical counts, accounting for recorded receipts."""
         estimated_depletion = Decimal("0")
         observed_days = Decimal("0")
-        receipts = sorted(
-            receipts,
-            key=lambda movement: (
-                movement.occurred_at or datetime.min.replace(tzinfo=timezone.utc),
-                movement.id or 0,
-            ),
-        )
+        receipts = list(receipts or [])
         if len(counts) < 2:
             return estimated_depletion, observed_days
 
