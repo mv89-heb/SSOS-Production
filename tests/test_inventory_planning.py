@@ -234,3 +234,27 @@ def test_recommendation_accounts_for_receipts_between_counts(db, tenant_a_admin)
 
     assert single["estimated_depletion"] == 50
     assert bulk["estimated_depletion"] == 50
+
+def test_recommendations_include_catalog_beyond_previous_500_product_cap(db, tenant_a_admin):
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="Bulk Supplier")
+    db.session.add(supplier)
+    db.session.flush()
+    products = [
+        Product(
+            tenant_id=tenant_id,
+            supplier_id=supplier.id,
+            name=f"Catalog Product {index:04d}",
+            current_price=1,
+            currency="ILS",
+            active=True,
+        )
+        for index in range(501)
+    ]
+    db.session.add_all(products)
+    db.session.commit()
+
+    rows = InventoryPlanningService(tenant_id).recommendations(limit=501)
+
+    assert len(rows) == 501
+    assert len({row["product_id"] for row in rows}) == 501
