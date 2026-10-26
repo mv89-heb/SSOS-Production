@@ -70,7 +70,7 @@ def _name_lookup(product_name, timeout):
         "search_simple": "1",
         "action": "process",
         "json": "1",
-        "page_size": "5",
+        "page_size": "50",
         "fields": "code,product_name,brands,quantity,image_front_url,selected_images",
         "lc": "he",
         "cc": "il",

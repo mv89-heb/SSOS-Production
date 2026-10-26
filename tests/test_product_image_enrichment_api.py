@@ -53,3 +53,17 @@ def test_image_enrichment_never_overwrites_existing_custom_image(logged_in_clien
 def test_image_enrichment_rejects_invalid_batch_size(logged_in_client_a):
     response = logged_in_client_a.post("/api/catalog/products/images/enrich", json={"limit": 101})
     assert response.status_code == 400
+
+
+def test_image_enrichment_does_not_mark_source_outage_as_checked(logged_in_client_a, db):
+    product_id = _make_product(logged_in_client_a, "Offline Image Supplier", "Offline product", "IMG-OFFLINE", "1234567890125")
+    unavailable = {"image_url": None, "reason": "source_unavailable"}
+    with patch("app.routes.catalog.lookup_product_image", return_value=unavailable):
+        response = logged_in_client_a.post("/api/catalog/products/images/enrich", json={"limit": 10})
+    assert response.status_code == 200, response.get_json()
+    body = response.get_json()
+    assert body["source_unavailable"] == 1
+    assert body["reason_counts"]["source_unavailable"] == 1
+    assert body["remaining_eligible"] >= 1
+    product = db.session.get(Product, product_id)
+    assert product.image_checked_at is None
