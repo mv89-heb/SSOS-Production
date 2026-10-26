@@ -93,6 +93,7 @@ export interface InventoryRecommendation {
   coverage_days: number | null;
   safety_stock: number;
   status: "urgent" | "reorder" | "healthy" | "insufficient_data";
+  last_count_at?: string | null;
   data_ready: boolean;
   active_planning_periods?: InventoryPlanningPeriod[];
   supplier_schedule: {

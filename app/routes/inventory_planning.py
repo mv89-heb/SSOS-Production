@@ -192,7 +192,7 @@ def recommendations():
         rows = service.recommendations(
             lookback_days=request.args.get("lookback_days", default=60, type=int),
             safety_days=request.args.get("safety_days", default=2, type=int),
-            limit=request.args.get("limit", default=500, type=int),
+            limit=request.args.get("limit", default=2000, type=int),
         )
         return jsonify({"success": True, "recommendations": rows})
     except (ValueError, TypeError) as exc:
