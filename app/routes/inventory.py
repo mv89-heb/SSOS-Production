@@ -4,11 +4,12 @@ from io import BytesIO
 from flask import Blueprint, jsonify, request, send_file
 from flask_login import current_user, login_required
 from sqlalchemy import or_, select
-from werkzeug.exceptions import BadRequest, HTTPException
+from werkzeug.exceptions import BadRequest, Conflict, HTTPException
 
 from app.extensions import db
 from app.models.inventory_movement import InventoryMovement, VALID_MOVEMENT_TYPES
 from app.models.product import Product
+from app.models.tenant import Tenant
 from app.services.inventory_planning_service import InventoryPlanningService
 from app.services.permission_service import PermissionService
 
@@ -459,9 +460,41 @@ def bulk_count():
     if found_ids != set(product_ids):
         return _handle(BadRequest("some products are unavailable or inactive"))
 
-    count_id = uuid4().hex
+    count_id = str(payload.get("count_id") or "").strip() or uuid4().hex
+    if len(count_id) > 100:
+        return _handle(BadRequest("count_id must not exceed 100 characters"))
     counted_at = datetime.now(timezone.utc)
     note = str(payload.get("note") or "").strip() or None
+
+    # Serialize count-session claims within a tenant to prevent concurrent
+    # retries from applying the same physical count twice.
+    db.session.execute(
+        select(Tenant.id)
+        .where(Tenant.id == current_user.tenant_id)
+        .with_for_update()
+    ).scalar_one()
+
+    existing = db.session.scalars(
+        select(InventoryMovement).where(
+            InventoryMovement.tenant_id == current_user.tenant_id,
+            InventoryMovement.movement_type == "count",
+            InventoryMovement.reference_type == "inventory_count",
+            InventoryMovement.reference_id == count_id,
+        ).order_by(InventoryMovement.id.asc())
+    ).all()
+    if existing:
+        existing_quantities = {movement.product_id: int(movement.quantity) for movement in existing}
+        if existing_quantities != dict(parsed) or any((movement.note or None) != note for movement in existing):
+            return _handle(Conflict("count_id was already used for a different inventory count"))
+        return jsonify({
+            "success": True,
+            "count_id": count_id,
+            "counted": len(existing),
+            "counted_at": existing[-1].occurred_at.isoformat() if existing[-1].occurred_at else None,
+            "movements": [movement.to_dict() for movement in existing],
+            "replayed": True,
+        }), 200
+
     service = InventoryPlanningService(current_user.tenant_id)
     movements = []
     try:
