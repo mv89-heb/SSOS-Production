@@ -312,6 +312,19 @@ export default function InventoryCountPage() {
         </div>
       </header>
 
+      {currentUser.data?.role === "employee" && countStatus.data && (
+        <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-indigo-950 dark:border-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-100">
+          <div className="flex items-start gap-3">
+            <ClipboardCheck className="mt-1 shrink-0" size={22} />
+            <div>
+              <h2 className="font-black">המשימה השבועית שלך — ספירה מחזורית</h2>
+              <p className="mt-1 text-sm leading-6">אין צורך לספור את כל הקטלוג. השבוע הוקצו לך {countStatus.data.assigned_products} מוצרים מתוך {data?.products.length ?? 0}; מוצרים שאזלו או מתחת למינימום מקבלים עדיפות. הקטלוג הרגיל מסתובב במחזור של {countStatus.data.rotation_cycle_weeks} שבועות.</p>
+              <p className="mt-1 text-sm font-bold">התקדמות השבוע: {countStatus.data.completion_percent}% · נותרו {products.length} מוצרים לספירה.</p>
+            </div>
+          </div>
+        </section>
+      )}
+
       {message && (
         <div className="flex items-start gap-2 rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
           <CheckCircle2 className="mt-0.5 shrink-0" size={18}/><span>{message}</span>
