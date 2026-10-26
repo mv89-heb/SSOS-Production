@@ -15,7 +15,7 @@ def user(role="employee", active=True, authenticated=True, permissions=None):
     )
 
 
-def test_employee_defaults_allow_order_preparation_but_not_approval_or_sending():
+def test_employee_defaults_allow_preparation_but_reserve_approval_and_sending():
     permissions = effective_permissions(user("employee"))
     assert permissions["orders.view"] is True
     assert permissions["orders.create"] is True

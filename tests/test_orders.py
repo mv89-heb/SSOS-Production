@@ -94,15 +94,18 @@ def test_submit_twice_rejected(logged_in_client_a, make_order):
     assert second.status_code == 409
 
 
-def test_order_creator_cannot_approve_own_order(logged_in_client_a, make_order):
+def test_manager_can_approve_own_order_in_internal_workflow(logged_in_client_a, make_order, db):
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
+    from app.models.user import User, ROLE_MANAGER
+    user_id = logged_in_client_a.get("/api/auth/me").get_json()["user"]["id"]
+    user = db.session.get(User, user_id)
+    user.role = ROLE_MANAGER
+    db.session.commit()
     assert logged_in_client_a.post(f"/api/orders/{order_id}/submit").status_code == 200
     approved = logged_in_client_a.post(f"/api/orders/{order_id}/approve")
-    assert approved.status_code == 409, approved.get_json()
-    assert "creator" in approved.get_json()["message"].lower()
-    detail = logged_in_client_a.get(f"/api/orders/{order_id}")
-    assert detail.get_json()["order"]["status"] == "submitted"
+    assert approved.status_code == 200, approved.get_json()
+    assert approved.get_json()["order"]["status"] == "approved"
 
 
 def test_approve_before_submit_rejected(logged_in_client_a, make_order):
