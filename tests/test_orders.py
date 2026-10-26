@@ -184,3 +184,35 @@ def test_order_audit_events_created(logged_in_client_a, make_order):
     actions = [log["action"] for log in logs]
     assert "order.created" in actions
     assert "order.submitted" in actions
+
+
+
+def test_carton_order_converts_piece_price_to_carton_price(logged_in_client_a):
+    supplier_response = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "Carton Supplier"})
+    assert supplier_response.status_code == 201, supplier_response.get_json()
+    supplier_id = supplier_response.get_json()["supplier"]["id"]
+    product_response = logged_in_client_a.post("/api/catalog/products", json={
+        "supplier_id": supplier_id,
+        "name": "Milk carton test",
+        "sku": "MILK-CARTON-TEST",
+        "current_price": 2,
+        "unit": "יחידה",
+        "units_per_carton": 12,
+        "current_stock": 0,
+    })
+    assert product_response.status_code == 201, product_response.get_json()
+    product_id = product_response.get_json()["product"]["id"]
+
+    response = logged_in_client_a.post("/api/orders", json={
+        "supplier_id": supplier_id,
+        "items": [{"product_id": product_id, "quantity": 3, "quantity_unit": "carton"}],
+    })
+
+    assert response.status_code == 201, response.get_json()
+    order = response.get_json()["order"]
+    assert order["subtotal"] == 72
+    line = order["items"][0]
+    assert line["quantity"] == 3
+    assert line["unit_price"] == 24
+    assert line["unit"] == "קרטון"
+    assert line["units_per_carton"] == 12
