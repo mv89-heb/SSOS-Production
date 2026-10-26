@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 import re
 
 from sqlalchemy import func, select
@@ -139,7 +139,7 @@ class InventoryUnifiedPlanningService:
                     latest_by_day[day_key] = row
             counts_by[product_id] = sorted(
                 latest_by_day.values(),
-                key=lambda row: (row.occurred_at or datetime.min.replace(tzinfo=timezone.utc), row.id or 0),
+                key=lambda row: (row.occurred_at.isoformat() if row.occurred_at else "", row.id or 0),
             )
 
         result = {}
@@ -316,7 +316,7 @@ class InventoryUnifiedPlanningService:
             daily_cartons = daily_rate / carton_divisor if carton_ready else None
             depletion_cartons = Decimal(str(metric.get("consumption", 0))) / carton_divisor if carton_ready else None
             stock_cartons = current_stock / carton_divisor if carton_ready else None
-            recommended_cartons = int((recommended / carton_divisor).to_integral_value(rounding=__import__("decimal").ROUND_CEILING)) if carton_ready else None
+            recommended_cartons = int((recommended / carton_divisor).to_integral_value(rounding=ROUND_CEILING)) if carton_ready else None
 
             rows.append({
                 "product_id": product.id,
