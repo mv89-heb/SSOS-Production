@@ -84,7 +84,7 @@ export default function AdminAuditHealthPage() {
         <Link href="/dashboard/audit" className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl border border-indigo-200 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-300 dark:hover:bg-indigo-950/30">
           <ExternalLink size={16} /> מעבר ללוג הביקורת המרכזי
         </Link>
-      </section>ction>
+      </section>
     </div>
   );
 }
