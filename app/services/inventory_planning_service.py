@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
 import re
 
 from sqlalchemy import select
@@ -133,6 +133,73 @@ class InventoryPlanningService:
         db.session.flush()
         return movement
 
+    @staticmethod
+    def _estimate_depletion(counts, receipts):
+        """Estimate actual usage between physical counts, accounting for recorded receipts."""
+        estimated_depletion = Decimal("0")
+        observed_days = Decimal("0")
+        receipts = list(receipts or [])
+        if len(counts) < 2:
+            return estimated_depletion, observed_days
+
+        for previous, current in zip(counts, counts[1:]):
+            if not previous.occurred_at or not current.occurred_at:
+                continue
+            days = Decimal(str(max((current.occurred_at - previous.occurred_at).total_seconds() / 86400, 0)))
+            if days <= 0:
+                continue
+            observed_days += days
+            received = sum(
+                (Decimal(str(movement.quantity or 0)) for movement in receipts
+                 if movement.occurred_at and previous.occurred_at < movement.occurred_at <= current.occurred_at),
+                Decimal("0"),
+            )
+            consumption = Decimal(str(previous.balance_after or 0)) + received - Decimal(str(current.balance_after or 0))
+            if consumption > 0:
+                estimated_depletion += consumption
+        return estimated_depletion, observed_days
+
+    @staticmethod
+    def _carton_metrics(product, current_stock, estimated_depletion, average_daily_usage, reorder_point, recommended_order):
+        """Expose planning quantities in cartons without changing the stored stock unit.
+
+        Legacy inventory is carton-based unless Product.unit is exactly "יחידה",
+        in which case inventory is stored in individual pieces. Never infer a
+        pack size that has not been configured.
+        """
+        pack_size = product.units_per_carton
+        pack_size = int(pack_size) if pack_size is not None and int(pack_size) > 0 else None
+        piece_stock = str(product.unit or "").strip() == "יחידה"
+
+        if piece_stock and not pack_size:
+            return {
+                "stock_unit": "יחידה",
+                "units_per_carton": product.units_per_carton,
+                "current_stock_cartons": None,
+                "estimated_depletion_cartons": None,
+                "average_daily_usage_cartons": None,
+                "reorder_point_cartons": None,
+                "recommended_order_cartons": None,
+                "packaging_configured": False,
+                "carton_recommendation_ready": False,
+                "carton_recommendation_reason": "units_per_carton_required_for_piece_stock",
+            }
+
+        divisor = Decimal(pack_size) if piece_stock else Decimal("1")
+        carton_order = (recommended_order / divisor).to_integral_value(rounding=ROUND_CEILING)
+        return {
+            "stock_unit": "יחידה" if piece_stock else "ארגז",
+            "units_per_carton": pack_size,
+            "current_stock_cartons": round(float(current_stock / divisor), 3),
+            "estimated_depletion_cartons": round(float(estimated_depletion / divisor), 3),
+            "average_daily_usage_cartons": round(float(average_daily_usage / divisor), 3),
+            "reorder_point_cartons": round(float(reorder_point / divisor), 3),
+            "recommended_order_cartons": int(carton_order),
+            "packaging_configured": pack_size is not None,
+            "carton_recommendation_ready": True,
+            "carton_recommendation_reason": None,
+        }
+
     def recommendation(self, product_id: int, *, lookback_days=60, lead_time_days=None, safety_days=2, prefetched_counts=None, prefetched_suppliers=None):
         lookback_days = max(7, min(int(lookback_days), 365))
         safety_days = max(0, min(int(safety_days), 90))
@@ -145,19 +212,15 @@ class InventoryPlanningService:
         else:
             counts = db.session.scalars(select(InventoryMovement).where(InventoryMovement.tenant_id == self.tenant_id, InventoryMovement.product_id == product.id, InventoryMovement.movement_type == MOVEMENT_COUNT, InventoryMovement.occurred_at >= since).order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())).all()
         counts = self._dedupe_daily_counts(counts)
-        estimated_depletion = Decimal("0")
-        observed_days = Decimal("0")
-        if len(counts) >= 2:
-            for previous, current in zip(counts, counts[1:]):
-                previous_balance = Decimal(str(previous.balance_after or 0))
-                current_balance = Decimal(str(current.balance_after or 0))
-                days = Decimal(str(max((current.occurred_at - previous.occurred_at).total_seconds() / 86400, 0)))
-                if days <= 0:
-                    continue
-                observed_days += days
-                decrease = previous_balance - current_balance
-                if decrease > 0:
-                    estimated_depletion += decrease
+        receipts = db.session.scalars(
+            select(InventoryMovement).where(
+                InventoryMovement.tenant_id == self.tenant_id,
+                InventoryMovement.product_id == product.id,
+                InventoryMovement.movement_type == MOVEMENT_RECEIPT,
+                InventoryMovement.occurred_at >= since,
+            ).order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
+        ).all()
+        estimated_depletion, observed_days = self._estimate_depletion(counts, receipts)
         average_daily_usage = (estimated_depletion / observed_days) if observed_days > 0 else Decimal("0")
         next_order_date = date.fromisoformat(schedule["next_order_date"]) if schedule["next_order_date"] else None
         today = now.date()
@@ -178,6 +241,7 @@ class InventoryPlanningService:
         current_stock = Decimal(str(product.current_stock or 0))
         recommended_order = max(Decimal("0"), reorder_point - current_stock)
         coverage_days = (current_stock / average_daily_usage) if average_daily_usage > 0 else None
+        carton_metrics = self._carton_metrics(product, current_stock, estimated_depletion, average_daily_usage, reorder_point, recommended_order)
         if len(counts) < 2:
             status = "insufficient_data"
         elif current_stock <= 0:
@@ -186,7 +250,7 @@ class InventoryPlanningService:
             status = "reorder"
         else:
             status = "healthy"
-        return {"product_id": product.id, "product_name": product.name, "current_stock": float(current_stock), "lookback_days": lookback_days, "stock_checks_in_period": len(counts), "observed_days": round(float(observed_days), 1), "estimated_depletion": float(estimated_depletion), "average_daily_usage": round(float(average_daily_usage), 3), "lead_time_days": lead_time_days, "days_until_next_order": days_until_order, "planning_horizon_days": horizon_days, "lead_time_demand": round(float(lead_time_demand), 3), "safety_stock": round(float(safety_stock), 3), "reorder_point": round(float(reorder_point), 3), "recommended_order": round(float(recommended_order), 3), "coverage_days": round(float(coverage_days), 1) if coverage_days is not None else None, "status": status, "data_ready": len(counts) >= 2, "supplier_schedule": schedule}
+        return {"product_id": product.id, "product_name": product.name, "current_stock": float(current_stock), "lookback_days": lookback_days, "stock_checks_in_period": len(counts), "observed_days": round(float(observed_days), 1), "estimated_depletion": float(estimated_depletion), "average_daily_usage": round(float(average_daily_usage), 3), "lead_time_days": lead_time_days, "days_until_next_order": days_until_order, "planning_horizon_days": horizon_days, "lead_time_demand": round(float(lead_time_demand), 3), "safety_stock": round(float(safety_stock), 3), "reorder_point": round(float(reorder_point), 3), "recommended_order": round(float(recommended_order), 3), "coverage_days": round(float(coverage_days), 1) if coverage_days is not None else None, "status": status, "data_ready": len(counts) >= 2, "supplier_schedule": schedule, **carton_metrics}
 
     def recommendations(self, *, lookback_days=60, lead_time_days=None, safety_days=2, limit=100):
         products = db.session.scalars(select(Product).where(Product.tenant_id == self.tenant_id, Product.active.is_(True)).order_by(Product.name).limit(max(1, min(int(limit), 500)))).all()
@@ -198,6 +262,15 @@ class InventoryPlanningService:
         counts_by_product = {}
         for movement in count_rows:
             counts_by_product.setdefault(movement.product_id, []).append(movement)
+        receipt_rows = db.session.scalars(select(InventoryMovement).where(
+            InventoryMovement.tenant_id == self.tenant_id,
+            InventoryMovement.product_id.in_(product_ids),
+            InventoryMovement.movement_type == MOVEMENT_RECEIPT,
+            InventoryMovement.occurred_at >= since,
+        ).order_by(InventoryMovement.product_id.asc(), InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())).all()
+        receipts_by_product = {}
+        for movement in receipt_rows:
+            receipts_by_product.setdefault(movement.product_id, []).append(movement)
         supplier_ids = {product.supplier_id for product in products if product.supplier_id is not None}
         suppliers = {}
         if supplier_ids:
@@ -206,7 +279,7 @@ class InventoryPlanningService:
         for product in products:
             supplier = suppliers.get(product.supplier_id)
             schedule = self._supplier_schedule_from_supplier(product, supplier)
-            rows.append(self._recommendation_from_product(product, schedule, counts_by_product.get(product.id, []), lookback_days=lookback_days, lead_time_days=lead_time_days, safety_days=safety_days))
+            rows.append(self._recommendation_from_product(product, schedule, counts_by_product.get(product.id, []), receipts_by_product.get(product.id, []), lookback_days=lookback_days, lead_time_days=lead_time_days, safety_days=safety_days))
         priority = {"urgent": 0, "reorder": 1, "healthy": 2, "insufficient_data": 3}
         rows.sort(key=lambda row: (priority[row["status"]], -(row["recommended_order"] or 0), row["product_name"]))
         return rows
@@ -223,24 +296,12 @@ class InventoryPlanningService:
             next_delivery = self._next_weekday(next_order + timedelta(days=1), delivery_weekdays)
         return {"supplier_id": supplier.id, "supplier_name": supplier.name, "order_days": sorted(order_weekdays), "delivery_days": sorted(delivery_weekdays), "next_order_date": next_order.isoformat() if next_order else None, "next_delivery_date": next_delivery.isoformat() if next_delivery else None, "recommended_check_date": next_order.isoformat() if next_order else None, "order_cutoff_time": None, "schedule_ready": bool(order_weekdays and delivery_weekdays)}
 
-    def _recommendation_from_product(self, product, schedule, counts, *, lookback_days=60, lead_time_days=None, safety_days=2):
+    def _recommendation_from_product(self, product, schedule, counts, receipts=None, *, lookback_days=60, lead_time_days=None, safety_days=2):
         lookback_days = max(7, min(int(lookback_days), 365))
         safety_days = max(0, min(int(safety_days), 90))
         now = datetime.now(timezone.utc)
         counts = self._dedupe_daily_counts(counts)
-        estimated_depletion = Decimal("0")
-        observed_days = Decimal("0")
-        if len(counts) >= 2:
-            for previous, current in zip(counts, counts[1:]):
-                previous_balance = Decimal(str(previous.balance_after or 0))
-                current_balance = Decimal(str(current.balance_after or 0))
-                days = Decimal(str(max((current.occurred_at - previous.occurred_at).total_seconds() / 86400, 0)))
-                if days <= 0:
-                    continue
-                observed_days += days
-                decrease = previous_balance - current_balance
-                if decrease > 0:
-                    estimated_depletion += decrease
+        estimated_depletion, observed_days = self._estimate_depletion(counts, receipts or [])
         average_daily_usage = (estimated_depletion / observed_days) if observed_days > 0 else Decimal("0")
         next_order_date = date.fromisoformat(schedule["next_order_date"]) if schedule["next_order_date"] else None
         today = now.date()
@@ -262,6 +323,7 @@ class InventoryPlanningService:
         current_stock = Decimal(str(product.current_stock or 0))
         recommended_order = max(Decimal("0"), reorder_point - current_stock)
         coverage_days = (current_stock / average_daily_usage) if average_daily_usage > 0 else None
+        carton_metrics = self._carton_metrics(product, current_stock, estimated_depletion, average_daily_usage, reorder_point, recommended_order)
         if len(counts) < 2:
             status = "insufficient_data"
         elif current_stock <= 0:
@@ -270,4 +332,4 @@ class InventoryPlanningService:
             status = "reorder"
         else:
             status = "healthy"
-        return {"product_id": product.id, "product_name": product.name, "current_stock": float(current_stock), "lookback_days": lookback_days, "stock_checks_in_period": len(counts), "observed_days": round(float(observed_days), 1), "estimated_depletion": float(estimated_depletion), "average_daily_usage": round(float(average_daily_usage), 3), "lead_time_days": effective_lead_time, "days_until_next_order": days_until_order, "planning_horizon_days": horizon_days, "lead_time_demand": round(float(lead_time_demand), 3), "safety_stock": round(float(safety_stock), 3), "reorder_point": round(float(reorder_point), 3), "recommended_order": round(float(recommended_order), 3), "coverage_days": round(float(coverage_days), 1) if coverage_days is not None else None, "status": status, "data_ready": len(counts) >= 2, "supplier_schedule": schedule}
+        return {"product_id": product.id, "product_name": product.name, "current_stock": float(current_stock), "lookback_days": lookback_days, "stock_checks_in_period": len(counts), "observed_days": round(float(observed_days), 1), "estimated_depletion": float(estimated_depletion), "average_daily_usage": round(float(average_daily_usage), 3), "lead_time_days": effective_lead_time, "days_until_next_order": days_until_order, "planning_horizon_days": horizon_days, "lead_time_demand": round(float(lead_time_demand), 3), "safety_stock": round(float(safety_stock), 3), "reorder_point": round(float(reorder_point), 3), "recommended_order": round(float(recommended_order), 3), "coverage_days": round(float(coverage_days), 1) if coverage_days is not None else None, "status": status, "data_ready": len(counts) >= 2, "supplier_schedule": schedule, **carton_metrics}

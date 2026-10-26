@@ -75,6 +75,8 @@ class Product(db.Model):
             missing_fields.append("category")
         if not str(self.unit or "").strip():
             missing_fields.append("unit")
+        if str(self.unit or "").strip() == "יחידה" and (self.units_per_carton is None or self.units_per_carton <= 0):
+            missing_fields.append("units_per_carton")
         if not str(self.sku or "").strip() and not str(self.supplier_sku or "").strip():
             missing_fields.append("sku")
         if not str(self.barcode or "").strip():

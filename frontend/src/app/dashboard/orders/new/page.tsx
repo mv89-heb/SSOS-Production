@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 interface DraftLine {
   product_id: number | "";
   quantity: number;
+  quantity_unit?: "carton";
 }
 
 export default function NewOrderPage() {
@@ -55,7 +56,7 @@ export default function NewOrderPage() {
       const [rawId, rawQuantity] = entry.split(":");
       return { product_id: Number(rawId), quantity: Number(rawQuantity) };
     }).filter((item) => Number.isInteger(item.product_id) && item.product_id > 0 && Number.isFinite(item.quantity) && item.quantity > 0);
-    const available = requested.filter((item) => products.some((product) => product.id === item.product_id));
+    const available = requested.filter((item) => products.some((product) => product.id === item.product_id)).map((item) => ({ ...item, quantity_unit: "carton" as const }));
     if (available.length) {
       setLines(available);
       setNotes((current) => current || "טיוטה מוצעת לפי צריכה שבועית מחושבת מספירות מלאי פיזיות. יש לבדוק כמויות ומחירים לפני שליחה לאישור.");
@@ -96,7 +97,8 @@ export default function NewOrderPage() {
       const product = products.find((candidate) => candidate.id === line.product_id);
       if (!product || product.current_price == null || product.current_price <= 0) continue;
       const currency = (product.currency || "ILS").toUpperCase();
-      totals[currency] = (totals[currency] || 0) + product.current_price * line.quantity;
+      const pricePerCarton = line.quantity_unit === "carton" && product.unit === "יחידה" && product.units_per_carton ? product.current_price * product.units_per_carton : product.current_price;
+      totals[currency] = (totals[currency] || 0) + pricePerCarton * line.quantity;
     }
     return totals;
   }, [lines, products]);
@@ -155,7 +157,7 @@ export default function NewOrderPage() {
       supplier_id: supplierId,
       notes: notes || undefined,
       planned_order_date: plannedOrderDate || undefined,
-      items: items.map((line) => ({ product_id: line.product_id as number, quantity: line.quantity })),
+      items: items.map((line) => ({ product_id: line.product_id as number, quantity: line.quantity, ...(line.quantity_unit ? { quantity_unit: line.quantity_unit } : {}) })),
     });
   };
 
@@ -285,9 +287,10 @@ export default function NewOrderPage() {
                       </option>
                     ))}
                   </select>
+                  {line.quantity_unit === "carton" && <p className="mt-1 text-[11px] font-bold text-indigo-600">מחיר ההזמנה יחושב לפי קרטון; מחיר יחידה יומר לפי מספר היחידות באריזה.</p>}
                 </div>
                 <div className="w-full md:w-28">
-                  <label className="mb-1 block text-[11px] font-bold text-slate-400">כמות</label>
+                  <label className="mb-1 block text-[11px] font-bold text-slate-400">{line.quantity_unit === "carton" ? "כמות (קרטונים)" : "כמות"}</label>
                   <input
                     type="number"
                     min={1}

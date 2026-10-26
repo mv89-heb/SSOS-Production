@@ -194,6 +194,9 @@ class InventoryCalendarService:
                 "הזמנות פתוחות במצב מאושר/נשלח נלקחות כמלאי נכנס כאשר שורת ההזמנה כוללת product_id.",
             ],
         })
+        row.update(self.base._carton_metrics(
+            product, current_stock, estimated_consumption, daily_rate, target_stock, recommended_order
+        ))
         return row
 
     def recommendations(self, *, lookback_days=60, safety_days=2, limit=500):
@@ -272,6 +275,7 @@ class InventoryCalendarService:
                 "supplier_schedule": schedule, "active_planning_periods": [p.to_dict() for p in periods if p.end_date >= today and p.start_date <= horizon_end],
                 "planning_notes": ["הצריכה מחושבת מספירות פיזיות ורכישות בין הספירות.", "ספירות חוזרות באותו יום מאוחדות ונשמרת האחרונה.", "התחזית מתחשבת בתקופות תכנון פעילות ובמלאי נכנס מאושר או שנשלח."]
             })
+            row.update(self.base._carton_metrics(product, stock, used, rate, target, recommended))
             rows.append(row)
         priority = {"urgent": 0, "reorder": 1, "healthy": 2, "insufficient_data": 3}
         rows.sort(key=lambda r: (priority.get(r.get("status"), 4), -(r.get("recommended_order") or 0), r.get("product_name", "")))

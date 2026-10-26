@@ -135,3 +135,102 @@ def test_recommendation_is_insufficient_without_two_checks(db, tenant_a_admin):
     assert result["status"] == "insufficient_data"
     assert result["data_ready"] is False
     assert result["average_daily_usage"] == 0
+
+
+
+def test_carton_metrics_round_up_piece_orders():
+    from decimal import Decimal
+
+    product = Product(unit="יחידה", units_per_carton=12)
+    metrics = InventoryPlanningService._carton_metrics(
+        product,
+        Decimal("27"),
+        Decimal("60"),
+        Decimal("6"),
+        Decimal("48"),
+        Decimal("27"),
+    )
+
+    assert metrics["stock_unit"] == "יחידה"
+    assert metrics["units_per_carton"] == 12
+    assert metrics["current_stock_cartons"] == pytest.approx(2.25)
+    assert metrics["estimated_depletion_cartons"] == pytest.approx(5)
+    assert metrics["average_daily_usage_cartons"] == pytest.approx(0.5)
+    assert metrics["reorder_point_cartons"] == pytest.approx(4)
+    assert metrics["recommended_order_cartons"] == 3
+    assert metrics["carton_recommendation_ready"] is True
+
+
+def test_carton_metrics_round_up_carton_stock_orders():
+    from decimal import Decimal
+
+    product = Product(unit="ארגז", units_per_carton=24)
+    metrics = InventoryPlanningService._carton_metrics(
+        product,
+        Decimal("4"),
+        Decimal("12"),
+        Decimal("1.2"),
+        Decimal("6.1"),
+        Decimal("2.1"),
+    )
+
+    assert metrics["current_stock_cartons"] == 4
+    assert metrics["average_daily_usage_cartons"] == pytest.approx(1.2)
+    assert metrics["recommended_order_cartons"] == 3
+    assert metrics["carton_recommendation_ready"] is True
+
+
+def test_carton_metrics_do_not_guess_missing_pack_size():
+    from decimal import Decimal
+
+    product = Product(unit="יחידה", units_per_carton=None)
+    metrics = InventoryPlanningService._carton_metrics(
+        product,
+        Decimal("27"),
+        Decimal("60"),
+        Decimal("6"),
+        Decimal("48"),
+        Decimal("27"),
+    )
+
+    assert metrics["current_stock_cartons"] is None
+    assert metrics["recommended_order_cartons"] is None
+    assert metrics["packaging_configured"] is False
+    assert metrics["carton_recommendation_ready"] is False
+    assert metrics["carton_recommendation_reason"] == "units_per_carton_required_for_piece_stock"
+
+
+
+def test_recommendation_accounts_for_receipts_between_counts(db, tenant_a_admin):
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="Supplier")
+    db.session.add(supplier)
+    db.session.flush()
+    product = _make_product(db, tenant_id, supplier.id, name="Receipt-aware product")
+    now = datetime.now(timezone.utc)
+    db.session.add_all([
+        InventoryMovement(
+            tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_COUNT,
+            quantity=100, balance_after=100, occurred_at=now - timedelta(days=10),
+        ),
+        InventoryMovement(
+            tenant_id=tenant_id, product_id=product.id, movement_type="receipt",
+            quantity=20, balance_after=90, occurred_at=now - timedelta(days=5),
+        ),
+        InventoryMovement(
+            tenant_id=tenant_id, product_id=product.id, movement_type=MOVEMENT_COUNT,
+            quantity=70, balance_after=70, occurred_at=now,
+        ),
+    ])
+    product.current_stock = 70
+    db.session.commit()
+
+    service = InventoryPlanningService(tenant_id)
+    single = service.recommendation(product.id, lookback_days=60, safety_days=0)
+    bulk = next(
+        row for row in service.recommendations(lookback_days=60, safety_days=0)
+        if row["product_id"] == product.id
+    )
+
+    assert single["estimated_depletion"] == 50
+    assert bulk["estimated_depletion"] == 50
