@@ -8,6 +8,7 @@ from werkzeug.exceptions import BadRequest, Conflict, HTTPException
 from app.extensions import db
 from app.models.inventory_movement import InventoryMovement
 from app.models.product import Product
+from app.models.tenant import Tenant
 from app.services.inventory_planning_service import InventoryPlanningService
 from app.services.permission_service import PermissionService
 
@@ -131,6 +132,14 @@ def bulk_count():
     count_id = str(payload.get("count_id") or "").strip() or uuid4().hex
     if len(count_id) > 100:
         return _handle(BadRequest("count_id must not exceed 100 characters"))
+
+    # Serialize count-session claims within this tenant so concurrent retries
+    # cannot both pass the existence check and create duplicate movements.
+    db.session.execute(
+        select(Tenant.id)
+        .where(Tenant.id == current_user.tenant_id)
+        .with_for_update()
+    ).scalar_one()
 
     # A retried bulk count must never reset stock to a stale snapshot after
     # later inventory movements. Treat count_id as an idempotency token.
