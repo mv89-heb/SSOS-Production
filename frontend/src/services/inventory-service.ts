@@ -67,6 +67,16 @@ export interface InventoryRecommendation {
   product_id: number;
   product_name: string;
   current_stock: number;
+  stock_unit?: "יחידה" | "ארגז" | string;
+  units_per_carton?: number | null;
+  current_stock_cartons?: number | null;
+  estimated_depletion_cartons?: number | null;
+  average_daily_usage_cartons?: number | null;
+  reorder_point_cartons?: number | null;
+  recommended_order_cartons?: number | null;
+  packaging_configured?: boolean;
+  carton_recommendation_ready?: boolean;
+  carton_recommendation_reason?: string | null;
   confirmed_inbound?: number;
   stock_checks_in_period: number;
   observed_days: number;
