@@ -99,6 +99,11 @@ export default function InventoryCountPage() {
   useEffect(() => {
     if (!draftRestored) return;
     const hasDraft = Object.keys(quantities).length > 0 || note.trim().length > 0;
+    if (!hasDraft && countId) {
+      setCountId("");
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* local storage may be unavailable */ }
+      return;
+    }
     if (hasDraft && !countId) {
       setCountId(crypto.randomUUID());
       return;
