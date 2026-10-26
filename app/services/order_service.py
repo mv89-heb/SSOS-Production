@@ -337,7 +337,7 @@ class OrderService:
                 "sku": product.sku,
                 "product_name": product.name,
                 "quantity": qty,
-                "quantity_unit": quantity_unit or "catalog",
+                "quantity_unit": quantity_unit,
                 "unit_price": unit_price,
                 "total_price": round(qty * unit_price, 2),
                 "currency": currency,
