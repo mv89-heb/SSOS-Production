@@ -7,7 +7,6 @@ import { AlertTriangle, BarChart3, Boxes, CalendarDays, CircleDollarSign, Packag
 import { inventoryService } from "@/services/inventory-service";
 import { orderService } from "@/services/order-service";
 import { catalogService } from "@/services/catalog-service";
-import type { Product } from "@/types";
 
 const money = (value: number) => new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", maximumFractionDigits: 0 }).format(value);
 const qty = (value: number) => new Intl.NumberFormat("he-IL", { maximumFractionDigits: 2 }).format(value);
