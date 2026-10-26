@@ -7,11 +7,10 @@ import { AlertTriangle, BarChart3, Boxes, CalendarDays, CircleDollarSign, Packag
 import { inventoryService } from "@/services/inventory-service";
 import { orderService } from "@/services/order-service";
 import { catalogService } from "@/services/catalog-service";
-import type { Order, Product } from "@/types";
+import type { Product } from "@/types";
 
 const money = (value: number) => new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", maximumFractionDigits: 0 }).format(value);
 const qty = (value: number) => new Intl.NumberFormat("he-IL", { maximumFractionDigits: 2 }).format(value);
-const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
 const monthKey = (value: string) => { const d = new Date(value); return Number.isNaN(d.getTime()) ? "" : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; };
 const monthLabel = (key: string) => { const [y,m] = key.split("-").map(Number); return new Intl.DateTimeFormat("he-IL", { month: "short" }).format(new Date(y,m-1,1)); };
 
