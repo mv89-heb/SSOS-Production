@@ -48,7 +48,7 @@ export default function InventoryPage() {
   const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "urgent" | "reorder" | "healthy" | "insufficient_data">("all");
-  const [inventoryTab, setInventoryTab] = useState<"urgent" | "needs_data" | "all">("urgent");
+  const [inventoryTab, setInventoryTab] = useState<"urgent" | "needs_data" | "all">("all");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [recommendationTab, setRecommendationTab] = useState<"urgent" | "reorder" | "needs_data">("urgent");
   const [supplierFilter, setSupplierFilter] = useState("all");
