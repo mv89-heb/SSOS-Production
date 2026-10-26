@@ -9,6 +9,9 @@ import { apiClient } from "@/services/api-client";
 const money = (value: number | null | undefined, currency = "ILS") =>
   value == null ? "—" : new Intl.NumberFormat("he-IL", { style: "currency", currency, maximumFractionDigits: 2 }).format(value);
 
+const priceMoney = (value: number | null | undefined, currency = "ILS") =>
+  value == null || !Number.isFinite(value) || value <= 0 ? "מחיר חסר" : money(value, currency);
+
 type Row = {
   product_id: number;
   master_product_id?: number | null;
@@ -288,7 +291,7 @@ export default function SupplierOverviewPage() {
                     <div className="mt-3 grid grid-cols-2 gap-3">
                       <div className="min-w-0 rounded-xl bg-slate-50 p-3 dark:bg-slate-900">
                         <div className="text-xs text-slate-500">המחיר הזול ביותר</div>
-                        <div className="mt-1 break-words font-black text-emerald-700">{money(row.best_price, row.currency)}</div>
+                        <div className="mt-1 break-words font-black text-emerald-700">{priceMoney(row.best_price, row.currency)}</div>
                         <div className="mt-1 break-words text-xs text-slate-500">{row.best_supplier || "לא זוהה ספק"}</div>
                       </div>
                       <div className="min-w-0 rounded-xl bg-slate-50 p-3 dark:bg-slate-900">
@@ -322,7 +325,7 @@ export default function SupplierOverviewPage() {
                               <div className="mt-1 text-xs text-slate-500">לפי {offer.unit || row.comparison_unit || "יחידה"}</div>
                               {index === 0 && <span className="mt-1 inline-block text-xs font-bold text-emerald-700">הזול ביותר</span>}
                             </div>
-                            <div className="shrink-0 font-black">{money(offer.price, offer.currency)}</div>
+                            <div className="shrink-0 font-black">{priceMoney(offer.price, offer.currency)}</div>
                           </div>
                         )) : <p className="text-sm text-slate-500">אין פירוט הצעות זמין לשורה זו.</p>}
                       </div>
@@ -370,9 +373,9 @@ export default function SupplierOverviewPage() {
                       </td>
                       <td className="px-4 py-4 text-xs text-slate-500">{row.category || "—"}</td>
                       <td className="px-4 py-4">{row.current_supplier || "—"}</td>
-                      <td className="px-4 py-4 font-bold">{money(row.current_price, row.currency)}</td>
+                      <td className="px-4 py-4 font-bold">{priceMoney(row.current_price, row.currency)}</td>
                       <td className="px-4 py-4 font-bold text-emerald-700">{row.best_supplier || "—"}</td>
-                      <td className="px-4 py-4 font-black text-emerald-700">{money(row.best_price, row.currency)}</td>
+                      <td className="px-4 py-4 font-black text-emerald-700">{priceMoney(row.best_price, row.currency)}</td>
                       <td className="px-4 py-4">
                         {row.savings_per_unit > 0 ? (
                           <>
@@ -428,7 +431,7 @@ export default function SupplierOverviewPage() {
                                     <div className="font-bold">{offer.supplier_name || `ספק #${offer.supplier_id}`}</div>
                                     {index === 0 && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">הזול ביותר</span>}
                                   </div>
-                                  <div className="mt-2 text-xl font-black">{money(offer.price, offer.currency)}</div>
+                                  <div className="mt-2 text-xl font-black">{priceMoney(offer.price, offer.currency)}</div>
                                   <div className="mt-1 text-xs text-slate-500">לפי {offer.unit || row.comparison_unit || "יחידה"}</div>
                                 </div>
                               ))}
