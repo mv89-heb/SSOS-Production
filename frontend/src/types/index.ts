@@ -8,7 +8,7 @@ export type OrderStatus = "draft" | "submitted" | "approved" | "sent" | "complet
 export type ReminderState = "pending" | "due" | "critical" | "complete";
 export interface OrderItem { product_id: number; product_name: string; sku: string; quantity: number; unit_price: number; total_price: number; }
 export interface Order { id: number; tenant_id: number; user_id: number; order_number: string; supplier_name: string; planned_order_date: string | null; supplier_contact: string | null; supplier_email: string | null; status: OrderStatus; reminder_state: ReminderState; reminder_rules_snapshot: Record<string, unknown> | null; next_reminder_at: string | null; subtotal: number; discount_total: number; tax_total: number; final_total: number; currency: string; items: OrderItem[]; order_items?: Array<{ id: number; product_id: number; quantity: number; product_snapshot?: { name?: string; [key: string]: unknown } | null }>; receipts?: Array<{ id: number; receipt_number: string; status: string; received_at: string | null; notes: string | null }>; snapshot: unknown | null; snapshot_taken_at: string | null; notes: string | null; created_at: string; updated_at: string; }
-export interface CreateOrderItemInput { product_id: number; quantity: number; }
+export interface CreateOrderItemInput { product_id: number; quantity: number; quantity_unit?: "carton"; }
 export interface CreateOrderInput { supplier_id: number; currency?: string; notes?: string; planned_order_date?: string | null; items: CreateOrderItemInput[]; }
 export interface Supplier {
   id: number; tenant_id: number; name: string; contact_name: string | null; email: string | null;
