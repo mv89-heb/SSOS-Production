@@ -62,6 +62,12 @@ export default function InventoryCountPage() {
     queryFn: () => inventoryService.getRecommendations({ lookback_days: 30, safety_days: 2, limit: 500 }),
     staleTime: 60_000,
   });
+  const currentUser = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: async () => (await apiClient.get<{ user: { role: string } }>("/api/auth/me")).data.user,
+    retry: false,
+    staleTime: 60_000,
+  });
   const countStatus = useQuery({
     queryKey: ["inventory", "count-status"],
     queryFn: async () => (await apiClient.get<{ due: boolean; due_product_ids: number[]; assigned_products: number; completion_percent: number; priority_products: number; rotation_cycle_weeks: number }>("/api/inventory/planning/count-status")).data,
@@ -69,7 +75,9 @@ export default function InventoryCountPage() {
   });
   const allProducts = data?.products ?? [];
   const assignedIds = useMemo(() => new Set(countStatus.data?.due_product_ids ?? []), [countStatus.data?.due_product_ids]);
-  const products = allProducts.filter((product) => assignedIds.has(product.id));
+  const products = currentUser.data?.role === "employee"
+    ? allProducts.filter((product) => assignedIds.has(product.id))
+    : allProducts;
 
   useEffect(() => {
     try {
