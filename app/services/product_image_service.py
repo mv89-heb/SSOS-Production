@@ -123,6 +123,11 @@ def _upcitemdb_lookup(barcode, product_name, timeout):
                         "product_name": str(item.get("title") or "").strip() or None,
                         "match_method": "exact_barcode",
                     }
+    # A barcode lookup is a distinct operation. Let the caller decide whether
+    # to run one separate name search, so a failed lookup never consumes two
+    # search requests in the same batch item.
+    if normalized and not _is_synthetic_barcode(normalized):
+        return {"image_url": None, "reason": "product_not_found"}
     if not product_name or len(_normalize_product_name(product_name)) < 2:
         return {"image_url": None, "reason": "product_not_found"}
     payload = _upcitemdb_request(
@@ -219,8 +224,8 @@ def lookup_product_image(barcode, product_name=None, timeout=4):
         if fallback.get("reason") not in {"product_not_found", "image_not_available"}:
             return fallback
         if off_unavailable:
-            # The fallback call above already attempted both barcode and, when
-            # supplied, exact-name lookup. Do not spend a second search quota.
+            if product_name and fallback.get("reason") == "product_not_found":
+                return _upcitemdb_lookup(None, product_name, timeout)
             return fallback
     if product_name:
         primary = _name_lookup(product_name, timeout)
