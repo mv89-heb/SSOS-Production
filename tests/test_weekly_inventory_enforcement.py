@@ -27,6 +27,7 @@ def test_overdue_employee_cannot_mutate_operational_data_but_can_submit_count(
 ):
     registration, _ = tenant_a_admin
     tenant_id = registration["tenant"]["id"]
+    app.config["ENFORCE_WEEKLY_INVENTORY_COUNT_IN_TESTS"] = True
     monkeypatch.setattr(
         InventoryCalendarService,
         "count_status",
