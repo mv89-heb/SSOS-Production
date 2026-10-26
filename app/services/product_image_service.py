@@ -30,11 +30,11 @@ _UPC_SEARCH_INTERVAL_SECONDS = 16.0
 
 
 def _digits(value):
-    return re.sub(r"\\D", "", str(value or ""))
+    return re.sub(r"\D", "", str(value or ""))
 
 
 def _is_synthetic_barcode(value):
-    return bool(re.fullmatch(r"990000010000\\d+", str(value or "").strip()))
+    return bool(re.fullmatch(r"990000010000\d+", str(value or "").strip()))
 
 
 def _allowed_image_url(value):
