@@ -79,3 +79,42 @@ def test_invoice_payment_requires_manager_approval_and_audit(logged_in_client_a,
         json={"approval_status": INVOICE_APPROVAL_PENDING},
     )
     assert reset.status_code == 409
+
+
+
+def test_invoice_list_requires_orders_view_permission(logged_in_client_a, tenant_a_admin, make_order, db):
+    client = logged_in_client_a
+    tenant_data, _ = tenant_a_admin
+    tenant_slug = tenant_data["tenant"]["slug"]
+    order_id = _create_order(client, make_order)
+    created = client.post(
+        f"/api/orders/{order_id}/invoices",
+        json={"invoice_number": "INV-READ-PERM-001", "amount": 25},
+    )
+    assert created.status_code == 201, created.get_json()
+
+    registered = client.post("/api/auth/register", json={
+        "email": "invoice-reader@acme.test",
+        "password": "Passw0rd1",
+        "full_name": "Invoice Reader",
+        "tenant_slug": tenant_slug,
+        "role": "employee",
+    })
+    assert registered.status_code in (200, 201), registered.get_json()
+    from app.models.user import User
+    employee = db.session.query(User).filter_by(
+        tenant_id=tenant_data["tenant"]["id"],
+        email="invoice-reader@acme.test",
+    ).first()
+    assert employee is not None
+    employee.permissions = {"orders.view": False}
+    db.session.commit()
+
+    client.post("/api/auth/logout")
+    login = client.post("/api/auth/login", json={
+        "email": "invoice-reader@acme.test",
+        "password": "Passw0rd1",
+    })
+    assert login.status_code == 200, login.get_json()
+    denied = client.get(f"/api/orders/{order_id}/invoices")
+    assert denied.status_code == 403, denied.get_json()
