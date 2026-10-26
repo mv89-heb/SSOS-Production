@@ -314,41 +314,73 @@ class InventoryCalendarService:
         return rows
 
     def count_status(self):
+        """Assign a manageable rotating count list each week, prioritizing stock risks.
+
+        The catalog is split into four stable groups (about 25% per week). Products
+        at/below zero stock or their configured minimum are added to this week's
+        list regardless of rotation. A product leaves the due list only after a
+        physical count in the current seven-day window.
+        """
         today = datetime.now(timezone.utc).date()
-        products = db.session.scalars(select(Product.id).where(Product.tenant_id == self.tenant_id, Product.active.is_(True))).all()
-        product_count = len(products)
+        products = db.session.scalars(
+            select(Product).where(
+                Product.tenant_id == self.tenant_id,
+                Product.active.is_(True),
+            ).order_by(Product.id.asc())
+        ).all()
+        product_by_id = {int(product.id): product for product in products}
+        product_ids = list(product_by_id)
+        product_count = len(product_ids)
         window_start = today - timedelta(days=6)
-        counted_ids = db.session.scalars(
+        counted_ids = set(db.session.scalars(
             select(distinct(InventoryMovement.product_id)).where(
                 InventoryMovement.tenant_id == self.tenant_id,
                 InventoryMovement.movement_type == MOVEMENT_COUNT,
-                InventoryMovement.occurred_at >= datetime.combine(window_start, datetime.min.time(), tzinfo=timezone.utc),
-                InventoryMovement.product_id.in_(products or [-1]),
+                InventoryMovement.occurred_at >= datetime.combine(
+                    window_start, datetime.min.time(), tzinfo=timezone.utc
+                ),
+                InventoryMovement.product_id.in_(product_ids or [-1]),
             )
-        ).all()
-        counted_products = len(counted_ids)
-        # A weekly count is complete only when every active product has a physical
-        # count in the rolling seven-day window. Once the Sunday deadline passes,
-        # keep the requirement active on every subsequent day until completion.
-        completed = product_count == 0 or counted_products == product_count
+        ).all())
+
+        iso_year, iso_week, _ = today.isocalendar()
+        rotation_group = (iso_year * 53 + iso_week) % 4
+        rotation_ids = {
+            product_id for product_id in product_ids
+            if product_id % 4 == rotation_group
+        }
+        priority_ids = set()
+        for product_id, product in product_by_id.items():
+            current_stock = Decimal(str(product.current_stock or 0))
+            minimum = Decimal(str(product.min_stock)) if product.min_stock is not None else None
+            if current_stock <= 0 or (minimum is not None and current_stock <= minimum):
+                priority_ids.add(product_id)
+
+        assigned_ids = rotation_ids | priority_ids
+        due_ids = assigned_ids - counted_ids
+        counted_assigned = len(assigned_ids & counted_ids)
+        assigned_count = len(assigned_ids)
+        completed = not due_ids
         days_until_due = (self.DEFAULT_COUNT_WEEKDAY - today.weekday()) % 7
         upcoming_due = today + timedelta(days=days_until_due)
         if completed:
             next_due = upcoming_due + (timedelta(days=7) if upcoming_due == today else timedelta(days=0))
-            due = False
         else:
             days_since_deadline = (today.weekday() - self.DEFAULT_COUNT_WEEKDAY) % 7
-            last_deadline = today - timedelta(days=days_since_deadline)
-            next_due = last_deadline
-            due = True
+            next_due = today - timedelta(days=days_since_deadline)
         return {
             "count_weekday": self.DEFAULT_COUNT_WEEKDAY,
             "count_time": f"{self.DEFAULT_COUNT_HOUR:02d}:00",
             "active_products": product_count,
-            "counted_products_last_7_days": counted_products,
-            "completion_percent": round((counted_products / product_count) * 100, 1) if product_count else 0,
+            "assigned_products": assigned_count,
+            "due_product_ids": sorted(due_ids),
+            "priority_products": len(priority_ids),
+            "rotation_cycle_weeks": 4,
+            "counted_products_last_7_days": len(counted_ids),
+            "counted_assigned_products": counted_assigned,
+            "completion_percent": round((counted_assigned / assigned_count) * 100, 1) if assigned_count else 100,
             "completed": completed,
-            "due": due,
+            "due": bool(due_ids),
             "next_due_date": next_due.isoformat(),
             "window_start": window_start.isoformat(),
         }
