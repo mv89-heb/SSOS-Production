@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 import re
 
 from sqlalchemy import func, select
@@ -125,6 +125,22 @@ class InventoryUnifiedPlanningService:
             counts_by.setdefault(row.product_id, []).append(row)
         for row in receipts:
             receipts_by.setdefault(row.product_id, []).append(row)
+
+        # Multiple physical counts on the same day are corrections, not separate
+        # consumption intervals. Keep the latest count for each product/day.
+        for product_id, rows in counts_by.items():
+            latest_by_day = {}
+            for row in rows:
+                day_key = row.occurred_at.date() if row.occurred_at else date.min
+                previous = latest_by_day.get(day_key)
+                if previous is None or (
+                    row.occurred_at, row.id or 0
+                ) > (previous.occurred_at, previous.id or 0):
+                    latest_by_day[day_key] = row
+            counts_by[product_id] = sorted(
+                latest_by_day.values(),
+                key=lambda row: (row.occurred_at.isoformat() if row.occurred_at else "", row.id or 0),
+            )
 
         result = {}
         for product_id in product_ids:
@@ -293,10 +309,28 @@ class InventoryUnifiedPlanningService:
             else:
                 status = "healthy"
                 needs_data_reason = None
+            piece_stock = str(product.unit or "").strip() == "יחידה"
+            pack_size = int(product.units_per_carton) if product.units_per_carton and int(product.units_per_carton) > 0 else None
+            carton_ready = not piece_stock or pack_size is not None
+            carton_divisor = Decimal(pack_size) if piece_stock and pack_size else Decimal("1")
+            daily_cartons = daily_rate / carton_divisor if carton_ready else None
+            depletion_cartons = Decimal(str(metric.get("consumption", 0))) / carton_divisor if carton_ready else None
+            stock_cartons = current_stock / carton_divisor if carton_ready else None
+            recommended_cartons = int((recommended / carton_divisor).to_integral_value(rounding=ROUND_CEILING)) if carton_ready else None
+
             rows.append({
                 "product_id": product.id,
                 "product_name": product.name,
                 "current_stock": float(current_stock),
+                "stock_unit": "יחידה" if piece_stock else "ארגז",
+                "units_per_carton": pack_size,
+                "current_stock_cartons": round(float(stock_cartons), 3) if stock_cartons is not None else None,
+                "estimated_depletion_cartons": round(float(depletion_cartons), 3) if depletion_cartons is not None else None,
+                "average_daily_usage_cartons": round(float(daily_cartons), 3) if daily_cartons is not None else None,
+                "weekly_usage_cartons": round(float(daily_cartons * 7), 3) if daily_cartons is not None else None,
+                "recommended_order_cartons": recommended_cartons,
+                "carton_recommendation_ready": carton_ready,
+                "packaging_configured": pack_size is not None,
                 "open_inbound": float(open_inbound),
                 "confirmed_inbound": float(open_inbound),
                 "available_for_planning": float(available),
