@@ -95,6 +95,19 @@ def create_order_invoice(order_id):
         )
         db.session.add(invoice)
         db.session.flush()
+        AuditService.log_event(
+            current_user.tenant_id,
+            current_user.id,
+            "supplier_invoice.created",
+            f"Supplier invoice {invoice.invoice_number} recorded",
+            {
+                "invoice_id": invoice.id,
+                "order_id": order.id,
+                "supplier_id": order.supplier_id,
+                "amount": str(invoice.amount),
+                "currency": invoice.currency,
+            },
+        )
         result = invoice.to_dict()
         db.session.commit()
         return jsonify({"success": True, "invoice": result}), 201
@@ -217,6 +230,21 @@ def record_invoice_payment(invoice_id):
                     if paid_unit_price.is_finite() and paid_unit_price >= 0:
                         offer.last_paid_price = paid_unit_price.quantize(Decimal("0.01"))
                         offer.last_paid_at = datetime.combine(payment_date, datetime.min.time(), tzinfo=timezone.utc)
+        AuditService.log_event(
+            current_user.tenant_id,
+            current_user.id,
+            "supplier_invoice.payment_recorded",
+            f"Payment recorded for supplier invoice {invoice.invoice_number}",
+            {
+                "invoice_id": invoice.id,
+                "payment_id": payment.id,
+                "order_id": invoice.order_id,
+                "amount": str(amount),
+                "currency": invoice.currency,
+                "payment_date": payment_date.isoformat(),
+                "fully_paid": paid + amount >= Decimal(str(invoice.amount)),
+            },
+        )
         result = invoice.to_dict()
         db.session.commit()
         return jsonify({"success": True, "invoice": result}), 201
