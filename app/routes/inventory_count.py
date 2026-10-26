@@ -143,8 +143,8 @@ def bulk_count():
             InventoryMovement.reference_id == count_id,
         )
         .order_by(InventoryMovement.id.asc())
-        ).all()
-        if existing:
+    ).all()
+    if existing:
         existing_quantities = {
             movement.product_id: int(movement.quantity) for movement in existing
         }
