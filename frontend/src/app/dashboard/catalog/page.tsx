@@ -59,10 +59,11 @@ export default function CatalogPage() {
     try {
       const response = await apiClient.post<{
         attempted: number; matched: number; no_match: number; remaining_eligible: number;
-        missing_or_synthetic_barcode: number;
+        missing_or_synthetic_barcode: number; source_unavailable?: number;
       }>("/api/catalog/products/images/enrich", { limit: 10 });
       const result = response.data;
-      setImageEnrichmentMessage(`נבדקו ${result.attempted} מוצרים; נמצאו ${result.matched} תמונות; ללא תמונה תואמת: ${result.no_match}. נותרו לבדיקה: ${result.remaining_eligible}. ללא ברקוד אמיתי: ${result.missing_or_synthetic_barcode}.`);
+      const unavailableNote = result.source_unavailable ? ` מקור התמונות לא היה זמין עבור ${result.source_unavailable} מוצרים; הם לא סומנו כבדוקים וניתן לנסות שוב.` : "";
+      setImageEnrichmentMessage(`נבדקו ${result.attempted} מוצרים; נמצאו ${result.matched} תמונות; ללא תמונה תואמת: ${result.no_match - (result.source_unavailable ?? 0)}; שגיאת מקור: ${result.source_unavailable ?? 0}. נותרו לבדיקה: ${result.remaining_eligible}. ללא ברקוד אמיתי: ${result.missing_or_synthetic_barcode}.${unavailableNote}`);
       await refetch();
     } catch {
       setImageEnrichmentMessage("עדכון התמונות נכשל. בדוק חיבור לרשת והרשאות מנהל ונסה שוב.");
