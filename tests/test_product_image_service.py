@@ -108,6 +108,6 @@ def test_fallback_rejects_untrusted_non_https_image_url():
         "images": ["http://images.example-cdn.com/milk.jpg"],
     }]}
     with patch("app.services.product_image_service._request_json", side_effect=[None, payload]):
-        result = lookup_product_image("0123456789012", "Milk")
+        result = lookup_product_image("0123456789012")
     assert result["image_url"] is None
     assert result["reason"] == "source_unavailable"
