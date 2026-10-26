@@ -298,17 +298,36 @@ class OrderService:
                     raise Conflict(f"Supplier offer {offer.id} is inactive")
                 if offer.product_id != product.id or offer.supplier_id != order_supplier_id:
                     raise Conflict("Supplier offer does not match the ordered product and supplier")
-                unit_price = float(offer.price)
+                source_unit_price = float(offer.price)
+                source_unit = offer.unit
+                pack_size = offer.units_per_carton or product.units_per_carton
                 currency = offer.currency or "ILS"
                 offer_snapshot = offer.to_dict()
                 supplier_sku = offer.supplier_sku
             else:
                 if product.supplier_id != order_supplier_id:
                     raise Conflict("Product is assigned to a different supplier; select a valid supplier offer")
-                unit_price = float(product.current_price)
+                source_unit_price = float(product.current_price)
+                source_unit = product.unit
+                pack_size = product.units_per_carton
                 currency = product.currency or "ILS"
                 offer_snapshot = None
                 supplier_sku = product.supplier_sku
+
+            quantity_unit = item.get("quantity_unit")
+            if quantity_unit not in (None, "carton"):
+                raise BadRequest("quantity_unit must be 'carton' when supplied")
+            stock_unit = product.unit
+            if quantity_unit == "carton":
+                if not isinstance(pack_size, int) or isinstance(pack_size, bool) or pack_size <= 0:
+                    raise BadRequest(f"Product {p_id} requires a valid units_per_carton value for carton ordering")
+                if offer is not None and str(stock_unit or "").strip() != "יחידה" and product.units_per_carton and pack_size != product.units_per_carton:
+                    raise Conflict("This supplier's carton size differs from the product's stock carton size; carton ordering is not safe")
+                unit_price = source_unit_price * pack_size if str(source_unit or "").strip() == "יחידה" else source_unit_price
+                order_unit = "קרטון"
+            else:
+                unit_price = source_unit_price
+                order_unit = source_unit
 
             if unit_price <= 0:
                 raise Conflict(f"Product {p_id} must have a valid purchase price greater than zero")
@@ -318,13 +337,16 @@ class OrderService:
                 "sku": product.sku,
                 "product_name": product.name,
                 "quantity": qty,
+                "quantity_unit": quantity_unit or "catalog",
                 "unit_price": unit_price,
                 "total_price": round(qty * unit_price, 2),
                 "currency": currency,
                 "supplier_offer_id": offer.id if offer is not None else None,
                 "supplier_sku": supplier_sku,
-                "unit": offer.unit if offer is not None else product.unit,
-                "units_per_carton": offer.units_per_carton if offer is not None else product.units_per_carton,
+                "unit": order_unit,
+                "stock_unit": stock_unit,
+                "price_unit": source_unit,
+                "units_per_carton": pack_size,
                 "offer_snapshot": offer_snapshot,
             })
         return enriched_items
@@ -345,6 +367,9 @@ class OrderService:
                         "sku": item.get("sku"),
                         "product_name": item.get("product_name"),
                         "unit": item.get("unit"),
+                        "quantity_unit": item.get("quantity_unit"),
+                        "stock_unit": item.get("stock_unit"),
+                        "price_unit": item.get("price_unit"),
                         "units_per_carton": item.get("units_per_carton"),
                         "supplier_sku": item.get("supplier_sku"),
                     },
