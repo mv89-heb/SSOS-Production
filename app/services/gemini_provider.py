@@ -23,6 +23,8 @@ def _safe_provider_error(exc: Exception) -> str:
     if not detail:
         return "ai_provider_error"
     detail = re.sub(r"(?i)(api[_ -]?key|key)=?[^\s,;]+", r"\1=[REDACTED]", detail)
+    detail = re.sub(r"AIza[0-9A-Za-z_-]{20,}", "[REDACTED_API_KEY]", detail)
+    detail = re.sub(r"(?i)bearer\\s+[A-Za-z0-9._~-]+", "Bearer [REDACTED]", detail)
     detail = detail.replace("GEMINI_API_KEY", "Gemini API key")
     return f"ai_provider_error: {detail[:1500]}"
 
@@ -60,16 +62,38 @@ class GeminiProvider:
         return cls(api_key=api_key, model=model, timeout_seconds=timeout_seconds, fallback_model=fallback_model, thinking_level=thinking_level)
 
     def generate_text(self, prompt: str, *, system_instruction: str | None = None) -> AIResult:
-        try:
-            contents = prompt if not system_instruction else f"System instruction:\n{system_instruction}\n\nUser request:\n{prompt}"
-            response = self._client.models.generate_content(model=self.model, contents=contents)
-            text = (response.text or "").strip()
-            if not text:
-                return AIResult(success=False, error="empty_ai_response", provider=self.name, model=self.model)
-            return AIResult(success=True, text=text, provider=self.name, model=self.model)
-        except Exception as exc:
-            logger.exception("Gemini text generation failed")
-            return AIResult(success=False, error=_safe_provider_error(exc), provider=self.name, model=self.model)
+        contents = prompt if not system_instruction else f"System instruction:\\n{system_instruction}\\n\\nUser request:\\n{prompt}"
+        models_to_try = [self.model]
+        if self.fallback_model:
+            models_to_try.append(self.fallback_model)
+        last_error: Exception | None = None
+
+        for model_index, model_name in enumerate(models_to_try):
+            for attempt in range(1, 3):
+                try:
+                    response = self._client.models.generate_content(model=model_name, contents=contents)
+                    text = (response.text or "").strip()
+                    if not text:
+                        return AIResult(success=False, error="empty_ai_response", provider=self.name, model=model_name)
+                    return AIResult(success=True, text=text, provider=self.name, model=model_name)
+                except Exception as exc:
+                    last_error = exc
+                    retryable = self._is_retryable_error(exc)
+                    if retryable and attempt < 2:
+                        time.sleep(min(2, 2 ** (attempt - 1)))
+                        continue
+                    if model_index < len(models_to_try) - 1 and (
+                        retryable or self._is_model_fallback_error(exc)
+                    ):
+                        logger.warning(
+                            "Gemini text model %s failed; falling back to %s: %s",
+                            model_name, models_to_try[model_index + 1], _safe_provider_error(exc),
+                        )
+                        break
+                    logger.exception("Gemini text generation failed")
+                    return AIResult(success=False, error=_safe_provider_error(exc), provider=self.name, model=model_name)
+
+        return AIResult(success=False, error=_safe_provider_error(last_error or RuntimeError("Gemini text generation failed")), provider=self.name, model=self.model)
 
     @staticmethod
     def _normalize_supplier(value: dict | None) -> tuple[str, str]:
@@ -220,6 +244,15 @@ class GeminiProvider:
         return found
 
     @staticmethod
+    def _is_model_fallback_error(exc: Exception) -> bool:
+        """Identify model-specific failures where trying the configured fallback is useful."""
+        detail = str(exc).lower()
+        return any(marker in detail for marker in (
+            "model not found", "not found for api version", "unknown model",
+            "unsupported model", "model is not supported", "does not support the requested",
+        ))
+
+    @staticmethod
     def _is_retryable_error(exc: Exception) -> bool:
         """Identify transient Gemini/network failures that are safe to retry."""
         detail = str(exc).lower()
@@ -291,7 +324,7 @@ class GeminiProvider:
                         time.sleep(delay)
                         continue
 
-                    if retryable and model_index < len(models_to_try) - 1:
+                    if (retryable or self._is_model_fallback_error(exc)) and model_index < len(models_to_try) - 1:
                         fallback = models_to_try[model_index + 1]
                         logger.warning(
                             "Gemini model %s unavailable for page %s/%s; falling back to %s: %s",
@@ -363,7 +396,7 @@ class GeminiProvider:
                                 )
                                 time.sleep(delay)
                                 continue
-                            if retryable and model_index < len(models_to_try) - 1:
+                            if (retryable or self._is_model_fallback_error(exc)) and model_index < len(models_to_try) - 1:
                                 logger.warning(
                                     "Gemini model %s unavailable; falling back to %s: %s",
                                     model_name, models_to_try[model_index + 1],
