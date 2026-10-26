@@ -72,7 +72,7 @@ export default function InventoryPage() {
   const recommendationByProduct = useMemo(() => new Map((recommendations.data ?? []).map((row) => [row.product_id, row])), [recommendations.data]);
   const latestMovementByProduct = useMemo(() => {
     const latest = new Map<number, InventoryMovement>();
-    for (const movement of summary.data?.recent_movements ?? []) {
+    for (const movement of summary.data?.latest_movements ?? []) {
       const existing = latest.get(movement.product_id);
       if (!existing || new Date(movement.occurred_at).getTime() > new Date(existing.occurred_at).getTime()) latest.set(movement.product_id, movement);
     }
