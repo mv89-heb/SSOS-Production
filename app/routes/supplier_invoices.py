@@ -6,6 +6,7 @@ import os
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_login import current_user, login_required
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import BadRequest, Conflict, NotFound, HTTPException
 from werkzeug.utils import secure_filename
 
@@ -85,6 +86,13 @@ def create_order_invoice(order_id):
             ))
             if receipt is None:
                 raise NotFound("Receipt not found for this order")
+        duplicate_invoice = db.session.scalar(select(SupplierInvoice.id).where(
+            SupplierInvoice.tenant_id == current_user.tenant_id,
+            SupplierInvoice.supplier_id == order.supplier_id,
+            SupplierInvoice.invoice_number == invoice_number,
+        ).limit(1))
+        if duplicate_invoice is not None:
+            raise Conflict("Invoice number already exists for this supplier")
         invoice = SupplierInvoice(
             tenant_id=current_user.tenant_id, order_id=order.id, supplier_id=order.supplier_id,
             receipt_id=int(receipt_id) if receipt_id not in (None, "") else None,
@@ -114,6 +122,13 @@ def create_order_invoice(order_id):
     except HTTPException as exc:
         db.session.rollback()
         return _error(exc)
+    except IntegrityError as exc:
+        db.session.rollback()
+        # The database uniqueness constraint is the final protection against
+        # concurrent duplicate invoice submissions.
+        if "uq_supplier_invoice_number" in str(getattr(getattr(exc, "orig", None), "diag", None)) or "supplier_invoices.tenant_id" in str(getattr(exc, "orig", exc)):
+            return _error(Conflict("Invoice number already exists for this supplier"))
+        raise
     except Exception:
         db.session.rollback()
         raise
