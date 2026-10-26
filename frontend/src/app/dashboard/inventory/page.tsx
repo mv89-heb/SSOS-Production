@@ -42,6 +42,9 @@ export default function InventoryPage() {
   const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "urgent" | "reorder" | "healthy" | "insufficient_data">("all");
+  const [inventoryTab, setInventoryTab] = useState<"urgent" | "all" | "risk">("urgent");
+  const [supplierFilter, setSupplierFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [movementType, setMovementType] = useState<InventoryMovementType>("count");
   const [quantity, setQuantity] = useState("");
@@ -64,11 +67,27 @@ export default function InventoryPage() {
     const query = search.trim().toLocaleLowerCase("he");
     const filtered = products.filter((product) => {
       const matches = !query || [product.name, product.sku, product.barcode, product.category].filter(Boolean).some((v) => String(v).toLocaleLowerCase("he").includes(query));
-      return matches && (statusFilter === "all" || stockStatus(product) === statusFilter);
+      const status = stockStatus(product);
+      const matchesStatus = statusFilter === "all" || status === statusFilter;
+      const matchesTab = inventoryTab === "all" || (inventoryTab === "urgent" ? status === "urgent" : status === "reorder");
+      const matchesSupplier = supplierFilter === "all" || String(product.supplier_id ?? "") === supplierFilter;
+      const matchesCategory = categoryFilter === "all" || (product.category || "ללא קטגוריה") === categoryFilter;
+      return matches && matchesStatus && matchesTab && matchesSupplier && matchesCategory;
     });
     return sortByHebrewName(filtered, (product) => product.name, sortDirection);
-  }, [products, search, statusFilter, sortDirection]);
+  }, [products, search, statusFilter, sortDirection, inventoryTab, supplierFilter, categoryFilter]);
 
+  const categories = useMemo(() => [...new Set(products.map((product) => product.category || "ללא קטגוריה"))].sort((a,b)=>a.localeCompare(b,"he")), [products]);
+  const suppliers = useMemo(() => {
+    const found = new Map<string, string>();
+    for (const product of products) {
+      const forecast = recommendationByProduct.get(product.id);
+      if (product.supplier_id != null) found.set(String(product.supplier_id), forecast?.supplier_schedule?.supplier_name || ("ספק " + product.supplier_id));
+    }
+    return [...found.entries()].sort((a,b)=>a[1].localeCompare(b[1],"he"));
+  }, [products, recommendationByProduct]);
+  const urgentCount = useMemo(() => products.filter((product) => stockStatus(product) === "urgent").length, [products]);
+  const riskCount = useMemo(() => products.filter((product) => stockStatus(product) === "reorder").length, [products]);
   const selected = products.find((product) => product.id === selectedId) ?? null;
   const weeklyConsumption = useMemo(() => (recommendations.data ?? []).map((row) => ({ ...row, weeklyUsage: row.carton_recommendation_ready && row.average_daily_usage_cartons != null ? Number(row.average_daily_usage_cartons) * 7 : Number(row.average_daily_usage ?? 0) * 7, usageUnit: row.carton_recommendation_ready && row.average_daily_usage_cartons != null ? "קרטונים" : "יחידות" })).filter((row) => Number.isFinite(row.weeklyUsage) && row.weeklyUsage > 0).sort((a, b) => b.weeklyUsage - a.weeklyUsage).slice(0, 8), [recommendations.data]);
 
