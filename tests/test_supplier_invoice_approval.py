@@ -30,6 +30,12 @@ def test_invoice_payment_requires_manager_approval_and_audit(logged_in_client_a,
     assert created.status_code == 201, created.get_json()
     invoice = created.get_json()["invoice"]
     invoice_id = invoice["id"]
+    from app.models.audit import AuditLog
+    creation_event = db.session.query(AuditLog).filter_by(
+        action="supplier_invoice.created"
+    ).first()
+    assert creation_event is not None
+    assert creation_event.metadata_json["invoice_id"] == invoice_id
     assert invoice["approval_status"] == INVOICE_APPROVAL_PENDING
 
     payment = client.post(
@@ -55,6 +61,12 @@ def test_invoice_payment_requires_manager_approval_and_audit(logged_in_client_a,
     )
     assert payment.status_code == 201, payment.get_json()
     assert payment.get_json()["invoice"]["status"] == "paid"
+    payment_event = db.session.query(AuditLog).filter_by(
+        action="supplier_invoice.payment_recorded"
+    ).first()
+    assert payment_event is not None
+    assert payment_event.metadata_json["invoice_id"] == invoice_id
+    assert payment_event.metadata_json["fully_paid"] is True
 
     reset = client.post(
         f"/api/supplier-invoices/{invoice_id}/approval",
