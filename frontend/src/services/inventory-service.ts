@@ -90,6 +90,8 @@ export interface InventoryRecommendation {
   planning_horizon_days: number;
   reorder_point: number;
   recommended_order: number;
+  configured_stock_target?: number | null;
+  needs_data_reason?: "insufficient_physical_counts" | "stock_target_not_configured" | null;
   coverage_days: number | null;
   safety_stock: number;
   status: "urgent" | "reorder" | "healthy" | "insufficient_data";
