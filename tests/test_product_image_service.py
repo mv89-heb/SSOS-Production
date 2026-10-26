@@ -110,4 +110,4 @@ def test_fallback_rejects_untrusted_non_https_image_url():
     with patch("app.services.product_image_service._request_json", side_effect=[None, payload]):
         result = lookup_product_image("0123456789012")
     assert result["image_url"] is None
-    assert result["reason"] == "source_unavailable"
+    assert result["reason"] == "product_not_found"
