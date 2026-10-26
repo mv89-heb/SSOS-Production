@@ -94,18 +94,15 @@ def test_submit_twice_rejected(logged_in_client_a, make_order):
     assert second.status_code == 409
 
 
-def test_full_lifecycle_can_be_completed_by_order_creator(logged_in_client_a, make_order):
+def test_order_creator_cannot_approve_own_order(logged_in_client_a, make_order):
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
     assert logged_in_client_a.post(f"/api/orders/{order_id}/submit").status_code == 200
     approved = logged_in_client_a.post(f"/api/orders/{order_id}/approve")
-    assert approved.status_code == 200, approved.get_json()
-    assert approved.get_json()["order"]["status"] == "approved"
-    sent = logged_in_client_a.post(f"/api/orders/{order_id}/sent")
-    assert sent.status_code == 200, sent.get_json()
-    completed = logged_in_client_a.post(f"/api/orders/{order_id}/complete")
-    assert completed.status_code == 200, completed.get_json()
-    assert completed.get_json()["order"]["status"] == "completed"
+    assert approved.status_code == 409, approved.get_json()
+    assert "creator" in approved.get_json()["message"].lower()
+    detail = logged_in_client_a.get(f"/api/orders/{order_id}")
+    assert detail.get_json()["order"]["status"] == "submitted"
 
 
 def test_approve_before_submit_rejected(logged_in_client_a, make_order):
@@ -134,13 +131,20 @@ def test_reject_stores_reason_and_cancels(logged_in_client_a, client_b, make_ord
     assert "price too high" in order["notes"]
 
 
-def test_completed_order_cannot_be_edited(logged_in_client_a, make_order):
+def test_completed_order_cannot_be_edited(logged_in_client_a, client_b, make_order, db):
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
     assert logged_in_client_a.post(f"/api/orders/{order_id}/submit").status_code == 200
-    assert logged_in_client_a.post(f"/api/orders/{order_id}/approve").status_code == 200
-    assert logged_in_client_a.post(f"/api/orders/{order_id}/sent").status_code == 200
-    assert logged_in_client_a.post(f"/api/orders/{order_id}/complete").status_code == 200
+    from app.models.user import User, ROLE_MANAGER
+    tenant_id = logged_in_client_a.get("/api/auth/me").get_json()["user"]["tenant_id"]
+    manager = User(tenant_id=tenant_id, email="completion-manager@acme.test", full_name="Completion Manager", role=ROLE_MANAGER, active=True)
+    manager.set_password("Passw0rd1")
+    db.session.add(manager)
+    db.session.commit()
+    assert client_b.post("/api/auth/login", json={"email": "completion-manager@acme.test", "password": "Passw0rd1"}).status_code == 200
+    assert client_b.post(f"/api/orders/{order_id}/approve").status_code == 200
+    assert client_b.post(f"/api/orders/{order_id}/sent").status_code == 200
+    assert client_b.post(f"/api/orders/{order_id}/complete").status_code == 200
     blocked = logged_in_client_a.put(f"/api/orders/{order_id}", json={"notes": "too late"})
     assert blocked.status_code == 409
 

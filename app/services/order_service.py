@@ -180,6 +180,8 @@ class OrderService:
             raise NotFound("Order not found")
         if order.status != STATUS_SUBMITTED:
             raise Conflict(f"Only '{STATUS_SUBMITTED}' orders can be approved (current: '{order.status}')")
+        if order.user_id == user.id:
+            raise Conflict("The order creator cannot approve their own order")
         order.status = STATUS_APPROVED
         AuditService.log_event(self.tenant_id, user.id, "order.approved", f"Order {order.order_number} approved", {"order_id": order.id, "approved_by": user.id})
         return order
