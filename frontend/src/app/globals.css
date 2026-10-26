@@ -46,3 +46,59 @@
   main tr { break-inside: avoid; }
   a { color: #111827 !important; text-decoration: none !important; }
 }
+
+/* Fluid sizing: adapt the interface gently to browser viewport width.
+   Components still use responsive breakpoints; this only scales rem-based
+   spacing and typography within a safe, readable range. */
+@layer base {
+  html {
+    font-size: clamp(14px, calc(13px + 0.22vw), 16px);
+    scroll-padding-top: 1rem;
+  }
+
+  body {
+    width: 100%;
+    min-width: 320px;
+  }
+
+  img,
+  video,
+  canvas {
+    max-width: 100%;
+    height: auto;
+  }
+
+  input,
+  select,
+  textarea {
+    max-width: 100%;
+  }
+}
+
+/* Make content containers shrink with the available viewport instead of
+   forcing their flex/grid parents wider than the browser window. */
+@layer components {
+  .dashboard-section,
+  .table-shell {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .table-shell {
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 480px) {
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .page-title {
+    font-size: clamp(1.5rem, 1.1rem + 0.5vw, 2rem);
+  }
+}
