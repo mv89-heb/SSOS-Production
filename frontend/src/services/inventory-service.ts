@@ -73,6 +73,7 @@ export interface InventoryRecommendation {
   current_stock_cartons?: number | null;
   estimated_depletion_cartons?: number | null;
   average_daily_usage_cartons?: number | null;
+  weekly_usage_cartons?: number | null;
   reorder_point_cartons?: number | null;
   recommended_order_cartons?: number | null;
   packaging_configured?: boolean;
@@ -82,6 +83,8 @@ export interface InventoryRecommendation {
   stock_checks_in_period: number;
   observed_days: number;
   estimated_depletion: number;
+  estimated_depletion_cartons?: number | null;
+  current_stock_cartons?: number | null;
   average_daily_usage: number;
   base_average_daily_usage?: number;
   holiday_adjusted_demand?: number;
