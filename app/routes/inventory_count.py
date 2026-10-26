@@ -152,7 +152,7 @@ def bulk_count():
             requested_quantities = dict(normalized)
             same_note = all((movement.note or None) == note for movement in existing)
             if existing_quantities != requested_quantities or not same_note:
-                raise Conflict("count_id was already used for a different inventory count")
+                return _handle(Conflict("count_id was already used for a different inventory count"))
             existing_payload = [movement.to_dict() for movement in existing]
             return jsonify({
                 "success": True,
