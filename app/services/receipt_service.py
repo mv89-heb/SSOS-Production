@@ -168,8 +168,19 @@ class ReceiptService:
         for order_item_id, quantity in parsed.items():
             order_item = by_id[order_item_id]
             product = products_by_id[order_item.product_id]
+            stock_quantity = quantity
+            snapshot = order_item.product_snapshot or {}
+            if snapshot.get("quantity_unit") == "carton" and str(snapshot.get("stock_unit") or "").strip() == "יחידה":
+                try:
+                    pack_size = int(snapshot.get("units_per_carton"))
+                except (TypeError, ValueError):
+                    pack_size = 0
+                if pack_size <= 0:
+                    raise Conflict("Carton receipt cannot update piece-based stock without a valid units-per-carton snapshot")
+                stock_quantity = quantity * Decimal(pack_size)
+
             current_stock = Decimal(product.current_stock or 0)
-            new_balance = current_stock + quantity
+            new_balance = current_stock + stock_quantity
             product.current_stock = int(new_balance)
 
             db.session.add(
@@ -187,7 +198,7 @@ class ReceiptService:
                     user_id=user.id,
                     receipt_id=receipt.id,
                     movement_type=MOVEMENT_RECEIPT,
-                    quantity=quantity,
+                    quantity=stock_quantity,
                     balance_after=new_balance,
                     reference_type="receipt",
                     reference_id=str(receipt.id),
