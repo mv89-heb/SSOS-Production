@@ -82,3 +82,41 @@ def test_provider_defaults_to_flash_lite():
     provider.thinking_level = "low"
     assert provider.model == "gemini-3.5-flash-lite"
     assert provider.fallback_model == "gemini-3.6-flash"
+
+def test_model_specific_errors_allow_fallback():
+    assert GeminiProvider._is_model_fallback_error(RuntimeError("404 model not found"))
+    assert GeminiProvider._is_model_fallback_error(RuntimeError("Model is not supported"))
+    assert not GeminiProvider._is_model_fallback_error(RuntimeError("400 invalid JSON schema"))
+
+
+def test_text_generation_falls_back_when_primary_model_is_missing():
+    from unittest.mock import Mock
+
+    provider = GeminiProvider.__new__(GeminiProvider)
+    provider.model = "missing-primary-model"
+    provider.fallback_model = "gemini-3.6-flash"
+    provider._client = Mock()
+    provider._client.models.generate_content.side_effect = [
+        RuntimeError("404 model not found"),
+        Mock(text="fallback response"),
+    ]
+
+    result = provider.generate_text("hello")
+
+    assert result.success is True
+    assert result.text == "fallback response"
+    assert result.model == "gemini-3.6-flash"
+    assert provider._client.models.generate_content.call_count == 2
+
+
+def test_provider_error_redacts_google_api_key_and_bearer_token():
+    from app.services.gemini_provider import _safe_provider_error
+
+    message = _safe_provider_error(
+        RuntimeError("token AIzaSy123456789012345678901234567890; authorization Bearer secret.token-123")
+    )
+    assert "AIzaSy" not in message
+    assert "secret.token-123" not in message
+    assert "[REDACTED_API_KEY]" in message
+    assert "Bearer [REDACTED]" in message
+
