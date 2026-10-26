@@ -2,18 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, CheckCircle2, FileSearch, RefreshCw, ShieldCheck } from "lucide-react";
-import { adminService, type AdminAuditLog } from "@/services/admin-service";
+import { AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, RefreshCw, ShieldCheck } from "lucide-react";
+import { adminService } from "@/services/admin-service";
 import { useAuth } from "@/providers/auth-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/error-state";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from "@/components/ui/table";
 
 export default function AdminAuditHealthPage() {
   const { user } = useAuth();
-  const [logs, setLogs] = useState<AdminAuditLog[]>([]);
   const [chainValid, setChainValid] = useState<boolean | null>(null);
   const [brokenLogId, setBrokenLogId] = useState<number | null | undefined>(null);
   const [loading, setLoading] = useState(true);
@@ -24,7 +21,6 @@ export default function AdminAuditHealthPage() {
     setError(false);
     try {
       const result = await adminService.listAudit({ limit: 100, offset: 0 });
-      setLogs(result.logs);
       setChainValid(result.audit_chain_valid);
       setBrokenLogId(result.first_broken_log_id);
     } catch {
@@ -82,36 +78,12 @@ export default function AdminAuditHealthPage() {
         </Card>
       )}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-black text-slate-900">אירועים אחרונים</h2><span className="text-xs text-slate-500">{logs.length} אירועים מוצגים · עד 100 אחרונים</span></div>
-        {error ? null : loading && logs.length === 0 ? (
-          <div className="rounded-xl border bg-white p-8 text-center text-sm text-slate-500">טוען אירועים...</div>
-        ) : logs.length === 0 ? (
-          <EmptyState icon={FileSearch} title="אין אירועי ביקורת להצגה" description="אירועים מתועדים יופיעו כאן לאחר ביצוע פעולות במערכת." />
-        ) : (
-          <div className="overflow-hidden rounded-xl border bg-white">
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableHeaderCell>תאריך ושעה</TableHeaderCell>
-                  <TableHeaderCell>פעולה</TableHeaderCell>
-                  <TableHeaderCell>פרטים</TableHeaderCell>
-                  <TableHeaderCell>מזהה משתמש</TableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {logs.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="whitespace-nowrap text-slate-600">{new Date(log.created_at).toLocaleString("he-IL")}</TableCell>
-                    <TableCell><span className="font-mono text-xs text-slate-700">{log.action}</span></TableCell>
-                    <TableCell className="max-w-md text-slate-600">{log.title || "—"}</TableCell>
-                    <TableCell className="text-slate-500">{log.user_id ?? "מערכת"}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+      <section className="rounded-xl border bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+        <h2 className="text-lg font-black text-slate-900 dark:text-slate-100">עיון באירועי ביקורת</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-500">רשימת הפעולות המלאה מוצגת במסך לוג הביקורת המרכזי, כדי לשמור על מקור אחד לפרטי האירועים ולמנוע הבדלים בין שתי רשימות.</p>
+        <Link href="/dashboard/audit" className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl border border-indigo-200 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-300 dark:hover:bg-indigo-950/30">
+          <ExternalLink size={16} /> מעבר ללוג הביקורת המרכזי
+        </Link>
       </section>
     </div>
   );
