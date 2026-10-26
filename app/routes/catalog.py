@@ -938,6 +938,7 @@ def enrich_missing_product_images():
             matched.append({
                 "product_id": product.id, "name": product.name,
                 "image_url": product.image_url, "match_method": result.get("match_method"),
+                "source": product.image_source, "source_url": product.image_source_url,
             })
         else:
             no_match += 1
@@ -960,6 +961,7 @@ def enrich_missing_product_images():
         "name_search_attempted": name_searches,
         "missing_or_synthetic_barcode": missing_or_synthetic_barcode,
         "matches": matched,
-        "source": "Open Food Facts",
+        "source": "Open Food Facts with UPCitemdb fallback",
+        "available_sources": ["Open Food Facts", "UPCitemdb"],
         "policy": "Exact barcode matches preferred; name fallback requires identical normalized token sets and one unambiguous result. Existing images are never overwritten.",
     })
