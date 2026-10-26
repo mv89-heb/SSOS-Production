@@ -114,7 +114,7 @@ def _upcitemdb_lookup(barcode, product_name, timeout):
                 returned_codes.discard("")
                 if not any(code.lstrip("0") == normalized.lstrip("0") for code in returned_codes):
                     continue
-                image_url = next((_allowed_image_url(url) for url in item.get("images", []) if _allowed_image_url(url)), None)
+                image_url = next((_allowed_image_url(url) for url in (item.get("images") if isinstance(item.get("images"), list) else []) if _allowed_image_url(url)), None)
                 if image_url:
                     return {
                         "image_url": image_url, "reason": "matched",
