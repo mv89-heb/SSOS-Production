@@ -6,6 +6,7 @@ from app.models.inventory_movement import InventoryMovement, MOVEMENT_COUNT
 from app.models.product import Product
 from app.models.supplier import Supplier
 from app.services.inventory_planning_service import InventoryPlanningService
+from app.services.inventory_calendar_service import InventoryCalendarService
 
 
 def _make_product(db, tenant_id, supplier_id, name="Test Product"):
@@ -254,7 +255,7 @@ def test_recommendations_include_catalog_beyond_previous_500_product_cap(db, ten
     db.session.add_all(products)
     db.session.commit()
 
-    rows = InventoryPlanningService(tenant_id).recommendations(limit=501)
+    rows = InventoryCalendarService(tenant_id).recommendations(limit=501)
 
     assert len(rows) == 501
     assert len({row["product_id"] for row in rows}) == 501
