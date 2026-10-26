@@ -113,6 +113,6 @@ def test_text_generation_falls_back_when_primary_model_is_missing():
 def test_provider_error_redacts_google_api_key():
     from app.services.gemini_provider import _safe_provider_error
 
-    message = _safe_provider_error(RuntimeError("request failed with key=AIzaSy123456789012345678901234567890"))
+    message = _safe_provider_error(RuntimeError("request failed with token AIzaSy123456789012345678901234567890"))
     assert "AIzaSy" not in message
     assert "[REDACTED_API_KEY]" in message
