@@ -26,6 +26,7 @@ export interface InventorySummary {
   };
   products: Product[];
   recent_movements: InventoryMovement[];
+  latest_movements: InventoryMovement[];
 }
 
 export interface InventoryPlanningPeriod {

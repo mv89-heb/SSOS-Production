@@ -70,6 +70,14 @@ export default function InventoryPage() {
   const history = useQuery({ queryKey: ["inventory", "history", selectedId], queryFn: () => inventoryService.getProductMovements(selectedId!, 100), enabled: selectedId != null && showHistory });
   const products = summary.data?.products ?? [];
   const recommendationByProduct = useMemo(() => new Map((recommendations.data ?? []).map((row) => [row.product_id, row])), [recommendations.data]);
+  const latestMovementByProduct = useMemo(() => {
+    const latest = new Map<number, InventoryMovement>();
+    for (const movement of summary.data?.latest_movements ?? []) {
+      const existing = latest.get(movement.product_id);
+      if (!existing || new Date(movement.occurred_at).getTime() > new Date(existing.occurred_at).getTime()) latest.set(movement.product_id, movement);
+    }
+    return latest;
+  }, [summary.data?.recent_movements]);
 
   const rows = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("he");
@@ -224,8 +232,8 @@ export default function InventoryPage() {
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="flex items-center justify-between border-b border-slate-200 p-5 dark:border-slate-800"><div><h2 className="text-xl font-black">מלאי לפי מוצר</h2><p className="mt-1 text-xs text-slate-500">{rows.length} מוצרים מוצגים מתוך {products.length} · בחר מוצר לפתיחת פרטים מלאים והיסטוריית תנועות.</p></div><div className="rounded-xl bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300">תצוגה תמציתית</div></div>
-        <div dir="rtl" className="hidden w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain md:block"><table dir="rtl" className="w-full min-w-[700px] text-right text-sm"><thead className="bg-slate-50 text-xs font-bold text-slate-500 dark:bg-slate-900"><tr><th className="px-5 py-3">שם המוצר / מק״ט</th><th className="px-5 py-3">סטטוס ומלאי</th><th className="px-5 py-3">המלצת רכש / נתונים חסרים</th><th className="px-5 py-3">פעולה מהירה</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{rows.map((product) => <InventoryProductRow key={product.id} product={product} forecast={recommendationByProduct.get(product.id)} status={stockStatus(product, recommendationByProduct.get(product.id))} onMovement={openMovement} onHistory={openHistory} />)}</tbody></table></div>
-        <div className="space-y-3 p-3 md:hidden">{rows.map((product) => <InventoryProductRow key={product.id} mobile product={product} forecast={recommendationByProduct.get(product.id)} status={stockStatus(product, recommendationByProduct.get(product.id))} onMovement={openMovement} onHistory={openHistory} />)}</div>
+        <div dir="rtl" className="hidden w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain md:block"><table dir="rtl" className="w-full min-w-[1040px] text-right text-sm"><thead className="bg-slate-50 text-xs font-bold text-slate-500 dark:bg-slate-900"><tr><th className="px-4 py-3">שם המוצר / מק״ט</th><th className="px-4 py-3">סטטוס ומלאי</th><th className="px-4 py-3">תנועה אחרונה</th><th className="px-4 py-3">קצב צריכה יומי</th><th className="px-4 py-3">המלצת רכש / נתונים חסרים</th><th className="px-4 py-3">פעולה מהירה</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{rows.map((product) => <InventoryProductRow key={product.id} product={product} forecast={recommendationByProduct.get(product.id)} latestMovement={latestMovementByProduct.get(product.id)} status={stockStatus(product, recommendationByProduct.get(product.id))} onMovement={openMovement} onHistory={openHistory} />)}</tbody></table></div>
+        <div className="space-y-3 p-3 md:hidden">{rows.map((product) => <InventoryProductRow key={product.id} mobile product={product} forecast={recommendationByProduct.get(product.id)} latestMovement={latestMovementByProduct.get(product.id)} status={stockStatus(product, recommendationByProduct.get(product.id))} onMovement={openMovement} onHistory={openHistory} />)}</div>
         {!rows.length && <div className="p-12 text-center"><Package className="mx-auto text-slate-300" size={40}/><h3 className="mt-3 font-black">לא נמצאו מוצרים</h3></div>}
       </section>
 
@@ -248,16 +256,23 @@ export default function InventoryPage() {
 type InventoryProductRowProps = {
   product: Product;
   forecast: any;
+  latestMovement?: InventoryMovement;
   status: keyof typeof statusMeta;
   onMovement: (product: Product, type: InventoryMovementType) => void;
   onHistory: (product: Product) => void;
   mobile?: boolean;
 };
 
-const InventoryProductRow = memo(function InventoryProductRow({ product, forecast, status, onMovement, onHistory, mobile = false }: InventoryProductRowProps) {
+const InventoryProductRow = memo(function InventoryProductRow({ product, forecast, latestMovement, status, onMovement, onHistory, mobile = false }: InventoryProductRowProps) {
   const stock = product.current_stock == null ? "לא ידוע" : number(product.current_stock);
   const weekly = forecast?.data_ready && forecast?.carton_recommendation_ready && forecast.average_daily_usage_cartons != null
     ? cartonNumber(forecast.average_daily_usage_cartons * 7) : "—";
+  const dailyUsage = forecast?.carton_recommendation_ready && forecast?.average_daily_usage_cartons != null
+    ? `${cartonNumber(forecast.average_daily_usage_cartons)} קרטונים`
+    : forecast?.average_daily_usage != null && Number(forecast.average_daily_usage) > 0
+      ? `${cartonNumber(forecast.average_daily_usage)} יחידות` : null;
+  const movementDate = latestMovement?.occurred_at ? new Date(latestMovement.occurred_at) : null;
+  const movementSign = latestMovement?.movement_type === "receipt" ? "+" : latestMovement?.movement_type === "issue" ? "−" : "";
   const order = forecast?.recommended_order_cartons != null && Number(forecast.recommended_order_cartons) > 0
     ? number(forecast.recommended_order_cartons) : null;
   const missingReason = forecast?.needs_data_reason === "stock_target_not_configured"
@@ -270,14 +285,17 @@ const InventoryProductRow = memo(function InventoryProductRow({ product, forecas
   if (mobile) return <article className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
     <div className="flex items-start justify-between gap-3"><button onClick={() => onHistory(product)} className="min-w-0 text-right"><h3 className="font-black">{product.name}</h3><p className="mt-1 text-xs text-slate-400">{product.sku || "ללא מק״ט"} · {product.barcode || "ללא ברקוד"}</p></button><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black ${statusMeta[status].className}`}>{statusMeta[status].label}</span></div>
     <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div><div className="text-xs text-slate-500">מלאי נוכחי</div><div className="font-black">{stock} <span className="text-xs font-normal">{unitSingular(product)}</span></div></div><div className="text-left"><div className="text-xs text-slate-500">צריכה שבועית</div><div className="font-black">{weekly === "—" ? "אין נתון אמין" : `${weekly} קרטונים`}</div></div></div>
+    <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl border border-slate-100 p-3 dark:border-slate-800"><div><div className="text-[11px] text-slate-500">תנועה אחרונה</div>{latestMovement ? <><div className="mt-1 text-xs font-bold text-slate-700 dark:text-slate-200">{movementLabels[latestMovement.movement_type]} · {movementSign}{number(latestMovement.quantity)}</div><div className="mt-0.5 text-[10px] text-slate-400">{movementDate && Number.isFinite(movementDate.getTime()) ? new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit" }).format(movementDate) : "תאריך לא זמין"}</div></> : <div className="mt-1 text-xs text-slate-400">אין תנועה מתועדת</div>}</div><div><div className="text-[11px] text-slate-500">צריכה יומית ממוצעת</div><div className="mt-1 text-xs font-bold text-slate-700 dark:text-slate-200">{dailyUsage ?? "אין נתון אמין"}</div><div className="mt-0.5 text-[10px] text-slate-400">לפי הנתונים שנצברו</div></div></div>
     <div className="mt-3 text-sm font-bold">{recommendation}</div>
     <div className="mt-3 flex gap-2"><button onClick={() => onMovement(product,"count")} className="flex-1 rounded-xl bg-indigo-600 py-3 text-xs font-black text-white">{status === "insufficient_data" ? "עדכן ספירה" : "ספירה חדשה"}</button><button onClick={() => onHistory(product)} className="rounded-xl bg-slate-100 px-4 py-3 text-xs font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">פרטים והיסטוריה</button></div>
   </article>;
   return <tr className="group cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/60" onClick={() => onHistory(product)}>
     <td className="px-5 py-4"><button onClick={(event) => { event.stopPropagation(); onHistory(product); }} className="text-right font-black hover:text-indigo-600">{product.name}<span className="mt-0.5 block text-xs font-normal text-slate-400">{product.sku || "ללא מק״ט"}{product.barcode ? ` · ${product.barcode}` : ""}</span></button></td>
     <td className="px-5 py-4"><div><span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${statusMeta[status].className}`}>{statusMeta[status].label}</span></div><div className="mt-2 text-base font-black">{stock} <span className="text-xs font-normal text-slate-400">{unitSingular(product)}</span></div></td>
-    <td className="px-5 py-4"><div className={`font-bold ${status === "insufficient_data" ? "text-amber-700 dark:text-amber-300" : ""}`}>{recommendation}</div>{status !== "insufficient_data" && <div className="mt-1 text-xs text-slate-500">{weekly === "—" ? "צריכה שבועית: אין נתון אמין" : `צריכה שבועית: ${weekly} קרטונים`}</div>}</td>
-    <td className="px-5 py-4"><div className="flex items-center gap-2"><button title="עדכן ספירה" aria-label={`עדכן ספירה: ${product.name}`} onClick={(event) => { event.stopPropagation(); onMovement(product,"count"); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-indigo-600 px-3 text-xs font-black text-white"><ClipboardCheck size={16}/> ספירה</button><button title="פרטים והיסטוריה" aria-label={`פרטים והיסטוריה: ${product.name}`} onClick={(event) => { event.stopPropagation(); onHistory(product); }} className="rounded-xl bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-200"><History size={17}/></button></div></td>
+    <td className="px-4 py-4"><div className="text-xs font-bold text-slate-700 dark:text-slate-200">{latestMovement ? movementLabels[latestMovement.movement_type] : "—"}</div>{latestMovement && <><div className="mt-1 text-xs text-slate-500">{movementSign}{number(latestMovement.quantity)} {unitSingular(product)}</div><div className="mt-0.5 text-[10px] text-slate-400">{movementDate && Number.isFinite(movementDate.getTime()) ? new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit" }).format(movementDate) : "תאריך לא זמין"}</div></>}</td>
+    <td className="px-4 py-4"><div className="text-sm font-black text-slate-900 dark:text-white">{dailyUsage ?? "—"}</div><div className="mt-1 text-[10px] text-slate-400">{dailyUsage ? "ממוצע ליום" : "אין מספיק נתונים"}</div></td>
+    <td className="px-4 py-4"><div className={`font-black ${status === "insufficient_data" ? "text-amber-700 dark:text-amber-300" : "text-slate-900 dark:text-white"}`}>{recommendation}</div>{status !== "insufficient_data" && <div className="mt-1 text-xs text-slate-500">{weekly === "—" ? "צריכה שבועית: אין נתון אמין" : `צריכה שבועית: ${weekly} קרטונים`}</div>}</td>
+    <td className="px-4 py-4"><div className="flex items-center gap-2"><button title="עדכן ספירה" aria-label={`עדכן ספירה: ${product.name}`} onClick={(event) => { event.stopPropagation(); onMovement(product,"count"); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-indigo-600 px-3 text-xs font-black text-white"><ClipboardCheck size={16}/> ספירה</button><button title="פרטים והיסטוריה" aria-label={`פרטים והיסטוריה: ${product.name}`} onClick={(event) => { event.stopPropagation(); onHistory(product); }} className="rounded-xl bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-200"><History size={17}/></button></div></td>
   </tr>;
 });
 

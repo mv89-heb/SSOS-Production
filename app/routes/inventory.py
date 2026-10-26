@@ -3,7 +3,7 @@ from io import BytesIO
 
 from flask import Blueprint, jsonify, request, send_file
 from flask_login import current_user, login_required
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.extensions import db
@@ -128,6 +128,32 @@ def summary():
             .limit(500)
         ).all()
 
+    latest_movement_ids = []
+    if product_ids:
+        ranked_movements = (
+            select(
+                InventoryMovement.id.label("movement_id"),
+                func.row_number().over(
+                    partition_by=InventoryMovement.product_id,
+                    order_by=(InventoryMovement.occurred_at.desc(), InventoryMovement.id.desc()),
+                ).label("row_num"),
+            )
+            .where(
+                InventoryMovement.tenant_id == current_user.tenant_id,
+                InventoryMovement.product_id.in_(product_ids),
+            )
+            .subquery()
+        )
+        latest_movement_ids = db.session.scalars(
+            select(ranked_movements.c.movement_id).where(ranked_movements.c.row_num == 1)
+        ).all()
+    latest_movements = db.session.scalars(
+        select(InventoryMovement).where(
+            InventoryMovement.tenant_id == current_user.tenant_id,
+            InventoryMovement.id.in_(latest_movement_ids),
+        )
+    ).all() if latest_movement_ids else []
+
     low_stock = [p for p in products if p.min_stock is not None and (p.current_stock or 0) <= p.min_stock]
     out_of_stock = [p for p in products if (p.current_stock or 0) <= 0]
     no_stock_rule = [p for p in products if p.min_stock is None and p.recommended_stock is None]
@@ -142,6 +168,7 @@ def summary():
         },
         "products": [p.to_dict() for p in products],
         "recent_movements": [m.to_dict() for m in movements[:50]],
+        "latest_movements": [m.to_dict() for m in latest_movements],
     })
 
 
