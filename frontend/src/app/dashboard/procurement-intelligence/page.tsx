@@ -30,7 +30,9 @@ import { ProductSortToggle } from "@/components/catalog/product-sort-toggle";
 import { sortByHebrewName, type ProductSortDirection } from "@/lib/product-sorting";
 
 const money = (value: number | null | undefined, currency = "ILS") => {
-  const amount = Number(value ?? 0);
+  // Missing or invalid values are unknown, not a real zero-price observation.
+  if (value == null || !Number.isFinite(Number(value))) return "—";
+  const amount = Number(value);
   try {
     return new Intl.NumberFormat("he-IL", {
       style: "currency",
