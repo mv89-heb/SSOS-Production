@@ -27,7 +27,7 @@ jobs:
       # storage local instead of exposing Render's private Redis to GitHub.
       RATELIMIT_STORAGE_URI: memory://
       CORS_ORIGINS: ${{ secrets.SSOS_CORS_ORIGINS }}
-      FRONTEND_PUBLIC_URL: ${{ secrets.SSOS_FRONTEND_PUBLIC_URL }}
+      FRONTEND_PUBLIC_URL: ${{ secrets.SSOS_FRONTEND_PUBLIC_URL || 'https://ssos-production.onrender.com' }}
       WEB_PUSH_VAPID_PUBLIC_KEY: ${{ secrets.SSOS_WEB_PUSH_VAPID_PUBLIC_KEY }}
       WEB_PUSH_VAPID_PRIVATE_KEY: ${{ secrets.SSOS_WEB_PUSH_VAPID_PRIVATE_KEY }}
       WEB_PUSH_VAPID_CLAIMS_EMAIL: ${{ secrets.SSOS_WEB_PUSH_VAPID_CLAIMS_EMAIL }}
@@ -56,6 +56,8 @@ jobs:
           test -n "$SECRET_KEY" || { echo 'Missing SSOS_SECRET_KEY repository secret.'; exit 1; }
           test -n "$DATABASE_URL" || { echo 'Missing SSOS_DATABASE_URL repository secret.'; exit 1; }
           test -n "$CORS_ORIGINS" || { echo 'Missing SSOS_CORS_ORIGINS repository secret.'; exit 1; }
+          test -n "$FRONTEND_PUBLIC_URL" || { echo 'Frontend public URL is required for actionable reminders.'; exit 1; }
+          case "$FRONTEND_PUBLIC_URL" in https://*) ;; *) echo 'FRONTEND_PUBLIC_URL must use HTTPS.'; exit 1 ;; esac
 
       - name: Process due order reminders
         run: python scripts/reminder_worker.py
