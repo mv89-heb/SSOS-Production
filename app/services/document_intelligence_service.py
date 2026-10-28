@@ -380,7 +380,7 @@ class DocumentIntelligenceService:
             db.session.rollback()
             raise
 
-    def compare_with_order(self, analysis_id: int, order_id: int):
+    def compare_with_order(self, analysis_id: int, order_id: int, confirm_supplier: bool = False):
         """Compare an analyzed delivery note/invoice with one tenant-scoped purchase order."""
         PermissionService.require_role_at_least("manager")
         row = self._get(analysis_id)
@@ -396,6 +396,8 @@ class DocumentIntelligenceService:
             supplier_check = "MISMATCH"
         else:
             supplier_check = "MATCH" if detected_supplier_id == order.supplier_id and detected_supplier_id else "REVIEW"
+            if supplier_check == "REVIEW" and confirm_supplier is True:
+                supplier_check = "MATCH_MANUAL"
         order_items = list(OrderItem.query.filter_by(tenant_id=self.tenant_id, order_id=order.id).all())
         by_product = {}
         for order_item in order_items:
@@ -507,7 +509,7 @@ class DocumentIntelligenceService:
         reconciliation = data.get("order_reconciliation")
         if not isinstance(reconciliation, dict):
             raise BadRequest("Compare the delivery note with a purchase order first")
-        if reconciliation.get("supplier_check") != "MATCH":
+        if reconciliation.get("supplier_check") not in {"MATCH", "MATCH_MANUAL"}:
             raise Conflict("Verify the document supplier against the purchase order before posting the delivery note")
         lines = reconciliation.get("lines") if isinstance(reconciliation.get("lines"), list) else []
         if not lines:
@@ -570,7 +572,7 @@ class DocumentIntelligenceService:
         order = Order.query.filter_by(id=reconciliation.get("order_id"), tenant_id=self.tenant_id).first()
         if order is None:
             raise NotFound("Reconciled purchase order not found")
-        if reconciliation.get("supplier_check") != "MATCH":
+        if reconciliation.get("supplier_check") not in {"MATCH", "MATCH_MANUAL"}:
             raise Conflict("Verify the invoice supplier against the purchase order before recording the invoice")
         invoice_number = str(payload.get("invoice_number") or data.get("document_number") or "").strip()
         if not invoice_number or len(invoice_number) > 120:
