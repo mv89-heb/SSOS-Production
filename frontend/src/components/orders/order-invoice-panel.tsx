@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Order } from "@/types";
 
 type Payment = { id: number; amount: number; payment_date: string; reference: string | null; notes: string | null };
-type Invoice = { id: number; order_id: number; approval_status: "pending_approval" | "approved_for_payment"; approved_by: number | null; approved_at: string | null; approval_note: string | null; receipt_id: number | null; invoice_number: string; invoice_date: string | null; due_date: string | null; amount: number; paid_amount: number; balance: number; currency: string; status: string; notes: string | null; attachment_filename: string | null; attachment_size: number | null; line_comparison: Array<{ order_index: number; product_name: string; ordered_quantity: number; invoiced_quantity: number; ordered_unit_price: number; invoiced_unit_price: number; quantity_difference: number; unit_price_difference: number; amount_difference: number }>; payments: Payment[] };
+type Invoice = { id: number; order_id: number; approval_status: "pending_approval" | "approved_for_payment"; approved_by: number | null; approved_at: string | null; approval_note: string | null; receipt_id: number | null; invoice_number: string; invoice_date: string | null; due_date: string | null; amount: number; paid_amount: number; balance: number; currency: string; status: string; notes: string | null; attachment_filename: string | null; attachment_size: number | null; line_comparison: Array<{ order_index: number; order_item_id?: number | null; received_quantity?: number | null; received_quantity_difference?: number | null; product_name: string; ordered_quantity: number; invoiced_quantity: number; ordered_unit_price: number; invoiced_unit_price: number; quantity_difference: number; unit_price_difference: number; amount_difference: number }>; payments: Payment[] };
 type InvoiceListResponse = { success: boolean; invoices: Invoice[] };
 
 function todayLocal() {
@@ -26,6 +26,7 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
   const [receiptId, setReceiptId] = useState("");
   const [invoiceNotes, setInvoiceNotes] = useState("");
   const [paymentDrafts, setPaymentDrafts] = useState<Record<number, { amount: string; date: string; reference: string }>>({});
+  const [approvalNoteDrafts, setApprovalNoteDrafts] = useState<Record<number, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [attachmentFiles, setAttachmentFiles] = useState<Record<number, File | null>>({});
   const [uploadingInvoiceId, setUploadingInvoiceId] = useState<number | null>(null);
@@ -56,10 +57,10 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
     },
   });
   const updateApproval = useMutation({
-    mutationFn: async ({ invoiceId, approvalStatus }: { invoiceId: number; approvalStatus: "pending_approval" | "approved_for_payment" }) =>
+    mutationFn: async ({ invoiceId, approvalStatus, approvalNote }: { invoiceId: number; approvalStatus: "pending_approval" | "approved_for_payment"; approvalNote?: string }) =>
       (await apiClient.post<{ success: boolean; invoice: Invoice }>(
         `/api/supplier-invoices/${invoiceId}/approval`,
-        { approval_status: approvalStatus },
+        { approval_status: approvalStatus, approval_note: approvalNote?.trim() || null },
       )).data.invoice,
     onSuccess: async (invoice) => {
       setMessage(invoice.approval_status === "approved_for_payment" ? "החשבונית אושרה לתשלום ונרשמה ביומן הפעולות." : "החשבונית הוחזרה לבדיקה.");
@@ -143,7 +144,7 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
                 {invoice.approval_note && <div className="text-xs text-slate-500">{invoice.approval_note}</div>}
               </div>
               <div className="flex flex-wrap gap-2">
-                {invoice.approval_status !== "approved_for_payment" && <Button disabled={updateApproval.isPending || invoice.paid_amount > 0} onClick={() => { setMessage(null); updateApproval.mutate({ invoiceId: invoice.id, approvalStatus: "approved_for_payment" }); }}>{updateApproval.isPending ? "מעדכן..." : "אישור לתשלום"}</Button>}
+                {invoice.approval_status !== "approved_for_payment" && <div className="mt-2 space-y-2"><label className="block text-xs text-slate-600 dark:text-slate-300">הערת אישור / נימוק חריגה (נדרש אם הכמות בחשבונית שונה מהקבלה)</label><textarea aria-label="נימוק אישור חשבונית" maxLength={2000} value={approvalNoteDrafts[invoice.id] ?? ""} onChange={(e) => setApprovalNoteDrafts((current) => ({ ...current, [invoice.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm dark:bg-slate-900" rows={2} /><Button disabled={updateApproval.isPending || invoice.paid_amount > 0} onClick={() => { setMessage(null); updateApproval.mutate({ invoiceId: invoice.id, approvalStatus: "approved_for_payment", approvalNote: approvalNoteDrafts[invoice.id] }); }}>{updateApproval.isPending ? "מעדכן..." : "אישור לתשלום"}</Button></div>}
                 {invoice.approval_status === "approved_for_payment" && invoice.paid_amount === 0 && <Button variant="outline" disabled={updateApproval.isPending} onClick={() => { setMessage(null); updateApproval.mutate({ invoiceId: invoice.id, approvalStatus: "pending_approval" }); }}>החזרה לבדיקה</Button>}
               </div>
             </div>
@@ -151,13 +152,17 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
             {invoice.balance > 0 && invoice.approval_status !== "approved_for_payment" && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">אפשר לרשום תשלום רק לאחר אישור החשבונית לתשלום.</p>}
             <div className="space-y-2 border-t pt-3">
               <div className="font-bold text-sm">השוואת שורות החשבונית להזמנה</div>
-              <p className="text-xs text-slate-500">הזן ידנית את הכמות והמחיר שמופיעים בחשבונית. ההשוואה מחושבת מול צילום מצב פריטי ההזמנה.</p>
-              <div className="overflow-x-auto"><table className="w-full min-w-[650px] text-sm"><thead><tr className="border-b text-right text-xs text-slate-500"><th className="p-2">פריט</th><th className="p-2">כמות בהזמנה</th><th className="p-2">כמות בחשבונית</th><th className="p-2">מחיר בהזמנה</th><th className="p-2">מחיר בחשבונית</th><th className="p-2">פער שווי</th></tr></thead><tbody>
+              <p className="text-xs text-slate-500">הזן ידנית את הכמות והמחיר שמופיעים בחשבונית. המחיר והפער הכספי מושווים להזמנה; הכמות שהתקבלה מחושבת מקבלות שנרשמו סופית בלבד. אם החשבונית מקושרת לקבלה מסוימת, תוצג הכמות מאותה קבלה; אחרת יוצג הסכום מכל הקבלות הסופיות להזמנה.</p>
+              <div className="overflow-x-auto"><table className="w-full min-w-[800px] text-sm"><thead><tr className="border-b text-right text-xs text-slate-500"><th className="p-2">פריט</th><th className="p-2">כמות בהזמנה</th><th className="p-2">כמות שהתקבלה</th><th className="p-2">כמות בחשבונית</th><th className="p-2">מחיר בהזמנה</th><th className="p-2">מחיר בחשבונית</th><th className="p-2">פער שווי</th></tr></thead><tbody>
                 {order.items.map((item, index) => {
                   const saved = invoice.line_comparison?.find((line) => line.order_index === index);
                   const draftLine = reconciliationDrafts[invoice.id]?.[index] ?? { quantity: String(saved?.invoiced_quantity ?? item.quantity), price: String(saved?.invoiced_unit_price ?? item.unit_price) };
                   const amountDiff = (Number(draftLine.quantity) || 0) * (Number(draftLine.price) || 0) - Number(item.quantity) * Number(item.unit_price);
-                  return <tr key={index} className="border-b last:border-0"><td className="p-2"><div className="font-semibold">{item.product_name}</div><div className="text-xs text-slate-500">{item.sku || "ללא מק״ט"}</div></td><td className="p-2">{item.quantity}</td><td className="p-2"><input aria-label={`כמות בחשבונית ${item.product_name}`} type="number" min="0" step="0.001" value={draftLine.quantity} onChange={(e) => setReconciliationDrafts((current) => ({ ...current, [invoice.id]: { ...(current[invoice.id] ?? {}), [index]: { ...draftLine, quantity: e.target.value } } }))} className="w-24 rounded border px-2 py-1 dark:bg-slate-900" /></td><td className="p-2">{Number(item.unit_price).toLocaleString("he-IL", { minimumFractionDigits: 2 })}</td><td className="p-2"><input aria-label={`מחיר בחשבונית ${item.product_name}`} type="number" min="0" step="0.01" value={draftLine.price} onChange={(e) => setReconciliationDrafts((current) => ({ ...current, [invoice.id]: { ...(current[invoice.id] ?? {}), [index]: { ...draftLine, price: e.target.value } } }))} className="w-24 rounded border px-2 py-1 dark:bg-slate-900" /></td><td className={`p-2 font-bold ${Math.abs(amountDiff) > 0.01 ? "text-amber-700" : "text-emerald-700"}`}>{amountDiff.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {invoice.currency}</td></tr>;
+                  // Display the server-calculated receipt quantity saved with reconciliation.
+                  // Do not infer receipt totals from the order payload, which may omit receipt rows.
+                  const receivedQuantity = saved?.received_quantity ?? null;
+                  const receivedDiff = receivedQuantity === null ? null : (Number(draftLine.quantity) || 0) - receivedQuantity;
+                  return <tr key={index} className="border-b last:border-0"><td className="p-2"><div className="font-semibold">{item.product_name}</div><div className="text-xs text-slate-500">{item.sku || "ללא מק״ט"}</div></td><td className="p-2">{item.quantity}</td><td className="p-2"><div>{receivedQuantity === null ? "—" : receivedQuantity.toLocaleString("he-IL", { maximumFractionDigits: 3 })}</div>{receivedDiff !== null && <div className={Math.abs(receivedDiff) > 0.001 ? "text-xs font-bold text-amber-700" : "text-xs text-emerald-700"}>פער מול קבלה: {receivedDiff.toLocaleString("he-IL", { maximumFractionDigits: 3 })}</div>}</td><td className="p-2"><input aria-label={`כמות בחשבונית ${item.product_name}`} type="number" min="0" step="0.001" value={draftLine.quantity} onChange={(e) => setReconciliationDrafts((current) => ({ ...current, [invoice.id]: { ...(current[invoice.id] ?? {}), [index]: { ...draftLine, quantity: e.target.value } } }))} className="w-24 rounded border px-2 py-1 dark:bg-slate-900" /></td><td className="p-2">{Number(item.unit_price).toLocaleString("he-IL", { minimumFractionDigits: 2 })}</td><td className="p-2"><input aria-label={`מחיר בחשבונית ${item.product_name}`} type="number" min="0" step="0.01" value={draftLine.price} onChange={(e) => setReconciliationDrafts((current) => ({ ...current, [invoice.id]: { ...(current[invoice.id] ?? {}), [index]: { ...draftLine, price: e.target.value } } }))} className="w-24 rounded border px-2 py-1 dark:bg-slate-900" /></td><td className={`p-2 font-bold ${Math.abs(amountDiff) > 0.01 ? "text-amber-700" : "text-emerald-700"}`}>{amountDiff.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {invoice.currency}</td></tr>;
                 })}
               </tbody></table></div>
               {invoice.line_comparison?.length > 0 && <p className="text-xs text-slate-500">ההשוואה האחרונה נשמרה. הפער החיובי/שלילי הוא לפי סכום פריט מחושב ואינו כולל בהכרח מע״מ, הנחות או דמי משלוח.</p>}
