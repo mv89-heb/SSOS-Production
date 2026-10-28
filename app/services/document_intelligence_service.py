@@ -18,7 +18,6 @@ from app.services.receipt_service import ReceiptService
 from app.services.audit_service import AuditService
 from app.models.product import Product
 from app.models.supplier import Supplier
-from app.models.supplier_offer import SupplierProductOffer
 from app.services.ai_service import AIService
 from app.services.catalog_service import CatalogService
 from app.services.permission_service import PermissionService
