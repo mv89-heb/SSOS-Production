@@ -92,6 +92,8 @@ def create_order_invoice(order_id):
             ))
             if receipt is None:
                 raise NotFound("Receipt not found for this order")
+            if receipt.status != RECEIPT_POSTED:
+                raise Conflict("Only posted receipts can be linked to a supplier invoice")
         duplicate_invoice = db.session.scalar(select(SupplierInvoice.id).where(
             SupplierInvoice.tenant_id == current_user.tenant_id,
             SupplierInvoice.supplier_id == order.supplier_id,
