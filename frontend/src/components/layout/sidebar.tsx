@@ -42,7 +42,7 @@ export default function Sidebar() {
       <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-5" aria-label="ניווט ראשי">
         {groups.map((group) => <section key={group.label}>
           <h2 className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{group.label}</h2>
-          <div className="space-y-1">{group.items.map((item) => {
+          <div className="space-y-1">{group.items.filter((item) => item.href !== "/dashboard/audit" || permissions.canViewAudit(user)).map((item) => {
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
             const Icon = item.icon;
             return <Link key={item.href} href={item.href} aria-current={isActive ? "page" : undefined} className={cn("group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200", isActive ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30" : "text-slate-300 hover:bg-white/8 hover:text-white")}>
