@@ -6,6 +6,8 @@ from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
 from werkzeug.exceptions import BadRequest, HTTPException
 
+from app.extensions import db
+
 from app.services.document_intelligence_service import DocumentIntelligenceService
 from app.services.permission_service import PermissionService
 
@@ -19,6 +21,7 @@ def _handle(exc):
 
 
 def _internal_error(exc, operation):
+    db.session.rollback()
     logger.exception("Document intelligence %s failed", operation)
     return jsonify({
         "success": False,
@@ -119,6 +122,27 @@ def rematch_document(analysis_id):
         return _internal_error(exc, "rematch")
 
 
+@document_intelligence_bp.route("/<int:analysis_id>/compare-order", methods=["POST"])
+@login_required
+def compare_document_with_order(analysis_id):
+    try:
+        PermissionService.require_permission("documents.process")
+        payload = request.get_json(silent=True) or {}
+        order_id = payload.get("order_id")
+        if not isinstance(order_id, int) or isinstance(order_id, bool) or order_id <= 0:
+            raise BadRequest("A valid order_id is required")
+        confirm_supplier = payload.get("confirm_supplier") is True
+        row, reconciliation = DocumentIntelligenceService(
+            current_user.tenant_id, current_user.id
+        ).compare_with_order(analysis_id, order_id, confirm_supplier=confirm_supplier)
+        return jsonify({"success": True, "analysis": row.to_dict(), "reconciliation": reconciliation}), 200
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+    except Exception as exc:
+        return _internal_error(exc, "order reconciliation")
+
+
 @document_intelligence_bp.route("/<int:analysis_id>/apply", methods=["POST"])
 @login_required
 def apply_document(analysis_id):
@@ -134,6 +158,48 @@ def apply_document(analysis_id):
         return jsonify({"success": False, "error": "validation_error", "message": str(exc)}), 400
     except Exception as exc:
         return _internal_error(exc, "apply")
+
+
+@document_intelligence_bp.route("/<int:analysis_id>/apply-delivery-note", methods=["POST"])
+@login_required
+def apply_scanned_delivery_note(analysis_id):
+    try:
+        PermissionService.require_permission("documents.process")
+        row, receipt = DocumentIntelligenceService(
+            current_user.tenant_id, current_user.id
+        ).apply_delivery_note(analysis_id, current_user)
+        return jsonify({
+            "success": True, "analysis": row.to_dict(), "receipt": receipt.to_dict(),
+        }), 201
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+    except ValueError as exc:
+        return jsonify({"success": False, "error": "validation_error", "message": str(exc)}), 400
+    except Exception as exc:
+        return _internal_error(exc, "delivery note reconciliation")
+
+
+@document_intelligence_bp.route("/<int:analysis_id>/apply-invoice", methods=["POST"])
+@login_required
+def apply_scanned_invoice(analysis_id):
+    try:
+        PermissionService.require_permission("documents.process")
+        payload = request.get_json(silent=True) or {}
+        row, invoice, updated_prices = DocumentIntelligenceService(
+            current_user.tenant_id, current_user.id
+        ).apply_invoice_reconciliation(analysis_id, payload)
+        return jsonify({
+            "success": True, "analysis": row.to_dict(), "invoice": invoice.to_dict(),
+            "automatic_price_updates": updated_prices,
+        }), 201
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+    except ValueError as exc:
+        return jsonify({"success": False, "error": "validation_error", "message": str(exc)}), 400
+    except Exception as exc:
+        return _internal_error(exc, "invoice reconciliation")
 
 
 @document_intelligence_bp.route("/<int:analysis_id>/create-product", methods=["POST"])

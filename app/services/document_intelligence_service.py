@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
 
 from flask import current_app
-from werkzeug.exceptions import BadRequest, NotFound, HTTPException
+from werkzeug.exceptions import BadRequest, Conflict, NotFound, HTTPException
 
 from app.extensions import db
 from app.models.document_analysis import DocumentAnalysis
+from app.models.order import Order
+from app.models.order_item import OrderItem
+from app.models.supplier_invoice import SupplierInvoice
+from app.models.supplier_offer import SupplierProductOffer
+from app.services.receipt_service import ReceiptService
+from app.services.audit_service import AuditService
 from app.models.product import Product
 from app.models.supplier import Supplier
-from app.models.supplier_offer import SupplierProductOffer
 from app.services.ai_service import AIService
 from app.services.catalog_service import CatalogService
 from app.services.permission_service import PermissionService
@@ -373,6 +379,350 @@ class DocumentIntelligenceService:
         except Exception:
             db.session.rollback()
             raise
+
+    def compare_with_order(self, analysis_id: int, order_id: int, confirm_supplier: bool = False):
+        """Compare an analyzed delivery note/invoice with one tenant-scoped purchase order."""
+        PermissionService.require_role_at_least("manager")
+        row = self._get(analysis_id)
+        if row.status not in {"ANALYZED", "PARTIALLY_APPLIED", "APPLIED"} or not isinstance(row.extracted_data, dict):
+            raise BadRequest("Document must be analyzed before reconciliation")
+        order = Order.query.filter_by(id=order_id, tenant_id=self.tenant_id).first()
+        if order is None:
+            raise NotFound("Purchase order not found")
+        extracted = row.extracted_data
+        supplier_match = extracted.get("supplier_matching") if isinstance(extracted.get("supplier_matching"), dict) else {}
+        detected_supplier_id = supplier_match.get("supplier_id")
+        if detected_supplier_id and order.supplier_id and detected_supplier_id != order.supplier_id:
+            supplier_check = "MISMATCH"
+        else:
+            supplier_check = "MATCH" if detected_supplier_id == order.supplier_id and detected_supplier_id else "REVIEW"
+            if supplier_check == "REVIEW" and confirm_supplier is True:
+                supplier_check = "MATCH_MANUAL"
+        order_items = list(OrderItem.query.filter_by(tenant_id=self.tenant_id, order_id=order.id).all())
+        by_product = {}
+        for order_item in order_items:
+            by_product.setdefault(order_item.product_id, []).append(order_item)
+        lines = []
+        for index, item in enumerate(extracted.get("items") if isinstance(extracted.get("items"), list) else []):
+            if not isinstance(item, dict):
+                continue
+            match = item.get("product_matching") if isinstance(item.get("product_matching"), dict) else {}
+            best = match.get("best_match") if isinstance(match.get("best_match"), dict) else {}
+            product_id = best.get("product_id")
+            candidates = by_product.get(product_id, []) if isinstance(product_id, int) else []
+            # An order can contain the same product only once in normal creation.
+            order_line = candidates[0] if len(candidates) == 1 else None
+            confidence = float(best.get("confidence") or 0) if best else 0.0
+            if order_line is None:
+                lines.append({
+                    "line_index": index, "description": item.get("description"),
+                    "matched": False, "status": "UNMATCHED",
+                    "reason": "לא נמצא פריט חד-משמעי בהזמנה",
+                    "extracted_quantity": item.get("quantity"),
+                    "extracted_unit_price": item.get("unit_price"),
+                    "confidence": confidence,
+                })
+                continue
+            expected_quantity = float(order_line.quantity)
+            extracted_quantity = item.get("quantity")
+            expected_price = float(order_line.unit_price)
+            extracted_price = item.get("unit_price")
+            catalog_price = None
+            product = order_line.product
+            if product is not None:
+                if product.supplier_id == order.supplier_id and product.current_price is not None:
+                    catalog_price = float(product.current_price)
+                else:
+                    current_offer = SupplierProductOffer.query.filter_by(
+                        tenant_id=self.tenant_id, product_id=product.id,
+                        supplier_id=order.supplier_id, active=True
+                    ).first()
+                    if current_offer is not None:
+                        catalog_price = float(current_offer.price)
+            try:
+                quantity_delta = round(float(extracted_quantity) - expected_quantity, 3) if extracted_quantity is not None else None
+            except (TypeError, ValueError):
+                quantity_delta = None
+            try:
+                price_delta = round(float(extracted_price) - expected_price, 2) if extracted_price is not None else None
+            except (TypeError, ValueError):
+                price_delta = None
+            try:
+                catalog_price_delta = round(float(extracted_price) - catalog_price, 2) if extracted_price is not None and catalog_price is not None else None
+            except (TypeError, ValueError):
+                catalog_price_delta = None
+            flags = []
+            if confidence < 0.93:
+                flags.append("MATCH_REVIEW")
+            if quantity_delta is None:
+                flags.append("QUANTITY_MISSING")
+            elif abs(quantity_delta) > 0.001:
+                flags.append("QUANTITY_VARIANCE")
+            if price_delta is None:
+                flags.append("PRICE_MISSING")
+            elif abs(price_delta) > 0.01:
+                flags.append("PRICE_VARIANCE")
+            if catalog_price_delta is not None and abs(catalog_price_delta) > 0.01:
+                flags.append("CATALOG_PRICE_VARIANCE")
+            if item.get("unit") and order_line.product and order_line.product.unit:
+                if ProductMatchingService.normalize(item.get("unit")) != ProductMatchingService.normalize(order_line.product.unit):
+                    flags.append("UNIT_VARIANCE")
+            lines.append({
+                "line_index": index, "description": item.get("description"),
+                "matched": True, "status": "MATCH" if not flags else "REVIEW",
+                "order_item_id": order_line.id, "product_id": order_line.product_id,
+                "product_name": (order_line.product_snapshot or {}).get("name") if isinstance(order_line.product_snapshot, dict) else (order_line.product.name if order_line.product else None),
+                "expected_quantity": expected_quantity, "extracted_quantity": extracted_quantity,
+                "quantity_delta": quantity_delta, "expected_unit_price": expected_price,
+                "extracted_unit_price": extracted_price, "price_delta": price_delta,
+                "catalog_unit_price": catalog_price, "catalog_price_delta": catalog_price_delta,
+                "currency": item.get("currency") or extracted.get("currency") or order.currency or "ILS",
+                "unit": item.get("unit"), "confidence": confidence, "flags": flags,
+            })
+        result = {
+            "order_id": order.id, "order_number": order.order_number,
+            "supplier_id": order.supplier_id, "supplier_name": order.supplier_name,
+            "supplier_check": supplier_check, "document_type": row.document_type,
+            "document_number": extracted.get("document_number"),
+            "document_date": extracted.get("document_date"), "lines": lines,
+            "unmatched_count": sum(1 for line in lines if not line.get("matched")),
+            "review_count": sum(1 for line in lines if line.get("status") == "REVIEW"),
+            "compared_at": datetime.now(timezone.utc).isoformat(),
+        }
+        updated = dict(extracted)
+        updated["order_reconciliation"] = result
+        row.extracted_data = updated
+        db.session.commit()
+        return row, result
+
+    def apply_delivery_note(self, analysis_id: int, user):
+        """Post a delivery note as a receipt only after all extracted lines map to the chosen order."""
+        PermissionService.require_role_at_least("manager")
+        row = DocumentAnalysis.query.filter_by(tenant_id=self.tenant_id, id=analysis_id).with_for_update().first()
+        if row is None:
+            raise NotFound("Document analysis not found")
+        if not isinstance(row.extracted_data, dict):
+            raise BadRequest("Document must be analyzed before receiving")
+        data = row.extracted_data
+        if str(data.get("document_type") or row.document_type or "").upper() != "DELIVERY_NOTE":
+            raise BadRequest("Only a scanned delivery note can be posted as a receipt")
+        reconciliation = data.get("order_reconciliation")
+        if not isinstance(reconciliation, dict):
+            raise BadRequest("Compare the delivery note with a purchase order first")
+        if reconciliation.get("supplier_check") not in {"MATCH", "MATCH_MANUAL"}:
+            raise Conflict("Verify the document supplier against the purchase order before posting the delivery note")
+        lines = reconciliation.get("lines") if isinstance(reconciliation.get("lines"), list) else []
+        if not lines:
+            raise BadRequest("The delivery note has no reconciled lines")
+        extracted_items = data.get("items") if isinstance(data.get("items"), list) else []
+        receipt_quantities = {}
+        for line in lines:
+            if not isinstance(line, dict) or not line.get("matched") or not isinstance(line.get("order_item_id"), int):
+                raise Conflict("Every delivery note line must be matched to an order item before posting")
+            index = line.get("line_index")
+            if not isinstance(index, int) or index < 0 or index >= len(extracted_items):
+                raise BadRequest("Delivery note line mapping is invalid")
+            item = extracted_items[index]
+            quantity = item.get("quantity") if isinstance(item, dict) else None
+            try:
+                amount = Decimal(str(quantity))
+            except (InvalidOperation, TypeError, ValueError):
+                raise Conflict(f"Missing or invalid quantity on delivery note line {index + 1}")
+            if not amount.is_finite() or amount <= 0:
+                raise Conflict(f"Missing or invalid quantity on delivery note line {index + 1}")
+            order_item_id = line["order_item_id"]
+            receipt_quantities[order_item_id] = receipt_quantities.get(order_item_id, Decimal("0")) + amount
+        receipt_items = [{"order_item_id": item_id, "quantity": str(quantity)} for item_id, quantity in sorted(receipt_quantities.items())]
+        receipt_number = str(data.get("document_number") or "").strip() or f"SCAN-DN-{analysis_id}"
+        receipt_payload = {
+            "receipt_number": receipt_number,
+            "notes": f"נוצר מסריקת תעודת משלוח: {row.filename}",
+            "items": receipt_items,
+        }
+        receipt, replayed = ReceiptService(self.tenant_id).create_receipt(
+            user, reconciliation["order_id"], receipt_payload,
+            idempotency_key=f"document-analysis-{analysis_id}-receipt",
+        )
+        updated = dict(data)
+        updated["delivery_note_result"] = {
+            "receipt_id": receipt.id, "receipt_number": receipt.receipt_number,
+            "replayed": replayed,
+        }
+        row.extracted_data = updated
+        row.status = "PARTIALLY_APPLIED"
+        row.applied_at = datetime.now(timezone.utc)
+        row.applied_by = self.user_id
+        db.session.commit()
+        return row, receipt
+
+    def apply_invoice_reconciliation(self, analysis_id: int, payload: dict):
+        """Record a scanned invoice and optionally accept only safe, high-confidence price changes."""
+        PermissionService.require_role_at_least("manager")
+        row = DocumentAnalysis.query.filter_by(tenant_id=self.tenant_id, id=analysis_id).with_for_update().first()
+        if row is None:
+            raise NotFound("Document analysis not found")
+        if not isinstance(row.extracted_data, dict):
+            raise BadRequest("Document must be analyzed before recording an invoice")
+        data = row.extracted_data
+        reconciliation = data.get("order_reconciliation")
+        if not isinstance(reconciliation, dict):
+            raise BadRequest("Compare the document with a purchase order before recording the invoice")
+        if str(data.get("document_type") or row.document_type or "").upper() != "INVOICE":
+            raise BadRequest("Only a scanned supplier invoice can be recorded through this action")
+        order = Order.query.filter_by(id=reconciliation.get("order_id"), tenant_id=self.tenant_id).first()
+        if order is None:
+            raise NotFound("Reconciled purchase order not found")
+        if reconciliation.get("supplier_check") not in {"MATCH", "MATCH_MANUAL"}:
+            raise Conflict("Verify the invoice supplier against the purchase order before recording the invoice")
+        invoice_number = str(payload.get("invoice_number") or data.get("document_number") or "").strip()
+        if not invoice_number or len(invoice_number) > 120:
+            raise BadRequest("Invoice number is required")
+        currency = str(payload.get("currency") or data.get("currency") or order.currency or "ILS").upper().strip()
+        if len(currency) != 3 or not currency.isalpha():
+            raise BadRequest("Invoice currency must be a three-letter code")
+        try:
+            amount = Decimal(str(payload.get("amount") if payload.get("amount") not in (None, "") else (data.get("totals") or {}).get("total")))
+        except (InvalidOperation, TypeError, ValueError):
+            raise BadRequest("A valid invoice total is required")
+        if not amount.is_finite() or amount <= 0:
+            raise BadRequest("Invoice total must be greater than zero")
+        invoice_date = None
+        raw_date = payload.get("invoice_date") or data.get("document_date")
+        if raw_date:
+            try:
+                invoice_date = date.fromisoformat(str(raw_date)[:10])
+            except ValueError:
+                raise BadRequest("Invoice date must be a valid ISO date")
+        duplicate = SupplierInvoice.query.filter_by(
+            tenant_id=self.tenant_id, supplier_id=order.supplier_id, invoice_number=invoice_number
+        ).first()
+        if duplicate:
+            raise Conflict("Invoice number already exists for this supplier")
+        receipt_id = payload.get("receipt_id")
+        if receipt_id not in (None, ""):
+            from app.models.receipt import Receipt, RECEIPT_POSTED
+            receipt = Receipt.query.filter_by(id=receipt_id, order_id=order.id, tenant_id=self.tenant_id).first()
+            if receipt is None or receipt.status != RECEIPT_POSTED:
+                raise BadRequest("receipt_id must refer to a posted receipt for the selected order")
+
+        lines = reconciliation.get("lines") if isinstance(reconciliation.get("lines"), list) else []
+        invoice_lines = []
+        allow_price_updates = payload.get("allow_price_updates") is True
+        auto_updated = []
+        intelligence = PriceIntelligenceService(self.tenant_id)
+        order_item_ids = {line.get("order_item_id") for line in lines if isinstance(line, dict) and line.get("order_item_id")}
+        order_items = {
+            item.id: item for item in OrderItem.query.filter(
+                OrderItem.tenant_id == self.tenant_id, OrderItem.order_id == order.id,
+                OrderItem.id.in_(order_item_ids or [-1])
+            ).all()
+        }
+        for line in lines:
+            if not isinstance(line, dict):
+                continue
+            item = data.get("items", [])[line["line_index"]] if isinstance(line.get("line_index"), int) and 0 <= line["line_index"] < len(data.get("items", [])) else {}
+            quantity = item.get("quantity") if isinstance(item, dict) else None
+            invoice_price = item.get("unit_price") if isinstance(item, dict) else None
+            invoice_lines.append({
+                **line,
+                "invoiced_quantity": quantity,
+                "received_quantity": None,
+                "invoice_unit_price": invoice_price,
+            })
+            if not allow_price_updates or not line.get("matched") or line.get("confidence", 0) < 0.93:
+                continue
+            order_item = order_items.get(line.get("order_item_id"))
+            if order_item is None or invoice_price in (None, ""):
+                continue
+            product = Product.query.filter_by(id=order_item.product_id, tenant_id=self.tenant_id, active=True).first()
+            if product is None:
+                continue
+            extracted_unit = item.get("unit") if isinstance(item, dict) else None
+            if not extracted_unit or not product.unit:
+                continue
+            if ProductMatchingService.normalize(extracted_unit) != ProductMatchingService.normalize(product.unit):
+                continue
+            line_currency = str(item.get("currency") or data.get("currency") or order.currency or "ILS").upper()
+            if line_currency != currency or currency != (order.currency or "ILS").upper():
+                continue
+            try:
+                new_price = Decimal(str(invoice_price))
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+            if not new_price.is_finite() or new_price <= 0:
+                continue
+            if item.get("discount") not in (None, "", 0, 0.0, "0", "0.0"):
+                continue
+            supplier_id = order.supplier_id
+            offer = None
+            if supplier_id == product.supplier_id:
+                old_price = Decimal(str(product.current_price or 0))
+                existing_currency = (product.currency or "ILS").upper()
+            else:
+                offer = SupplierProductOffer.query.filter_by(
+                    tenant_id=self.tenant_id, product_id=product.id, supplier_id=supplier_id, active=True
+                ).first()
+                # Do not invent a new supplier offer from a single scanned line.
+                # Missing offers remain for explicit catalog review.
+                if offer is None:
+                    continue
+                old_price = Decimal(str(offer.price))
+                existing_currency = (offer.currency or "ILS").upper()
+            if existing_currency != currency or abs(new_price - old_price) <= Decimal("0.01"):
+                continue
+            intelligence.record_observation(
+                product_id=product.id, supplier_id=supplier_id, observed_price=new_price,
+                currency=currency, unit=extracted_unit, source_type="INVOICE",
+                source_document_id=row.id, match_method="ORDER_RECONCILIATION",
+                match_confidence=line.get("confidence"),
+            )
+            intelligence.accept_price_change(
+                product_id=product.id, supplier_id=supplier_id, new_price=new_price,
+                currency=currency, unit=extracted_unit, source_type="INVOICE",
+                source_document_id=row.id,
+            )
+            if supplier_id == product.supplier_id:
+                product.current_price = new_price
+                product.currency = currency
+                product.unit = extracted_unit
+            else:
+                offer.price = new_price
+                offer.currency = currency
+                offer.unit = extracted_unit
+                offer.active = True
+            auto_updated.append({
+                "product_id": product.id, "product_name": product.name,
+                "old_price": float(old_price), "new_price": float(new_price),
+                "supplier_id": supplier_id,
+            })
+
+        invoice = SupplierInvoice(
+            tenant_id=self.tenant_id, order_id=order.id, supplier_id=order.supplier_id,
+            receipt_id=int(receipt_id) if receipt_id not in (None, "") else None,
+            invoice_number=invoice_number, invoice_date=invoice_date, amount=amount,
+            currency=currency, notes="נוצרה מסריקת מסמך; יש להשלים בדיקה ואישור לפי הצורך.",
+            approval_status="pending_approval", line_comparison=invoice_lines,
+            created_by=self.user_id,
+        )
+        db.session.add(invoice)
+        db.session.flush()
+        AuditService.log_event(
+            self.tenant_id, self.user_id, "supplier_invoice.scanned",
+            f"Supplier invoice {invoice_number} created from document scan",
+            {"invoice_id": invoice.id, "order_id": order.id, "document_analysis_id": row.id,
+             "automatic_price_updates": auto_updated},
+        )
+        updated = dict(data)
+        updated["invoice_reconciliation_result"] = {
+            "invoice_id": invoice.id, "invoice_number": invoice_number,
+            "automatic_price_updates": auto_updated, "prices_updated_count": len(auto_updated),
+        }
+        row.extracted_data = updated
+        row.status = "PARTIALLY_APPLIED"
+        row.applied_at = datetime.now(timezone.utc)
+        row.applied_by = self.user_id
+        db.session.commit()
+        return row, invoice, auto_updated
 
     def get(self, analysis_id: int):
         PermissionService.require_role_at_least("manager")
