@@ -1,13 +1,13 @@
 """Add isolated historical document import records.
 
-Revision ID: 20261028_historical_document_import
+Revision ID: 20261028_hist_doc_import
 Revises: 20261028_invoice_metadata_only
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "20261028_historical_document_import"
+revision = "20261028_hist_doc_import"
 down_revision = "20261028_invoice_metadata_only"
 branch_labels = None
 depends_on = None
