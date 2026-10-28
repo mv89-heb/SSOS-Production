@@ -9,7 +9,7 @@ def test_supplier_invoice_model_does_not_store_original_file_bytes():
 
 def test_original_invoice_file_upload_and_download_are_disabled(logged_in_client_a, make_order):
     order_response, _, _ = make_order(logged_in_client_a)
-    assert order_response.status_code in (200, 201), order_response.get_json()
+    assert order_response.status_code == 201, order_response.get_json()
     order_id = order_response.get_json()["order"]["id"]
 
     invoice_response = logged_in_client_a.post(
