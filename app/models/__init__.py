@@ -21,11 +21,12 @@ from app.models.notification import Notification
 from app.models.google_calendar import GoogleCalendarConnection
 from app.models.inventory_movement import InventoryMovement
 from app.models.inventory_planning_period import InventoryPlanningPeriod
+from app.models.historical_document_import import HistoricalImportBatch, HistoricalPurchaseOrder, HistoricalDocumentRecord
 
 __all__ = [
     "Tenant", "User", "Supplier", "Product", "SupplierProductOffer",
     "MasterProduct", "SupplierProduct", "PriceHistory", "PriceObservation",
     "DocumentAnalysis", "ProductClassificationFeedback", "Order", "OrderItem", "Receipt", "ReceiptItem", "SupplierInvoice", "SupplierInvoicePayment", "IdempotencyKey", "AuditLog",
     "Notification", "GoogleCalendarConnection", "InventoryMovement",
-    "InventoryPlanningPeriod",
+    "InventoryPlanningPeriod", "HistoricalImportBatch", "HistoricalPurchaseOrder", "HistoricalDocumentRecord",
 ]
