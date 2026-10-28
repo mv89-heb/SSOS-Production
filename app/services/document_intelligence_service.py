@@ -630,22 +630,23 @@ class DocumentIntelligenceService:
                 continue
             if item.get("discount") not in (None, "", 0, 0.0, "0", "0.0"):
                 continue
-            old_price = Decimal(str(order_item.unit_price))
-            if abs(new_price - old_price) <= Decimal("0.01"):
-                continue
             supplier_id = order.supplier_id
             offer = None
-            if supplier_id != product.supplier_id:
+            if supplier_id == product.supplier_id:
+                old_price = Decimal(str(product.current_price or 0))
+                existing_currency = (product.currency or "ILS").upper()
+            else:
                 offer = SupplierProductOffer.query.filter_by(
-                    tenant_id=self.tenant_id, product_id=product.id, supplier_id=supplier_id
+                    tenant_id=self.tenant_id, product_id=product.id, supplier_id=supplier_id, active=True
                 ).first()
+                # Do not invent a new supplier offer from a single scanned line.
+                # Missing offers remain for explicit catalog review.
                 if offer is None:
-                    offer = SupplierProductOffer(
-                        tenant_id=self.tenant_id, product_id=product.id, supplier_id=supplier_id,
-                        price=new_price, currency=currency, unit=extracted_unit, active=True
-                    )
-                    db.session.add(offer)
-                    db.session.flush()
+                    continue
+                old_price = Decimal(str(offer.price))
+                existing_currency = (offer.currency or "ILS").upper()
+            if existing_currency != currency or abs(new_price - old_price) <= Decimal("0.01"):
+                continue
             intelligence.record_observation(
                 product_id=product.id, supplier_id=supplier_id, observed_price=new_price,
                 currency=currency, unit=extracted_unit, source_type="INVOICE",
