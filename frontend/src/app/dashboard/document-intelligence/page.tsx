@@ -58,7 +58,7 @@ export default function DocumentIntelligencePage() {
     setSelectedOrderId(reconciliation?.order_id ? String(reconciliation.order_id) : "");
     setInvoiceNumber(analysis.extracted_data?.document_number || "");
     setInvoiceAmount(analysis.extracted_data?.totals?.total != null ? String(analysis.extracted_data.totals.total) : "");
-  }, [analysis?.id, reconciliation?.order_id]);
+  }, [analysis?.id, reconciliation?.order_id, data?.document_number, data?.totals?.total]);
   const data = analysis?.extracted_data;
   const productOptions = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name, "he")).map((p) => ({ id: p.id, name: p.name, extra: p.sku })), [products]);
   const supplierOptions = useMemo(() => [...suppliers].sort((a, b) => a.name.localeCompare(b.name, "he")).map((s) => ({ id: s.id, name: s.name, extra: s.customer_number })), [suppliers]);
