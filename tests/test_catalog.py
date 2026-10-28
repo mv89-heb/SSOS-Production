@@ -502,10 +502,9 @@ def test_deleting_product_removes_its_offers_via_real_api(logged_in_client_a):
     logged_in_client_a.post(f"/api/catalog/products/{p_id}/offers", json={"supplier_id": alt_id, "price": 5.0})
 
     resp = logged_in_client_a.delete(f"/api/catalog/products/{p_id}")
-    assert resp.status_code == 200
-    # The product is gone, so its offers sub-resource is unreachable — this
-    # confirms via the API surface that nothing about it is still live.
-    assert logged_in_client_a.get(f"/api/catalog/products/{p_id}/offers").status_code == 404
+    assert resp.status_code == 409
+    # Supplier offers are retained and remain available for price comparison.
+    assert logged_in_client_a.get(f"/api/catalog/products/{p_id}/offers").status_code == 200
 
 
 def test_changing_or_deleting_offer_never_affects_existing_orders(logged_in_client_a, make_order):
