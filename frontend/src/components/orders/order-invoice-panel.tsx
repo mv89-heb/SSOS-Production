@@ -152,7 +152,7 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
             <div className="space-y-2 border-t pt-3">
               <div className="font-bold text-sm">השוואת שורות החשבונית להזמנה</div>
               <p className="text-xs text-slate-500">הזן ידנית את הכמות והמחיר שמופיעים בחשבונית. המחיר והפער הכספי מושווים להזמנה; הכמות שהתקבלה מחושבת מקבלות שנרשמו סופית בלבד. אם החשבונית מקושרת לקבלה מסוימת, תוצג הכמות מאותה קבלה; אחרת יוצג הסכום מכל הקבלות הסופיות להזמנה.</p>
-              <div className="overflow-x-auto"><table className="w-full min-w-[650px] text-sm"><thead><tr className="border-b text-right text-xs text-slate-500"><th className="p-2">פריט</th><th className="p-2">כמות בהזמנה</th><th className="p-2">כמות שהתקבלה</th><th className="p-2">כמות בחשבונית</th><th className="p-2">מחיר בהזמנה</th><th className="p-2">מחיר בחשבונית</th><th className="p-2">פער שווי</th></tr></thead><tbody>
+              <div className="overflow-x-auto"><table className="w-full min-w-[800px] text-sm"><thead><tr className="border-b text-right text-xs text-slate-500"><th className="p-2">פריט</th><th className="p-2">כמות בהזמנה</th><th className="p-2">כמות שהתקבלה</th><th className="p-2">כמות בחשבונית</th><th className="p-2">מחיר בהזמנה</th><th className="p-2">מחיר בחשבונית</th><th className="p-2">פער שווי</th></tr></thead><tbody>
                 {order.items.map((item, index) => {
                   const saved = invoice.line_comparison?.find((line) => line.order_index === index);
                   const draftLine = reconciliationDrafts[invoice.id]?.[index] ?? { quantity: String(saved?.invoiced_quantity ?? item.quantity), price: String(saved?.invoiced_unit_price ?? item.unit_price) };
