@@ -294,6 +294,16 @@ def record_invoice_payment(invoice_id):
         raise
 
 
+def _invoice_for_tenant(invoice_id):
+    invoice = db.session.scalar(select(SupplierInvoice).where(
+        SupplierInvoice.id == invoice_id,
+        SupplierInvoice.tenant_id == current_user.tenant_id,
+    ))
+    if invoice is None:
+        raise NotFound("Supplier invoice not found")
+    return invoice
+
+
 @supplier_invoices_bp.route("/supplier-invoices/<int:invoice_id>/attachment", methods=["POST", "GET"])
 @login_required
 def reject_supplier_invoice_attachment(invoice_id):
