@@ -213,6 +213,47 @@ export default function NewOrderPage() {
               הספק נבחר — המוצרים יוצגו לפי הספק הזה
             </div>
           )}
+          {supplierId !== "" && (() => {
+            const supplier = suppliers?.find((item) => item.id === supplierId);
+            if (!supplier) return null;
+            const details = [
+              supplier.order_days ? ["ימי הזמנה", supplier.order_days] : null,
+              supplier.order_cutoff_time ? ["שעת סגירת הזמנות", supplier.order_cutoff_time] : null,
+              supplier.delivery_days ? ["ימי אספקה", supplier.delivery_days] : null,
+              supplier.lead_time_days != null ? ["זמן אספקה משוער", `${supplier.lead_time_days} ימים`] : null,
+              supplier.payment_terms ? ["תנאי תשלום", supplier.payment_terms] : null,
+              supplier.credit_days != null ? ["ימי אשראי", `${supplier.credit_days} ימים`] : null,
+              supplier.minimum_order_amount != null ? ["מינימום להזמנה", Number(supplier.minimum_order_amount).toLocaleString("he-IL", { maximumFractionDigits: 2 })] : null,
+              supplier.delivery_fee != null ? ["דמי משלוח", Number(supplier.delivery_fee).toLocaleString("he-IL", { maximumFractionDigits: 2 })] : null,
+            ].filter((item): item is [string, string] => item !== null);
+            if (!details.length) return (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
+                לא הוגדרו תנאי הזמנה לספק הזה. מומלץ להשלים אותם בכרטיס הספק לפני שליחת ההזמנה.
+                <Link href={`/dashboard/suppliers/${supplier.id}`} className="mr-2 font-bold underline">לכרטיס הספק</Link>
+              </div>
+            );
+            return (
+              <div className="mt-4 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/20">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">תנאי הספק להזמנה זו</h3>
+                  <Link href={`/dashboard/suppliers/${supplier.id}`} className="text-xs font-bold text-indigo-700 underline dark:text-indigo-300">עדכון פרטי ספק</Link>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {details.map(([label, value]) => (
+                    <div key={label} className="rounded-xl bg-white/80 p-3 dark:bg-slate-900/70">
+                      <div className="text-xs text-slate-500">{label}</div>
+                      <div className="mt-1 break-words text-sm font-bold text-slate-900 dark:text-white">{value}</div>
+                    </div>
+                  ))}
+                </div>
+                {(supplier.minimum_order_amount != null || supplier.delivery_fee != null) && (
+                  <p className="mt-3 text-xs text-slate-500">
+                    הסכומים מוצגים כפי שנשמרו בכרטיס הספק; לא מוגדר להם מטבע נפרד, ולכן יש לאמת את המטבע מול הספק לפני אישור ההזמנה.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
