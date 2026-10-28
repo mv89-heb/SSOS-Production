@@ -513,7 +513,7 @@ class DocumentIntelligenceService:
         if not lines:
             raise BadRequest("The delivery note has no reconciled lines")
         extracted_items = data.get("items") if isinstance(data.get("items"), list) else []
-        receipt_items = []
+        receipt_quantities = {}
         for line in lines:
             if not isinstance(line, dict) or not line.get("matched") or not isinstance(line.get("order_item_id"), int):
                 raise Conflict("Every delivery note line must be matched to an order item before posting")
@@ -528,7 +528,9 @@ class DocumentIntelligenceService:
                 raise Conflict(f"Missing or invalid quantity on delivery note line {index + 1}")
             if not amount.is_finite() or amount <= 0:
                 raise Conflict(f"Missing or invalid quantity on delivery note line {index + 1}")
-            receipt_items.append({"order_item_id": line["order_item_id"], "quantity": str(amount)})
+            order_item_id = line["order_item_id"]
+            receipt_quantities[order_item_id] = receipt_quantities.get(order_item_id, Decimal("0")) + amount
+        receipt_items = [{"order_item_id": item_id, "quantity": str(quantity)} for item_id, quantity in sorted(receipt_quantities.items())]
         receipt_number = str(data.get("document_number") or "").strip() or f"SCAN-DN-{analysis_id}"
         receipt_payload = {
             "receipt_number": receipt_number,
