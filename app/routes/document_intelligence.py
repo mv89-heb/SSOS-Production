@@ -131,9 +131,10 @@ def compare_document_with_order(analysis_id):
         order_id = payload.get("order_id")
         if not isinstance(order_id, int) or isinstance(order_id, bool) or order_id <= 0:
             raise BadRequest("A valid order_id is required")
+        confirm_supplier = payload.get("confirm_supplier") is True
         row, reconciliation = DocumentIntelligenceService(
             current_user.tenant_id, current_user.id
-        ).compare_with_order(analysis_id, order_id)
+        ).compare_with_order(analysis_id, order_id, confirm_supplier=confirm_supplier)
         return jsonify({"success": True, "analysis": row.to_dict(), "reconciliation": reconciliation}), 200
     except HTTPException as exc:
         db.session.rollback()
