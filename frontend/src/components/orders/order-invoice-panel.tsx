@@ -26,6 +26,7 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
   const [receiptId, setReceiptId] = useState("");
   const [invoiceNotes, setInvoiceNotes] = useState("");
   const [paymentDrafts, setPaymentDrafts] = useState<Record<number, { amount: string; date: string; reference: string }>>({});
+  const [approvalNoteDrafts, setApprovalNoteDrafts] = useState<Record<number, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [attachmentFiles, setAttachmentFiles] = useState<Record<number, File | null>>({});
   const [uploadingInvoiceId, setUploadingInvoiceId] = useState<number | null>(null);
@@ -56,10 +57,10 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
     },
   });
   const updateApproval = useMutation({
-    mutationFn: async ({ invoiceId, approvalStatus }: { invoiceId: number; approvalStatus: "pending_approval" | "approved_for_payment" }) =>
+    mutationFn: async ({ invoiceId, approvalStatus, approvalNote }: { invoiceId: number; approvalStatus: "pending_approval" | "approved_for_payment"; approvalNote?: string }) =>
       (await apiClient.post<{ success: boolean; invoice: Invoice }>(
         `/api/supplier-invoices/${invoiceId}/approval`,
-        { approval_status: approvalStatus },
+        { approval_status: approvalStatus, approval_note: approvalNote?.trim() || null },
       )).data.invoice,
     onSuccess: async (invoice) => {
       setMessage(invoice.approval_status === "approved_for_payment" ? "החשבונית אושרה לתשלום ונרשמה ביומן הפעולות." : "החשבונית הוחזרה לבדיקה.");
@@ -143,7 +144,7 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
                 {invoice.approval_note && <div className="text-xs text-slate-500">{invoice.approval_note}</div>}
               </div>
               <div className="flex flex-wrap gap-2">
-                {invoice.approval_status !== "approved_for_payment" && <Button disabled={updateApproval.isPending || invoice.paid_amount > 0} onClick={() => { setMessage(null); updateApproval.mutate({ invoiceId: invoice.id, approvalStatus: "approved_for_payment" }); }}>{updateApproval.isPending ? "מעדכן..." : "אישור לתשלום"}</Button>}
+                {invoice.approval_status !== "approved_for_payment" && <div className="mt-2 space-y-2"><label className="block text-xs text-slate-600 dark:text-slate-300">הערת אישור / נימוק חריגה (נדרש אם הכמות בחשבונית שונה מהקבלה)</label><textarea aria-label="נימוק אישור חשבונית" maxLength={2000} value={approvalNoteDrafts[invoice.id] ?? ""} onChange={(e) => setApprovalNoteDrafts((current) => ({ ...current, [invoice.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm dark:bg-slate-900" rows={2} /><Button disabled={updateApproval.isPending || invoice.paid_amount > 0} onClick={() => { setMessage(null); updateApproval.mutate({ invoiceId: invoice.id, approvalStatus: "approved_for_payment", approvalNote: approvalNoteDrafts[invoice.id] }); }}>{updateApproval.isPending ? "מעדכן..." : "אישור לתשלום"}</Button></div>}
                 {invoice.approval_status === "approved_for_payment" && invoice.paid_amount === 0 && <Button variant="outline" disabled={updateApproval.isPending} onClick={() => { setMessage(null); updateApproval.mutate({ invoiceId: invoice.id, approvalStatus: "pending_approval" }); }}>החזרה לבדיקה</Button>}
               </div>
             </div>
