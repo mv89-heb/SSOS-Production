@@ -12,7 +12,7 @@ from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.models.order import Order
-from app.models.receipt import Receipt
+from app.models.receipt import Receipt, RECEIPT_POSTED
 from app.models.supplier_invoice import SupplierInvoice, SupplierInvoicePayment, INVOICE_APPROVAL_PENDING, INVOICE_APPROVAL_APPROVED, VALID_INVOICE_APPROVAL_STATUSES
 from app.models.supplier_offer import SupplierProductOffer
 from app.services.audit_service import AuditService
@@ -90,6 +90,8 @@ def create_order_invoice(order_id):
             ))
             if receipt is None:
                 raise NotFound("Receipt not found for this order")
+            if receipt.status != RECEIPT_POSTED:
+                raise Conflict("Only posted receipts can be linked to a supplier invoice")
         duplicate_invoice = db.session.scalar(select(SupplierInvoice.id).where(
             SupplierInvoice.tenant_id == current_user.tenant_id,
             SupplierInvoice.supplier_id == order.supplier_id,
