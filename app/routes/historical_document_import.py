@@ -302,6 +302,18 @@ def review_document(batch_id, document_id):
         if len(supplier_name) > 255:
             raise BadRequest("supplier_name must not exceed 255 characters")
         record.supplier_name = supplier_name or None
+        if "document_number" in payload:
+            record.document_number = str(payload.get("document_number") or "").strip()[:160] or None
+        if "document_date" in payload:
+            record.document_date = _date(payload.get("document_date"))
+        if "total_amount" in payload:
+            record.total_amount = _decimal(payload.get("total_amount"))
+        if "currency" in payload:
+            currency = str(payload.get("currency") or "").upper().strip()
+            if currency and (len(currency) != 3 or not currency.isalpha()):
+                raise BadRequest("currency must be a three-letter code")
+            if currency:
+                record.currency = currency
         if "order_reference" in payload:
             record.order_reference = str(payload.get("order_reference") or "").strip()[:160] or None
         confirm_duplicate = payload.get("confirm_duplicate") is True
