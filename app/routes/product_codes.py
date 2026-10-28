@@ -30,6 +30,19 @@ def _product_or_404(product_id):
     return product
 
 
+@product_codes_bp.route("", methods=["GET"])
+@login_required
+def list_tenant_product_codes():
+    try:
+        PermissionService.require_permission("catalog.view")
+        rows = db.session.scalars(db.select(ProductCode).where(
+            ProductCode.tenant_id == current_user.tenant_id,
+        ).order_by(ProductCode.product_id, ProductCode.id)).all()
+        return jsonify({"success": True, "codes": [row.to_dict() for row in rows]})
+    except HTTPException as exc:
+        return _error(exc)
+
+
 @product_codes_bp.route("/products/<int:product_id>", methods=["GET"])
 @login_required
 def list_product_codes(product_id):
