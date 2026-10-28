@@ -14,6 +14,7 @@ from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.supplier_offer import SupplierProductOffer
+from app.services.receipt_service import ReceiptService
 from app.services.audit_service import AuditService
 from app.models.product import Product
 from app.models.supplier import Supplier
@@ -473,6 +474,64 @@ class DocumentIntelligenceService:
         row.extracted_data = updated
         db.session.commit()
         return row, result
+
+    def apply_delivery_note(self, analysis_id: int, user):
+        """Post a delivery note as a receipt only after all extracted lines map to the chosen order."""
+        PermissionService.require_role_at_least("manager")
+        row = DocumentAnalysis.query.filter_by(tenant_id=self.tenant_id, id=analysis_id).with_for_update().first()
+        if row is None:
+            raise NotFound("Document analysis not found")
+        if not isinstance(row.extracted_data, dict):
+            raise BadRequest("Document must be analyzed before receiving")
+        data = row.extracted_data
+        if str(data.get("document_type") or row.document_type or "").upper() != "DELIVERY_NOTE":
+            raise BadRequest("Only a scanned delivery note can be posted as a receipt")
+        reconciliation = data.get("order_reconciliation")
+        if not isinstance(reconciliation, dict):
+            raise BadRequest("Compare the delivery note with a purchase order first")
+        if reconciliation.get("supplier_check") == "MISMATCH":
+            raise Conflict("The delivery note supplier does not match the purchase order supplier")
+        lines = reconciliation.get("lines") if isinstance(reconciliation.get("lines"), list) else []
+        if not lines:
+            raise BadRequest("The delivery note has no reconciled lines")
+        extracted_items = data.get("items") if isinstance(data.get("items"), list) else []
+        receipt_items = []
+        for line in lines:
+            if not isinstance(line, dict) or not line.get("matched") or not isinstance(line.get("order_item_id"), int):
+                raise Conflict("Every delivery note line must be matched to an order item before posting")
+            index = line.get("line_index")
+            if not isinstance(index, int) or index < 0 or index >= len(extracted_items):
+                raise BadRequest("Delivery note line mapping is invalid")
+            item = extracted_items[index]
+            quantity = item.get("quantity") if isinstance(item, dict) else None
+            try:
+                amount = Decimal(str(quantity))
+            except (InvalidOperation, TypeError, ValueError):
+                raise Conflict(f"Missing or invalid quantity on delivery note line {index + 1}")
+            if not amount.is_finite() or amount <= 0:
+                raise Conflict(f"Missing or invalid quantity on delivery note line {index + 1}")
+            receipt_items.append({"order_item_id": line["order_item_id"], "quantity": str(amount)})
+        receipt_number = str(data.get("document_number") or "").strip() or f"SCAN-DN-{analysis_id}"
+        receipt_payload = {
+            "receipt_number": receipt_number,
+            "notes": f"נוצר מסריקת תעודת משלוח: {row.filename}",
+            "items": receipt_items,
+        }
+        receipt, replayed = ReceiptService(self.tenant_id).create_receipt(
+            user, reconciliation["order_id"], receipt_payload,
+            idempotency_key=f"document-analysis-{analysis_id}-receipt",
+        )
+        updated = dict(data)
+        updated["delivery_note_result"] = {
+            "receipt_id": receipt.id, "receipt_number": receipt.receipt_number,
+            "replayed": replayed,
+        }
+        row.extracted_data = updated
+        row.status = "PARTIALLY_APPLIED"
+        row.applied_at = datetime.now(timezone.utc)
+        row.applied_by = self.user_id
+        db.session.commit()
+        return row, receipt
 
     def apply_invoice_reconciliation(self, analysis_id: int, payload: dict):
         """Record a scanned invoice and optionally accept only safe, high-confidence price changes."""
