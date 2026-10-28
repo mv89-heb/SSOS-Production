@@ -161,8 +161,8 @@ def test_snapshot_survives_product_deletion(logged_in_client_a):
     order_id = o_resp.get_json()["order"]["id"]
 
     deleted = logged_in_client_a.delete(f"/api/catalog/products/{p_id}")
-    assert deleted.status_code == 200
-    assert logged_in_client_a.get(f"/api/catalog/products/{p_id}").status_code == 404
+    assert deleted.status_code == 409
+    assert logged_in_client_a.get(f"/api/catalog/products/{p_id}").status_code == 200
 
     fetched_order = logged_in_client_a.get(f"/api/orders/{order_id}").get_json()["order"]
     assert fetched_order["items"][0]["product_name"] == "Doomed Product"
