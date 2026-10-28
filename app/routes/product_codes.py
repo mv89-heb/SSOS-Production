@@ -1,5 +1,5 @@
 import io
-import os
+from urllib.parse import quote
 
 import barcode
 import qrcode
@@ -69,7 +69,7 @@ def generate_product_codes(product_id):
                 value = f"SSOS{current_user.tenant_id:04d}{product.id:08d}"
             else:
                 base_url = (current_app.config.get("FRONTEND_BASE_URL") or "https://ssos-production.onrender.com").rstrip("/")
-                value = f"{base_url}/dashboard/catalog?product_id={product.id}"
+                value = f"{base_url}/dashboard/catalog?search={quote(product.name)}"
             row = ProductCode(
                 tenant_id=current_user.tenant_id,
                 product_id=product.id,
