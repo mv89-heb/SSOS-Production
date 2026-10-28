@@ -12,6 +12,7 @@ from app.models.product import Product
 from app.models.supplier import Supplier
 from app.models.user import ROLE_ADMIN, User
 from app.services.admin_service import AdminService
+from app.services.catalog_service import CatalogService
 from app.services.audit_service import AuditService
 from app.services.order_service import OrderService
 from app.services.permission_service import PermissionService
@@ -126,12 +127,15 @@ def delete_supplier(supplier_id: int):
 @admin_bp.route("/products/<int:product_id>", methods=["DELETE"])
 @login_required
 def delete_product(product_id: int):
-    product = _tenant_product(product_id)
-    name = product.name; target_id = product.id; previous_active = product.active
-    db.session.delete(product)
-    AuditService.log_event(current_user.tenant_id, current_user.id, "admin.product_deleted", f"Permanently deleted product {name}", {"product_id": target_id, "previous_active": previous_active})
-    db.session.commit()
-    return jsonify({"success": True})
+    # Reuse the canonical catalog lifecycle so admin deletion follows the
+    # same tenant checks, dependency rules, and audit event as catalog deletion.
+    try:
+        CatalogService(current_user.tenant_id, current_user.id).delete_product(product_id)
+        db.session.commit()
+        return jsonify({"success": True})
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
 
 
 @admin_bp.route("/orders/<int:order_id>", methods=["GET"])
