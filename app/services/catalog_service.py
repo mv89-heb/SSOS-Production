@@ -1,5 +1,10 @@
 import math
 
+from sqlalchemy import func, select
+from app.extensions import db
+from app.models.inventory_movement import InventoryMovement
+from app.models.order_item import OrderItem
+
 from werkzeug.exceptions import Conflict, BadRequest, NotFound
 
 from app.repositories.supplier_repository import SupplierRepository
@@ -206,7 +211,34 @@ class CatalogService:
         return product
 
     def delete_product(self, product_id: int):
-        product = self.product_repo.get_by_id_or_404(product_id); AuditService.log_event(self.tenant_id, self.user_id, "catalog.product_deleted", f"Deleted product {product.name}", {"product_id": product.id, "sku": product.sku}); self.product_repo.delete(product)
+        product = self.product_repo.get_by_id_or_404(product_id)
+        order_item_count = int(db.session.scalar(
+            select(func.count(OrderItem.id)).where(
+                OrderItem.tenant_id == self.tenant_id,
+                OrderItem.product_id == product.id,
+            )
+        ) or 0)
+        movement_count = int(db.session.scalar(
+            select(func.count(InventoryMovement.id)).where(
+                InventoryMovement.tenant_id == self.tenant_id,
+                InventoryMovement.product_id == product.id,
+            )
+        ) or 0)
+        offer_count = len(product.supplier_offers)
+        if order_item_count or movement_count or offer_count:
+            raise Conflict(
+                f"Product is referenced by {order_item_count} order line(s), "
+                f"{movement_count} inventory movement(s), and {offer_count} supplier offer(s). "
+                "Deactivate the product instead to preserve procurement and inventory history."
+            )
+        AuditService.log_event(
+            self.tenant_id,
+            self.user_id,
+            "catalog.product_deleted",
+            f"Deleted product {product.name}",
+            {"product_id": product.id, "sku": product.sku},
+        )
+        self.product_repo.delete(product)
 
     def list_offers(self, product_id: int): self.product_repo.get_by_id_or_404(product_id); return self.offer_repo.get_by_product(product_id)
 
