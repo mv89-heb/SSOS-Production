@@ -45,9 +45,16 @@ export default function CatalogPage() {
   const canManage = permissions.canManageCatalog(user);
   const [skuFilter, setSkuFilter] = useState(""); const [nameFilter, setNameFilter] = useState(""); const [supplierFilter, setSupplierFilter] = useState("all"); const [currencyFilter, setCurrencyFilter] = useState("all"); const [statusFilter, setStatusFilter] = useState<StatusFilter>("all"); const [categoryFilter, setCategoryFilter] = useState("all"); const [stockFilter, setStockFilter] = useState<StockFilter>("all"); const [priceMin, setPriceMin] = useState(""); const [priceMax, setPriceMax] = useState(""); const [viewMode, setViewMode] = useState<ViewMode>("list"); const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc"); const [modalOpen, setModalOpen] = useState(false); const [showMoreFields, setShowMoreFields] = useState(false); const [editingProduct, setEditingProduct] = useState<Product | null>(null); const [comparisonProduct, setComparisonProduct] = useState<Product | null>(null); const [form, setForm] = useState<ProductFormState>({ ...EMPTY_FORM }); const [formError, setFormError] = useState<string | null>(null); const [inlineEdit, setInlineEdit] = useState<{ id: number; field: InlineField; value: string } | null>(null); const [imageEnrichmentBusy, setImageEnrichmentBusy] = useState(false); const [imageEnrichmentMessage, setImageEnrichmentMessage] = useState<string | null>(null);
   useEffect(() => {
-    const search = new URLSearchParams(window.location.search).get("search");
-    if (search) setNameFilter(search);
-  }, []);
+    const params = new URLSearchParams(window.location.search);
+    const productId = params.get("product_id");
+    const search = params.get("search");
+    if (productId && products?.length) {
+      const product = products.find((item) => String(item.id) === productId);
+      if (product) setNameFilter(product.name);
+    } else if (search) {
+      setNameFilter(search);
+    }
+  }, [products]);
   const { data: products, isLoading, isError, refetch } = useProducts(); const { data: suppliers } = useSuppliers(); const { data: categoryOptions = [] } = useCategories(); const createProduct = useCreateProduct(); const updateProduct = useUpdateProduct(inlineEdit?.id ?? editingProduct?.id ?? -1); const toggleActive = useToggleProductActive();
   const supplierName = (supplierId: number) => suppliers?.find((s) => s.id === supplierId)?.name ?? `#${supplierId}`;
   const categories = useMemo(() => Array.from(new Set([...(categoryOptions ?? []), ...(products ?? []).map((p) => p.category).filter(Boolean) as string[]])).sort((a, b) => a.localeCompare(b, "he")), [categoryOptions, products]); const currencies = useMemo(() => Array.from(new Set((products ?? []).map((p) => p.currency).filter(Boolean))).sort(), [products]);
