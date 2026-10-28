@@ -209,6 +209,8 @@ def add_document(batch_id):
         if document_type not in {"INVOICE", "DELIVERY_NOTE"}:
             raise BadRequest("Only supplier invoices and delivery notes can be added to a historical batch")
         supplier_name, supplier_id, multi_supplier = _supplier_from_extraction(data)
+        if multi_supplier:
+            raise BadRequest("This document contains multiple supplier sections. Split it into separate single-supplier documents before historical import.")
         if supplier_id:
             supplier = db.session.scalar(select(Supplier).where(
                 Supplier.id == supplier_id,
@@ -223,8 +225,6 @@ def add_document(batch_id):
             reasons.append("document_number_missing")
         if not _date(data.get("document_date")):
             reasons.append("document_date_missing_or_invalid")
-        if multi_supplier:
-            reasons.append("multiple_supplier_sections_require_review")
         if not isinstance(data.get("items"), list) or not data.get("items"):
             reasons.append("no_line_items_extracted")
         document_number = str(data.get("document_number") or "").strip() or None
@@ -340,7 +340,7 @@ def review_document(batch_id, document_id):
         if confirm_duplicate:
             reasons = [reason for reason in reasons if reason != "possible_duplicate"]
         if payload.get("confirm_extraction") is True:
-            reasons = [reason for reason in reasons if reason not in {"multiple_supplier_sections_require_review", "no_line_items_extracted"}]
+            reasons = [reason for reason in reasons if reason != "no_line_items_extracted"]
         record.review_reasons = reasons
         record.needs_review = bool(reasons)
         AuditService.log_event(current_user.tenant_id, current_user.id, "historical_import.document_reviewed",
