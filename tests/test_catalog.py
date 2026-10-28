@@ -609,3 +609,31 @@ def test_piece_product_without_carton_size_is_flagged_for_review(logged_in_clien
     product = response.get_json()["product"]
     assert "units_per_carton" in product["data_quality"]["missing_fields"]
     assert product["data_quality"]["needs_review"] is True
+
+
+
+def test_delete_product_without_history_succeeds(logged_in_client_a):
+    _supplier_id, product_id = _make_product(logged_in_client_a)
+
+    response = logged_in_client_a.delete(f"/api/catalog/products/{product_id}")
+
+    assert response.status_code == 200
+    assert logged_in_client_a.get(f"/api/catalog/products/{product_id}").status_code == 404
+
+
+def test_delete_product_with_supplier_offer_is_blocked(logged_in_client_a):
+    primary_supplier_id, product_id = _make_product(logged_in_client_a)
+    alternate_supplier_id = logged_in_client_a.post(
+        "/api/catalog/suppliers", json={"name": "Alternate supplier"}
+    ).get_json()["supplier"]["id"]
+    offer_response = logged_in_client_a.post(
+        f"/api/catalog/products/{product_id}/offers",
+        json={"supplier_id": alternate_supplier_id, "price": 8.5},
+    )
+    assert offer_response.status_code in (200, 201)
+
+    response = logged_in_client_a.delete(f"/api/catalog/products/{product_id}")
+
+    assert response.status_code == 409
+    assert "Deactivate the product instead" in response.get_json()["message"]
+    assert logged_in_client_a.get(f"/api/catalog/products/{product_id}").status_code == 200
