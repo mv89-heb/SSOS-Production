@@ -59,7 +59,7 @@ export default function ProductCodesPage() {
 
   if (!canManage) return <div dir="rtl" className="rounded-xl border bg-white p-8 text-center text-sm text-slate-500">נדרשת הרשאת ניהול קטלוג כדי ליצור תוויות.</div>;
 
-  const apiBase = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL || "https://ssos-backend.onrender.com").replace(/\/$/, "");
 
   return <main dir="rtl" className="mx-auto w-full max-w-7xl space-y-6 pb-12">
     <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
