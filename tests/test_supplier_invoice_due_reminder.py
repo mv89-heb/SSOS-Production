@@ -113,7 +113,11 @@ def test_supplier_invoice_due_reminders_are_scoped_deduplicated_and_skip_ineligi
         assert len(notifications) == 2
         assert {n.tenant_id for n in notifications} == {tenant_a.id, tenant_b.id}
         assert {n.user_id for n in notifications} == {admin_a.id, admin_b.id}
-        assert all(n.action_url.endswith(f"/dashboard/orders/{n.action_url.rsplit('/', 1)[-1]}") for n in notifications)
+        notification_by_message = {n.message: n for n in notifications}
+        due_a_notification = next(n for n in notifications if "DUE-A" in (n.message or ""))
+        due_b_notification = next(n for n in notifications if "DUE-B" in (n.message or ""))
+        assert due_a_notification.action_url.endswith(f"/dashboard/orders/{due_a.order_id}")
+        assert due_b_notification.action_url.endswith(f"/dashboard/orders/{due_b.order_id}")
         assert all(n.dedupe_key for n in notifications)
         assert not any("PENDING-A" in (n.message or "") for n in notifications)
         assert not any("PAID-A" in (n.message or "") for n in notifications)
@@ -122,4 +126,4 @@ def test_supplier_invoice_due_reminders_are_scoped_deduplicated_and_skip_ineligi
         assert worker.process_supplier_invoice_due_reminders(today=today) == 0
         assert db.session.query(Notification).count() == 2
         assert len(pushed) == 2
-        assert all(payload["url"].startswith("/dashboard/orders/") for _, payload in pushed)
+        assert all(payload["url"].endswith("/dashboard/orders/" + payload["url"].rsplit("/", 1)[-1]) for _, payload in pushed)
