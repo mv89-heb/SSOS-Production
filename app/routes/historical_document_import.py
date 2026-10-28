@@ -71,13 +71,13 @@ def _supplier_from_extraction(data):
     matching = data.get("supplier_matching")
     if isinstance(matching, list):
         matching = matching[0] if len(matching) == 1 else None
-    supplier_id = matching.get("supplier_id") if isinstance(matching, dict) else None
+    supplier_id = matching.get("supplier_id") if isinstance(matching, dict) and matching.get("decision") == "AUTO_MATCH" else None
     supplier_name = supplier.get("name") or ""
     if not supplier_name and len(sections) == 1 and isinstance(sections[0], dict):
         section_supplier = sections[0].get("supplier") if isinstance(sections[0].get("supplier"), dict) else {}
         supplier_name = section_supplier.get("name") or ""
         section_match = sections[0].get("supplier_matching")
-        if supplier_id is None and isinstance(section_match, dict):
+        if supplier_id is None and isinstance(section_match, dict) and section_match.get("decision") == "AUTO_MATCH":
             supplier_id = section_match.get("supplier_id")
     if len(sections) > 1:
         supplier_name = supplier_name or ""
