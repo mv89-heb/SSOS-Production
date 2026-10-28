@@ -285,8 +285,11 @@ def review_document(batch_id, document_id):
         if record is None:
             raise NotFound("Historical document not found")
         payload = request.get_json(silent=True) or {}
+        original_supplier_name = record.supplier_name
         supplier_name = str(payload.get("supplier_name") or record.supplier_name or "").strip()
         supplier_id = payload.get("supplier_id", record.supplier_id)
+        if "supplier_name" in payload and "supplier_id" not in payload and _norm(supplier_name) != _norm(original_supplier_name):
+            record.supplier_id = None
         if supplier_id not in (None, ""):
             if not isinstance(supplier_id, int) or isinstance(supplier_id, bool):
                 raise BadRequest("supplier_id must be an integer")
@@ -361,7 +364,7 @@ def finalize_batch(batch_id):
             raise Conflict("Some documents still require review; resolve supplier, date/number, possible duplicates and order reference before finalizing")
         groups = {}
         for record in records:
-            key = (record.supplier_id or _norm(record.supplier_name), _norm(record.order_reference))
+            key = (_norm(record.supplier_name), _norm(record.order_reference))
             groups.setdefault(key, []).append(record)
         orders = []
         for _, docs in groups.items():
