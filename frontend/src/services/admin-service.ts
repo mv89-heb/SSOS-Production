@@ -6,8 +6,10 @@ export type AdminProduct = { id: number; name: string; sku?: string | null; acti
 export type AdminOrder = { id: number; order_number: string; status: string; final_total: number; created_at: string; notes?: string | null };
 export type AdminImport = { id: number; filename: string; status: string; row_count?: number | null; created_at: string };
 export type AdminAuditLog = { id: number; action: string; title: string; metadata?: Record<string, unknown>; user_id?: number | null; created_at: string; hash?: string | null };
+export type AdminOverview = { users: number; active_users: number; suppliers: number; active_suppliers: number; products: number; active_products: number; orders: number; imports: number };
 
 export const adminService = {
+  async getOverview() { const { data } = await apiClient.get<{ success: boolean; counts: AdminOverview }>("/api/admin/overview"); return data.counts; },
   async listUsers() { const { data } = await apiClient.get<{ success: boolean; users: AdminUser[] }>("/api/users"); return data.users; },
   async createUser(payload: { full_name: string; email: string; password: string; role: AdminUser["role"] }) { const { data } = await apiClient.post<{ success: boolean; user: AdminUser }>("/api/users", payload); return data.user; },
   async updateUser(id: number, payload: Record<string, unknown>) { const { data } = await apiClient.put<{ success: boolean; user: AdminUser }>(`/api/users/${id}`, payload); return data.user; },
