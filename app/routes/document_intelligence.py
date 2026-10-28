@@ -119,6 +119,25 @@ def rematch_document(analysis_id):
         return _internal_error(exc, "rematch")
 
 
+@document_intelligence_bp.route("/<int:analysis_id>/compare-order", methods=["POST"])
+@login_required
+def compare_document_with_order(analysis_id):
+    try:
+        PermissionService.require_permission("documents.process")
+        payload = request.get_json(silent=True) or {}
+        order_id = payload.get("order_id")
+        if not isinstance(order_id, int) or isinstance(order_id, bool) or order_id <= 0:
+            raise BadRequest("A valid order_id is required")
+        row, reconciliation = DocumentIntelligenceService(
+            current_user.tenant_id, current_user.id
+        ).compare_with_order(analysis_id, order_id)
+        return jsonify({"success": True, "analysis": row.to_dict(), "reconciliation": reconciliation}), 200
+    except HTTPException as exc:
+        return _handle(exc)
+    except Exception as exc:
+        return _internal_error(exc, "order reconciliation")
+
+
 @document_intelligence_bp.route("/<int:analysis_id>/apply", methods=["POST"])
 @login_required
 def apply_document(analysis_id):
