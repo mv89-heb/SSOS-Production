@@ -5,14 +5,16 @@ import os
 
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_login import current_user, login_required
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import BadRequest, Conflict, NotFound, HTTPException
 from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.models.order import Order
-from app.models.receipt import Receipt
+from app.models.order_item import OrderItem
+from app.models.receipt import Receipt, RECEIPT_POSTED
+from app.models.receipt_item import ReceiptItem
 from app.models.supplier_invoice import SupplierInvoice, SupplierInvoicePayment, INVOICE_APPROVAL_PENDING, INVOICE_APPROVAL_APPROVED, VALID_INVOICE_APPROVAL_STATUSES
 from app.models.supplier_offer import SupplierProductOffer
 from app.services.audit_service import AuditService
@@ -381,6 +383,44 @@ def save_invoice_reconciliation(invoice_id):
         if len(submitted_lines) > 500:
             raise BadRequest("Too many invoice lines")
         order_lines = order.items if isinstance(order.items, list) else []
+        # Receipt quantities are sourced from posted receipt rows only. If an
+        # old JSON order line cannot be matched unambiguously to a relational
+        # OrderItem, keep received quantity unknown rather than showing a false zero.
+        relational_lines = db.session.scalars(
+            select(OrderItem)
+            .where(OrderItem.tenant_id == current_user.tenant_id, OrderItem.order_id == order.id)
+            .order_by(OrderItem.id.asc())
+        ).all()
+        order_item_by_index = {}
+        for order_index, source_line in enumerate(order_lines):
+            if order_index >= len(relational_lines) or not isinstance(source_line, dict):
+                continue
+            relational_line = relational_lines[order_index]
+            source_product_id = source_line.get("product_id")
+            if source_product_id is not None and source_product_id == relational_line.product_id:
+                order_item_by_index[order_index] = relational_line
+        relational_ids = [item.id for item in order_item_by_index.values()]
+        received_by_order_item = {}
+        if relational_ids:
+            receipt_query = (
+                select(ReceiptItem.order_item_id, func.sum(ReceiptItem.quantity))
+                .join(Receipt, Receipt.id == ReceiptItem.receipt_id)
+                .where(
+                    ReceiptItem.tenant_id == current_user.tenant_id,
+                    Receipt.tenant_id == current_user.tenant_id,
+                    Receipt.order_id == order.id,
+                    Receipt.status == RECEIPT_POSTED,
+                    ReceiptItem.order_item_id.in_(relational_ids),
+                )
+            )
+            if invoice.receipt_id is not None:
+                receipt_query = receipt_query.where(Receipt.id == invoice.receipt_id)
+            received_by_order_item = {
+                item_id: Decimal(str(quantity or 0))
+                for item_id, quantity in db.session.execute(
+                    receipt_query.group_by(ReceiptItem.order_item_id)
+                ).all()
+            }
         saved = []
         seen = set()
         for line in submitted_lines:
@@ -406,8 +446,16 @@ def save_invoice_reconciliation(invoice_id):
             qty_diff = invoiced_qty - ordered_qty
             price_diff = invoiced_price - ordered_price
             amount_diff = (invoiced_qty * invoiced_price) - (ordered_qty * ordered_price)
+            relational_line = order_item_by_index.get(index)
+            received_qty = (
+                received_by_order_item.get(relational_line.id, Decimal("0"))
+                if relational_line is not None else None
+            )
             saved.append({
                 "order_index": index,
+                "order_item_id": relational_line.id if relational_line is not None else None,
+                "received_quantity": float(received_qty) if received_qty is not None else None,
+                "received_quantity_difference": float(invoiced_qty - received_qty) if received_qty is not None else None,
                 "product_name": str(source.get("product_name") or source.get("name") or f"פריט {index + 1}")[:500],
                 "sku": str(source.get("sku") or "")[:120] or None,
                 "ordered_quantity": float(ordered_qty),
