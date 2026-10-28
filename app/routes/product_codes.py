@@ -3,6 +3,7 @@ import os
 
 import barcode
 import qrcode
+from barcode.writer import SVGWriter
 from flask import Blueprint, current_app, jsonify, request, Response
 from flask_login import current_user, login_required
 from qrcode.image.svg import SvgPathImage
@@ -106,7 +107,7 @@ def render_product_code(code_id):
             image.save(output)
         elif row.code_type == "CODE128":
             code_class = barcode.get_barcode_class("code128")
-            image = code_class(row.code_value, writer=barcode.writer.SVGWriter())
+            image = code_class(row.code_value, writer=SVGWriter())
             image.write(output, options={"module_height": 15, "font_size": 10, "text_distance": 3, "quiet_zone": 3})
         else:
             raise BadRequest("Unsupported code type")
