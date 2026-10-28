@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, Grid2X2, ImageOff, Package, Pencil, Plus, Power, RefreshCw, Save, Scale, Search, X } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
@@ -45,6 +45,17 @@ export default function CatalogPage() {
   const canManage = permissions.canManageCatalog(user);
   const [skuFilter, setSkuFilter] = useState(""); const [nameFilter, setNameFilter] = useState(""); const [supplierFilter, setSupplierFilter] = useState("all"); const [currencyFilter, setCurrencyFilter] = useState("all"); const [statusFilter, setStatusFilter] = useState<StatusFilter>("all"); const [categoryFilter, setCategoryFilter] = useState("all"); const [stockFilter, setStockFilter] = useState<StockFilter>("all"); const [priceMin, setPriceMin] = useState(""); const [priceMax, setPriceMax] = useState(""); const [viewMode, setViewMode] = useState<ViewMode>("list"); const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc"); const [modalOpen, setModalOpen] = useState(false); const [showMoreFields, setShowMoreFields] = useState(false); const [editingProduct, setEditingProduct] = useState<Product | null>(null); const [comparisonProduct, setComparisonProduct] = useState<Product | null>(null); const [form, setForm] = useState<ProductFormState>({ ...EMPTY_FORM }); const [formError, setFormError] = useState<string | null>(null); const [inlineEdit, setInlineEdit] = useState<{ id: number; field: InlineField; value: string } | null>(null); const [imageEnrichmentBusy, setImageEnrichmentBusy] = useState(false); const [imageEnrichmentMessage, setImageEnrichmentMessage] = useState<string | null>(null);
   const { data: products, isLoading, isError, refetch } = useProducts(); const { data: suppliers } = useSuppliers(); const { data: categoryOptions = [] } = useCategories(); const createProduct = useCreateProduct(); const updateProduct = useUpdateProduct(inlineEdit?.id ?? editingProduct?.id ?? -1); const toggleActive = useToggleProductActive();
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const productId = params.get("product_id");
+    const search = params.get("search");
+    if (productId && products?.length) {
+      const product = products.find((item) => String(item.id) === productId);
+      if (product) setNameFilter(product.name);
+    } else if (search) {
+      setNameFilter(search);
+    }
+  }, [products]);
   const supplierName = (supplierId: number) => suppliers?.find((s) => s.id === supplierId)?.name ?? `#${supplierId}`;
   const categories = useMemo(() => Array.from(new Set([...(categoryOptions ?? []), ...(products ?? []).map((p) => p.category).filter(Boolean) as string[]])).sort((a, b) => a.localeCompare(b, "he")), [categoryOptions, products]); const currencies = useMemo(() => Array.from(new Set((products ?? []).map((p) => p.currency).filter(Boolean))).sort(), [products]);
   const filtered = useMemo(() => { if (!products) return []; const min = priceMin.trim() ? Number(priceMin) : null; const max = priceMax.trim() ? Number(priceMax) : null; return products.filter((p) => { const matchesSku = !skuFilter.trim() || (p.sku ?? "").toLowerCase().includes(skuFilter.trim().toLowerCase()); const matchesName = !nameFilter.trim() || p.name.toLowerCase().includes(nameFilter.trim().toLowerCase()); const matchesSupplier = supplierFilter === "all" || String(p.supplier_id) === supplierFilter; const matchesCurrency = currencyFilter === "all" || p.currency === currencyFilter; const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? p.active : !p.active); const matchesCategory = categoryFilter === "all" || p.category === categoryFilter; const matchesStock = stockFilter === "all" || (stockFilter === "low" ? p.current_stock != null && p.min_stock != null && p.current_stock < p.min_stock : stockFilter === "healthy" ? p.current_stock != null && p.min_stock != null && p.current_stock >= p.min_stock : p.current_stock == null || p.min_stock == null); const matchesMin = min == null || currencyFilter === "all" || (Number.isFinite(min) && (p.current_price ?? 0) >= min); const matchesMax = max == null || currencyFilter === "all" || (Number.isFinite(max) && (p.current_price ?? 0) <= max); return matchesSku && matchesName && matchesSupplier && matchesCurrency && matchesStatus && matchesCategory && matchesStock && matchesMin && matchesMax; }); }, [products, skuFilter, nameFilter, supplierFilter, currencyFilter, statusFilter, categoryFilter, stockFilter, priceMin, priceMax]);
