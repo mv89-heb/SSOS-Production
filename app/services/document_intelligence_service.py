@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
 
 from flask import current_app
-from werkzeug.exceptions import BadRequest, NotFound, HTTPException
+from werkzeug.exceptions import BadRequest, Conflict, NotFound, HTTPException
 
 from app.extensions import db
 from app.models.document_analysis import DocumentAnalysis
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.supplier_invoice import SupplierInvoice
+from app.models.supplier_offer import SupplierProductOffer
+from app.services.audit_service import AuditService
 from app.models.product import Product
 from app.models.supplier import Supplier
 from app.models.supplier_offer import SupplierProductOffer
@@ -470,6 +473,174 @@ class DocumentIntelligenceService:
         row.extracted_data = updated
         db.session.commit()
         return row, result
+
+    def apply_invoice_reconciliation(self, analysis_id: int, payload: dict):
+        """Record a scanned invoice and optionally accept only safe, high-confidence price changes."""
+        PermissionService.require_role_at_least("manager")
+        row = DocumentAnalysis.query.filter_by(tenant_id=self.tenant_id, id=analysis_id).with_for_update().first()
+        if row is None:
+            raise NotFound("Document analysis not found")
+        if not isinstance(row.extracted_data, dict):
+            raise BadRequest("Document must be analyzed before recording an invoice")
+        data = row.extracted_data
+        reconciliation = data.get("order_reconciliation")
+        if not isinstance(reconciliation, dict):
+            raise BadRequest("Compare the document with a purchase order before recording the invoice")
+        if str(data.get("document_type") or row.document_type or "").upper() != "INVOICE":
+            raise BadRequest("Only a scanned supplier invoice can be recorded through this action")
+        order = Order.query.filter_by(id=reconciliation.get("order_id"), tenant_id=self.tenant_id).first()
+        if order is None:
+            raise NotFound("Reconciled purchase order not found")
+        if reconciliation.get("supplier_check") == "MISMATCH":
+            raise Conflict("The document supplier does not match the purchase order supplier")
+        invoice_number = str(payload.get("invoice_number") or data.get("document_number") or "").strip()
+        if not invoice_number or len(invoice_number) > 120:
+            raise BadRequest("Invoice number is required")
+        currency = str(payload.get("currency") or data.get("currency") or order.currency or "ILS").upper().strip()
+        if len(currency) != 3 or not currency.isalpha():
+            raise BadRequest("Invoice currency must be a three-letter code")
+        try:
+            amount = Decimal(str(payload.get("amount") if payload.get("amount") not in (None, "") else (data.get("totals") or {}).get("total")))
+        except (InvalidOperation, TypeError, ValueError):
+            raise BadRequest("A valid invoice total is required")
+        if not amount.is_finite() or amount <= 0:
+            raise BadRequest("Invoice total must be greater than zero")
+        invoice_date = None
+        raw_date = payload.get("invoice_date") or data.get("document_date")
+        if raw_date:
+            try:
+                invoice_date = date.fromisoformat(str(raw_date)[:10])
+            except ValueError:
+                raise BadRequest("Invoice date must be a valid ISO date")
+        duplicate = SupplierInvoice.query.filter_by(
+            tenant_id=self.tenant_id, supplier_id=order.supplier_id, invoice_number=invoice_number
+        ).first()
+        if duplicate:
+            raise Conflict("Invoice number already exists for this supplier")
+        receipt_id = payload.get("receipt_id")
+        if receipt_id not in (None, ""):
+            from app.models.receipt import Receipt, RECEIPT_POSTED
+            receipt = Receipt.query.filter_by(id=receipt_id, order_id=order.id, tenant_id=self.tenant_id).first()
+            if receipt is None or receipt.status != RECEIPT_POSTED:
+                raise BadRequest("receipt_id must refer to a posted receipt for the selected order")
+
+        lines = reconciliation.get("lines") if isinstance(reconciliation.get("lines"), list) else []
+        invoice_lines = []
+        allow_price_updates = payload.get("allow_price_updates") is True
+        auto_updated = []
+        intelligence = PriceIntelligenceService(self.tenant_id)
+        order_item_ids = {line.get("order_item_id") for line in lines if isinstance(line, dict) and line.get("order_item_id")}
+        order_items = {
+            item.id: item for item in OrderItem.query.filter(
+                OrderItem.tenant_id == self.tenant_id, OrderItem.order_id == order.id,
+                OrderItem.id.in_(order_item_ids or [-1])
+            ).all()
+        }
+        for line in lines:
+            if not isinstance(line, dict):
+                continue
+            item = data.get("items", [])[line["line_index"]] if isinstance(line.get("line_index"), int) and 0 <= line["line_index"] < len(data.get("items", [])) else {}
+            quantity = item.get("quantity") if isinstance(item, dict) else None
+            invoice_price = item.get("unit_price") if isinstance(item, dict) else None
+            invoice_lines.append({
+                **line,
+                "invoiced_quantity": quantity,
+                "received_quantity": None,
+                "invoice_unit_price": invoice_price,
+            })
+            if not allow_price_updates or not line.get("matched") or line.get("confidence", 0) < 0.93:
+                continue
+            order_item = order_items.get(line.get("order_item_id"))
+            if order_item is None or invoice_price in (None, ""):
+                continue
+            product = Product.query.filter_by(id=order_item.product_id, tenant_id=self.tenant_id, active=True).first()
+            if product is None:
+                continue
+            extracted_unit = item.get("unit") if isinstance(item, dict) else None
+            if not extracted_unit or not product.unit:
+                continue
+            if ProductMatchingService.normalize(extracted_unit) != ProductMatchingService.normalize(product.unit):
+                continue
+            line_currency = str(item.get("currency") or data.get("currency") or order.currency or "ILS").upper()
+            if line_currency != currency or currency != (order.currency or "ILS").upper():
+                continue
+            try:
+                new_price = Decimal(str(invoice_price))
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+            if not new_price.is_finite() or new_price <= 0:
+                continue
+            if item.get("discount") not in (None, "", 0, 0.0, "0", "0.0"):
+                continue
+            old_price = Decimal(str(order_item.unit_price))
+            if abs(new_price - old_price) <= Decimal("0.01"):
+                continue
+            supplier_id = order.supplier_id
+            offer = None
+            if supplier_id != product.supplier_id:
+                offer = SupplierProductOffer.query.filter_by(
+                    tenant_id=self.tenant_id, product_id=product.id, supplier_id=supplier_id
+                ).first()
+                if offer is None:
+                    offer = SupplierProductOffer(
+                        tenant_id=self.tenant_id, product_id=product.id, supplier_id=supplier_id,
+                        price=new_price, currency=currency, unit=extracted_unit, active=True
+                    )
+                    db.session.add(offer)
+                    db.session.flush()
+            intelligence.record_observation(
+                product_id=product.id, supplier_id=supplier_id, observed_price=new_price,
+                currency=currency, unit=extracted_unit, source_type="INVOICE",
+                source_document_id=row.id, match_method="ORDER_RECONCILIATION",
+                match_confidence=line.get("confidence"),
+            )
+            intelligence.accept_price_change(
+                product_id=product.id, supplier_id=supplier_id, new_price=new_price,
+                currency=currency, unit=extracted_unit, source_type="INVOICE",
+                source_document_id=row.id,
+            )
+            if supplier_id == product.supplier_id:
+                product.current_price = new_price
+                product.currency = currency
+                product.unit = extracted_unit
+            else:
+                offer.price = new_price
+                offer.currency = currency
+                offer.unit = extracted_unit
+                offer.active = True
+            auto_updated.append({
+                "product_id": product.id, "product_name": product.name,
+                "old_price": float(old_price), "new_price": float(new_price),
+                "supplier_id": supplier_id,
+            })
+
+        invoice = SupplierInvoice(
+            tenant_id=self.tenant_id, order_id=order.id, supplier_id=order.supplier_id,
+            receipt_id=int(receipt_id) if receipt_id not in (None, "") else None,
+            invoice_number=invoice_number, invoice_date=invoice_date, amount=amount,
+            currency=currency, notes="נוצרה מסריקת מסמך; יש להשלים בדיקה ואישור לפי הצורך.",
+            approval_status="pending_approval", line_comparison=invoice_lines,
+            created_by=self.user_id,
+        )
+        db.session.add(invoice)
+        db.session.flush()
+        AuditService.log_event(
+            self.tenant_id, self.user_id, "supplier_invoice.scanned",
+            f"Supplier invoice {invoice_number} created from document scan",
+            {"invoice_id": invoice.id, "order_id": order.id, "document_analysis_id": row.id,
+             "automatic_price_updates": auto_updated},
+        )
+        updated = dict(data)
+        updated["invoice_reconciliation_result"] = {
+            "invoice_id": invoice.id, "invoice_number": invoice_number,
+            "automatic_price_updates": auto_updated, "prices_updated_count": len(auto_updated),
+        }
+        row.extracted_data = updated
+        row.status = "PARTIALLY_APPLIED"
+        row.applied_at = datetime.now(timezone.utc)
+        row.applied_by = self.user_id
+        db.session.commit()
+        return row, invoice, auto_updated
 
     def get(self, analysis_id: int):
         PermissionService.require_role_at_least("manager")
