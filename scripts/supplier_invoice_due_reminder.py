@@ -2,7 +2,7 @@
 
 This worker only creates notifications; it never approves invoices or records payments.
 """
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from flask import current_app
@@ -65,8 +65,6 @@ def process_supplier_invoice_due_reminders(today=None) -> int:
             )
         ).all()
         for user in users:
-            # Per-user keys prevent duplicates while allowing every authorized
-            # manager/admin in the tenant to receive the reminder.
             dedupe_key = f"{dedupe_prefix}:user:{user.id}"
             exists = db.session.scalar(
                 select(Notification.id).where(Notification.dedupe_key == dedupe_key).limit(1)
@@ -79,7 +77,9 @@ def process_supplier_invoice_due_reminders(today=None) -> int:
                 f"חשבונית {invoice.invoice_number} של ספק {supplier_name}: {timing}. "
                 f"יתרה לתשלום: {balance:.2f} {invoice.currency}."
             )
-            action_url = current_app.config.get("FRONTEND_PUBLIC_URL", "").rstrip("/") + "/dashboard/supplier-invoices"
+            # Supplier invoices are managed from the existing orders workspace;
+            # avoid linking users to a route that does not exist.
+            action_url = current_app.config.get("FRONTEND_PUBLIC_URL", "").rstrip("/") + "/dashboard/orders"
             notification = Notification(
                 tenant_id=invoice.tenant_id,
                 user_id=user.id,
