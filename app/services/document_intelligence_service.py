@@ -9,6 +9,9 @@ from werkzeug.exceptions import BadRequest, NotFound, HTTPException
 
 from app.extensions import db
 from app.models.document_analysis import DocumentAnalysis
+from app.models.order import Order
+from app.models.order_item import OrderItem
+from app.models.supplier_invoice import SupplierInvoice
 from app.models.product import Product
 from app.models.supplier import Supplier
 from app.models.supplier_offer import SupplierProductOffer
@@ -373,6 +376,100 @@ class DocumentIntelligenceService:
         except Exception:
             db.session.rollback()
             raise
+
+    def compare_with_order(self, analysis_id: int, order_id: int):
+        """Compare an analyzed delivery note/invoice with one tenant-scoped purchase order."""
+        PermissionService.require_role_at_least("manager")
+        row = self._get(analysis_id)
+        if row.status not in {"ANALYZED", "PARTIALLY_APPLIED", "APPLIED"} or not isinstance(row.extracted_data, dict):
+            raise BadRequest("Document must be analyzed before reconciliation")
+        order = Order.query.filter_by(id=order_id, tenant_id=self.tenant_id).first()
+        if order is None:
+            raise NotFound("Purchase order not found")
+        extracted = row.extracted_data
+        supplier_match = extracted.get("supplier_matching") if isinstance(extracted.get("supplier_matching"), dict) else {}
+        detected_supplier_id = supplier_match.get("supplier_id")
+        if detected_supplier_id and order.supplier_id and detected_supplier_id != order.supplier_id:
+            supplier_check = "MISMATCH"
+        else:
+            supplier_check = "MATCH" if detected_supplier_id == order.supplier_id and detected_supplier_id else "REVIEW"
+        order_items = list(OrderItem.query.filter_by(tenant_id=self.tenant_id, order_id=order.id).all())
+        by_product = {}
+        for order_item in order_items:
+            by_product.setdefault(order_item.product_id, []).append(order_item)
+        lines = []
+        for index, item in enumerate(extracted.get("items") if isinstance(extracted.get("items"), list) else []):
+            if not isinstance(item, dict):
+                continue
+            match = item.get("product_matching") if isinstance(item.get("product_matching"), dict) else {}
+            best = match.get("best_match") if isinstance(match.get("best_match"), dict) else {}
+            product_id = best.get("product_id")
+            candidates = by_product.get(product_id, []) if isinstance(product_id, int) else []
+            # An order can contain the same product only once in normal creation.
+            order_line = candidates[0] if len(candidates) == 1 else None
+            confidence = float(best.get("confidence") or 0) if best else 0.0
+            if order_line is None:
+                lines.append({
+                    "line_index": index, "description": item.get("description"),
+                    "matched": False, "status": "UNMATCHED",
+                    "reason": "לא נמצא פריט חד-משמעי בהזמנה",
+                    "extracted_quantity": item.get("quantity"),
+                    "extracted_unit_price": item.get("unit_price"),
+                    "confidence": confidence,
+                })
+                continue
+            expected_quantity = float(order_line.quantity)
+            extracted_quantity = item.get("quantity")
+            expected_price = float(order_line.unit_price)
+            extracted_price = item.get("unit_price")
+            try:
+                quantity_delta = round(float(extracted_quantity) - expected_quantity, 3) if extracted_quantity is not None else None
+            except (TypeError, ValueError):
+                quantity_delta = None
+            try:
+                price_delta = round(float(extracted_price) - expected_price, 2) if extracted_price is not None else None
+            except (TypeError, ValueError):
+                price_delta = None
+            flags = []
+            if confidence < 0.93:
+                flags.append("MATCH_REVIEW")
+            if quantity_delta is None:
+                flags.append("QUANTITY_MISSING")
+            elif abs(quantity_delta) > 0.001:
+                flags.append("QUANTITY_VARIANCE")
+            if price_delta is None:
+                flags.append("PRICE_MISSING")
+            elif abs(price_delta) > 0.01:
+                flags.append("PRICE_VARIANCE")
+            if item.get("unit") and order_line.product and order_line.product.unit:
+                if ProductMatchingService.normalize(item.get("unit")) != ProductMatchingService.normalize(order_line.product.unit):
+                    flags.append("UNIT_VARIANCE")
+            lines.append({
+                "line_index": index, "description": item.get("description"),
+                "matched": True, "status": "MATCH" if not flags else "REVIEW",
+                "order_item_id": order_line.id, "product_id": order_line.product_id,
+                "product_name": (order_line.product_snapshot or {}).get("name") if isinstance(order_line.product_snapshot, dict) else (order_line.product.name if order_line.product else None),
+                "expected_quantity": expected_quantity, "extracted_quantity": extracted_quantity,
+                "quantity_delta": quantity_delta, "expected_unit_price": expected_price,
+                "extracted_unit_price": extracted_price, "price_delta": price_delta,
+                "currency": item.get("currency") or extracted.get("currency") or order.currency or "ILS",
+                "unit": item.get("unit"), "confidence": confidence, "flags": flags,
+            })
+        result = {
+            "order_id": order.id, "order_number": order.order_number,
+            "supplier_id": order.supplier_id, "supplier_name": order.supplier_name,
+            "supplier_check": supplier_check, "document_type": row.document_type,
+            "document_number": extracted.get("document_number"),
+            "document_date": extracted.get("document_date"), "lines": lines,
+            "unmatched_count": sum(1 for line in lines if not line.get("matched")),
+            "review_count": sum(1 for line in lines if line.get("status") == "REVIEW"),
+            "compared_at": datetime.now(timezone.utc).isoformat(),
+        }
+        updated = dict(extracted)
+        updated["order_reconciliation"] = result
+        row.extracted_data = updated
+        db.session.commit()
+        return row, result
 
     def get(self, analysis_id: int):
         PermissionService.require_role_at_least("manager")
