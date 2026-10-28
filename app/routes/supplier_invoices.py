@@ -165,6 +165,21 @@ def update_supplier_invoice_approval(invoice_id):
         note = str(data.get("approval_note") or "").strip()
         if len(note) > 2000:
             raise BadRequest("approval_note must not exceed 2000 characters")
+        if target == INVOICE_APPROVAL_APPROVED:
+            lines = invoice.line_comparison if isinstance(invoice.line_comparison, list) else []
+            received_variances = [
+                line for line in lines
+                if isinstance(line, dict)
+                and line.get("received_quantity") is not None
+                and abs(
+                    Decimal(str(line.get("invoiced_quantity", 0)))
+                    - Decimal(str(line.get("received_quantity", 0)))
+                ) > Decimal("0.001")
+            ]
+            if received_variances and not note:
+                raise Conflict(
+                    "Invoice quantity differs from posted receipt quantities. Add an approval note explaining the authorized exception."
+                )
         previous = invoice.approval_status or INVOICE_APPROVAL_PENDING
         invoice.approval_status = target
         invoice.approval_note = note or None
