@@ -112,7 +112,19 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
         {(query.data ?? []).map((invoice) => {
           const draft = paymentDrafts[invoice.id] ?? { amount: "", date: todayLocal(), reference: "" };
           return <div key={invoice.id} className="space-y-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
-            <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="font-black">{invoice.invoice_number}</div><div className="mt-1 text-xs text-slate-500">חשבונית: {invoice.invoice_date ?? "—"} · פירעון: {invoice.due_date ?? "לא הוגדר"}</div>{invoice.notes && <p className="mt-2 whitespace-pre-wrap text-sm text-slate-500">{invoice.notes}</p>}<div className="mt-2 text-xs text-slate-500">קובץ המקור אינו נשמר במערכת. נשמרים נתוני החשבונית וההתאמות בלבד.</div><div className="text-left text-sm"><div>סכום: <strong>{invoice.amount.toLocaleString("he-IL", { minimumFractionDigits: 2 })} {invoice.currency}</strong></div><div>שולם: {invoice.paid_amount.toLocaleString("he-IL", { minimumFractionDigits: 2 })} {invoice.currency}</div><div className={invoice.balance > 0 ? "font-black text-amber-700" : "font-black text-emerald-700"}>יתרה: {invoice.balance.toLocaleString("he-IL", { minimumFractionDigits: 2 })} {invoice.currency}</div></div></div>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-black">{invoice.invoice_number}</div>
+                <div className="mt-1 text-xs text-slate-500">חשבונית: {invoice.invoice_date ?? "—"} · פירעון: {invoice.due_date ?? "לא הוגדר"}</div>
+                {invoice.notes && <p className="mt-2 whitespace-pre-wrap text-sm text-slate-500">{invoice.notes}</p>}
+                <p className="mt-2 text-xs text-slate-500">קובץ המקור אינו נשמר במערכת. נשמרים נתוני החשבונית וההתאמות בלבד.</p>
+              </div>
+              <div className="text-left text-sm">
+                <div>סכום: <strong>{invoice.amount.toLocaleString("he-IL", { minimumFractionDigits: 2 })} {invoice.currency}</strong></div>
+                <div>שולם: {invoice.paid_amount.toLocaleString("he-IL", { minimumFractionDigits: 2 })} {invoice.currency}</div>
+                <div className={invoice.balance > 0 ? "font-black text-amber-700" : "font-black text-emerald-700"}>יתרה: {invoice.balance.toLocaleString("he-IL", { minimumFractionDigits: 2 })} {invoice.currency}</div>
+              </div>
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
               <div className="space-y-1">
                 <div className="text-sm font-bold">אישור לתשלום</div>
