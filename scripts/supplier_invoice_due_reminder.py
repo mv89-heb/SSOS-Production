@@ -77,9 +77,9 @@ def process_supplier_invoice_due_reminders(today=None) -> int:
                 f"חשבונית {invoice.invoice_number} של ספק {supplier_name}: {timing}. "
                 f"יתרה לתשלום: {balance:.2f} {invoice.currency}."
             )
-            # Supplier invoices are managed from the existing orders workspace;
-            # avoid linking users to a route that does not exist.
-            action_url = current_app.config.get("FRONTEND_PUBLIC_URL", "").rstrip("/") + "/dashboard/orders"
+            # Link directly to the order detail, where the invoice panel is rendered.
+            frontend_url = current_app.config.get("FRONTEND_PUBLIC_URL", "").rstrip("/")
+            action_url = f"{frontend_url}/dashboard/orders/{invoice.order_id}"
             notification = Notification(
                 tenant_id=invoice.tenant_id,
                 user_id=user.id,
