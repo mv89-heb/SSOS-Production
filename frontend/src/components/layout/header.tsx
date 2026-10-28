@@ -7,22 +7,24 @@ import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { useUnreadNotifications } from "@/hooks/use-notifications";
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, LogOut, Menu, X, HelpCircle, Bell, CalendarDays, BarChart3, FileSearch, Warehouse, ClipboardCheck } from "lucide-react";
+import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, LogOut, Menu, X, HelpCircle, Bell, CalendarDays, BarChart3, FileSearch, Warehouse, ClipboardCheck, BrainCircuit } from "lucide-react";
 
 const ORGANIZATION_NAME = "ישיבת אוהבי ירושלים - ראשית";
 const ROLE_LABELS: Record<string, string> = { admin: "מנהל מערכת", manager: "מנהל", employee: "עובד" };
 const NAVIGATION = [
   { name: "לוח בקרה", href: "/dashboard", icon: LayoutDashboard },
-  { name: "ניהול ספקים", href: "/dashboard/suppliers", icon: Users },
-  { name: "קטלוג מוצרים", href: "/dashboard/catalog", icon: Package },
-  { name: "מחסן ומלאי", href: "/dashboard/inventory", icon: Warehouse },
+  { name: "ספקים", href: "/dashboard/suppliers", icon: Users },
+  { name: "מוצרים ומחירים", href: "/dashboard/catalog", icon: Package },
+  { name: "מלאי וספירות", href: "/dashboard/inventory", icon: Warehouse },
   { name: "דיווח ספירת מלאי", href: "/dashboard/inventory/count", icon: ClipboardCheck },
-  { name: "השוואת ספקים", href: "/dashboard/price-intelligence", icon: BarChart3 },
+  { name: "השוואת מחירים", href: "/dashboard/price-intelligence", icon: BarChart3 },
+  { name: "תמונת מצב רכש", href: "/dashboard/procurement-intelligence", icon: BrainCircuit },
+  { name: "יומן", href: "/dashboard/calendar", icon: CalendarDays },
   { name: "מסמכים וקליטה", href: "/dashboard/document-intelligence", icon: FileSearch },
   { name: "הזמנות רכש", href: "/dashboard/orders", icon: ShoppingCart },
   { name: "תזכורות", href: "/dashboard/reminders", icon: Bell },
-  { name: "לוג ביקורת", href: "/dashboard/audit", icon: History },
-  { name: "הגדרות מערכת", href: "/dashboard/settings", icon: Settings },
+  { name: "היסטוריית פעולות", href: "/dashboard/audit", icon: History },
+  { name: "הגדרות", href: "/dashboard/settings", icon: Settings },
   { name: "Google Calendar", href: "/dashboard/settings/google-calendar", icon: CalendarDays },
   { name: "מרכז עזרה", href: "/dashboard/help", icon: HelpCircle },
 ];
