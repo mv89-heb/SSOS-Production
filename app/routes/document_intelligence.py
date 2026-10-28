@@ -155,6 +155,27 @@ def apply_document(analysis_id):
         return _internal_error(exc, "apply")
 
 
+@document_intelligence_bp.route("/<int:analysis_id>/apply-invoice", methods=["POST"])
+@login_required
+def apply_scanned_invoice(analysis_id):
+    try:
+        PermissionService.require_permission("documents.process")
+        payload = request.get_json(silent=True) or {}
+        row, invoice, updated_prices = DocumentIntelligenceService(
+            current_user.tenant_id, current_user.id
+        ).apply_invoice_reconciliation(analysis_id, payload)
+        return jsonify({
+            "success": True, "analysis": row.to_dict(), "invoice": invoice.to_dict(),
+            "automatic_price_updates": updated_prices,
+        }), 201
+    except HTTPException as exc:
+        return _handle(exc)
+    except ValueError as exc:
+        return jsonify({"success": False, "error": "validation_error", "message": str(exc)}), 400
+    except Exception as exc:
+        return _internal_error(exc, "invoice reconciliation")
+
+
 @document_intelligence_bp.route("/<int:analysis_id>/create-product", methods=["POST"])
 @login_required
 def create_product_from_document_line(analysis_id):
