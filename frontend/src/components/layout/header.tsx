@@ -18,7 +18,7 @@ const NAVIGATION = [
   { name: "מחסן ומלאי", href: "/dashboard/inventory", icon: Warehouse },
   { name: "דיווח ספירת מלאי", href: "/dashboard/inventory/count", icon: ClipboardCheck },
   { name: "השוואת ספקים", href: "/dashboard/price-intelligence", icon: BarChart3 },
-  { name: "ניתוח מסמכים עם Gemini", href: "/dashboard/gemini", icon: FileSearch },
+  { name: "מסמכים וקליטה", href: "/dashboard/document-intelligence", icon: FileSearch },
   { name: "הזמנות רכש", href: "/dashboard/orders", icon: ShoppingCart },
   { name: "תזכורות", href: "/dashboard/reminders", icon: Bell },
   { name: "לוג ביקורת", href: "/dashboard/audit", icon: History },
@@ -32,7 +32,8 @@ export default function Header() {
   const pathname = usePathname();
   const { data: unreadNotifications = [] } = useUnreadNotifications();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const navigation = permissions.canManageUsers(user) ? [...NAVIGATION, { name: "מרכז מנהל מערכת", href: "/dashboard/admin", icon: ShieldCheck }] : NAVIGATION;
+  const visibleNavigation = NAVIGATION.filter((item) => item.href !== "/dashboard/audit" || permissions.canViewAudit(user));
+  const navigation = permissions.canManageUsers(user) ? [...visibleNavigation, { name: "מרכז מנהל מערכת", href: "/dashboard/admin", icon: ShieldCheck }] : visibleNavigation;
   useEffect(() => { setMobileOpen(false); }, [pathname]);
   useEffect(() => { if (!mobileOpen) return; const previousOverflow = document.body.style.overflow; document.body.style.overflow = "hidden"; const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setMobileOpen(false); }; window.addEventListener("keydown", onKeyDown); return () => { document.body.style.overflow = previousOverflow; window.removeEventListener("keydown", onKeyDown); }; }, [mobileOpen]);
 
