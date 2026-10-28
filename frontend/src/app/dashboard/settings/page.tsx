@@ -121,7 +121,8 @@ export default function SettingsPage() {
 
       <Section title="ניהול, בקרה ותיעוד" description="כלים לבדיקת פעולות המערכת, הרשאות ותהליכי עבודה.">
         {canManageUsers && <SettingsCard title="מרכז ניהול מערכת" description="ניהול משתמשים, תפקידים והרשאות וכן צפייה בנתוני ניהול." href="/dashboard/admin" icon={Users} />}
-        {canViewAudit && <SettingsCard title="יומן ביקורת" description="עיון בפעולות מתועדות ובדיקת שלמות שרשרת הגיבובים, לפי ההרשאות." href="/dashboard/admin/audit" icon={History} />}
+        {canViewAudit && <SettingsCard title="יומן פעולות" description="עיון בפעולות המתועדות במערכת, לפי הרשאות המשתמש." href="/dashboard/audit" icon={History} />}
+        {canManageUsers && <SettingsCard title="בדיקת שלמות יומן הביקורת" description="בדיקת תקינות שרשרת הביקורת במרכז ניהול המערכת." href="/dashboard/admin/audit" icon={ShieldCheck} tag="מנהל מערכת" />}
         <SettingsCard title="הזמנות רכש" description="גישה לתהליך ההזמנה, סטטוסים ופרטי ההזמנות." href="/dashboard/orders" icon={ShoppingBag} />
         <SettingsCard title="מלאי וספירות" description="גישה למלאי, לספירות ולכלי תכנון המלאי." href="/dashboard/inventory" icon={Warehouse} />
       </Section>
