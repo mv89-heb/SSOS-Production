@@ -489,8 +489,8 @@ class DocumentIntelligenceService:
         reconciliation = data.get("order_reconciliation")
         if not isinstance(reconciliation, dict):
             raise BadRequest("Compare the delivery note with a purchase order first")
-        if reconciliation.get("supplier_check") == "MISMATCH":
-            raise Conflict("The delivery note supplier does not match the purchase order supplier")
+        if reconciliation.get("supplier_check") != "MATCH":
+            raise Conflict("Verify the document supplier against the purchase order before posting the delivery note")
         lines = reconciliation.get("lines") if isinstance(reconciliation.get("lines"), list) else []
         if not lines:
             raise BadRequest("The delivery note has no reconciled lines")
@@ -550,8 +550,8 @@ class DocumentIntelligenceService:
         order = Order.query.filter_by(id=reconciliation.get("order_id"), tenant_id=self.tenant_id).first()
         if order is None:
             raise NotFound("Reconciled purchase order not found")
-        if reconciliation.get("supplier_check") == "MISMATCH":
-            raise Conflict("The document supplier does not match the purchase order supplier")
+        if reconciliation.get("supplier_check") != "MATCH":
+            raise Conflict("Verify the invoice supplier against the purchase order before recording the invoice")
         invoice_number = str(payload.get("invoice_number") or data.get("document_number") or "").strip()
         if not invoice_number or len(invoice_number) > 120:
             raise BadRequest("Invoice number is required")
