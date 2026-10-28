@@ -28,9 +28,19 @@ export default function ProductCodesPage() {
 
   useEffect(() => {
     if (!user) return;
-    apiClient.get<{ success: boolean; products: Product[] }>("/api/catalog/products")
-      .then(({ data }) => setProducts(data.products ?? []))
-      .catch(() => setError("לא ניתן לטעון את קטלוג המוצרים."));
+    Promise.all([
+      apiClient.get<{ success: boolean; products: Product[] }>("/api/catalog/products"),
+      apiClient.get<{ success: boolean; codes: ProductCode[] }>("/api/product-codes"),
+    ])
+      .then(([productResponse, codeResponse]) => {
+        setProducts(productResponse.data.products ?? []);
+        const grouped = (codeResponse.data.codes ?? []).reduce<Record<number, ProductCode[]>>((acc, code) => {
+          (acc[code.product_id] ??= []).push(code);
+          return acc;
+        }, {});
+        setCodes(grouped);
+      })
+      .catch(() => setError("לא ניתן לטעון את קטלוג המוצרים והקודים השמורים."));
   }, [user]);
 
   const filtered = useMemo(() => {
