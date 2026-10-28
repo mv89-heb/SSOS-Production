@@ -46,15 +46,29 @@ export default function AdminPage() {
   const [newUserForm, setNewUserForm] = useState({ full_name: "", email: "", password: "", role: "employee" as AdminUser["role"] });
   const [newUserPermissions, setNewUserPermissions] = useState<Record<string, boolean>>(rolePermissionDefaults.employee);
 
-  async function load(initial = false) {
-    if (initial) setLoading(true); else setRefreshing(true); setError(null);
-    try { const [u, s, p, o, i, summary] = await Promise.all([adminService.listUsers(), adminService.listSuppliers(), adminService.listProducts(), adminService.listOrders(), adminService.listImports(), adminService.getOverview()]); setUsers(u); setSuppliers(s); setProducts(p); setOrders(o); setImports(i); setOverview(summary); }
-    catch (e: any) { setError(e?.friendlyMessage || e?.response?.data?.message || "לא ניתן לטעון את נתוני מרכז הניהול."); }
-    finally { setLoading(false); setRefreshing(false); }
+  async function load(initial = false, target: Tab = tab) {
+    if (initial) setLoading(true); else setRefreshing(true);
+    setError(null);
+    try {
+      const summaryPromise = adminService.getOverview().then(setOverview);
+      const dataPromise = (async () => {
+        if (target === "users") setUsers(await adminService.listUsers());
+        else if (target === "suppliers") setSuppliers(await adminService.listSuppliers());
+        else if (target === "products") setProducts(await adminService.listProducts());
+        else if (target === "orders") setOrders(await adminService.listOrders());
+        else if (target === "imports") setImports(await adminService.listImports());
+      })();
+      await Promise.all([summaryPromise, dataPromise]);
+    } catch (e: any) {
+      setError(e?.friendlyMessage || e?.response?.data?.message || "לא ניתן לטעון את נתוני מרכז הניהול.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }
-  useEffect(() => { void load(true); }, []);
+  useEffect(() => { void load(true, "overview"); }, []);
   async function run(key: string, fn: () => Promise<void>, message: string) { if (!window.confirm(message)) return; setBusy(key); setError(null); try { await fn(); await load(); } catch (e: any) { setError(e?.friendlyMessage || e?.response?.data?.message || "הפעולה נכשלה."); } finally { setBusy(null); } }
-  async function createUser() { setBusy("create-user"); setError(null); try { const created = await adminService.createUser(newUserForm); if (newUserForm.role !== "admin") await adminService.updateUser(created.id, { permissions: newUserPermissions }); setCreateUserOpen(false); setNewUserForm({ full_name: "", email: "", password: "", role: "employee" }); setNewUserPermissions(rolePermissionDefaults.employee); await load(); setTab("users"); } catch (e: any) { setError(e?.friendlyMessage || e?.response?.data?.message || "לא ניתן להשלים את יצירת המשתמש ושמירת ההרשאות. בדוק את האימייל, הסיסמה וההרשאות."); await load(); } finally { setBusy(null); } }
+  async function createUser() { setBusy("create-user"); setError(null); try { const created = await adminService.createUser(newUserForm); if (newUserForm.role !== "admin") await adminService.updateUser(created.id, { permissions: newUserPermissions }); setCreateUserOpen(false); setNewUserForm({ full_name: "", email: "", password: "", role: "employee" }); setNewUserPermissions(rolePermissionDefaults.employee); setTab("users"); await load(false, "users"); } catch (e: any) { setError(e?.friendlyMessage || e?.response?.data?.message || "לא ניתן להשלים את יצירת המשתמש ושמירת ההרשאות. בדוק את האימייל, הסיסמה וההרשאות."); await load(); } finally { setBusy(null); } }
 
   const fu = useMemo(() => filterRows(users, search, u => `${u.full_name} ${u.email} ${roleLabel(u.role)}`), [users, search]);
   const fs = useMemo(() => filterRows(suppliers, search, s => `${s.name} ${s.id}`), [suppliers, search]);
@@ -67,7 +81,7 @@ export default function AdminPage() {
       <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-start gap-4"><div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/20"><ShieldCheck size={23}/></div><div><div className="mb-1 text-xs font-extrabold uppercase tracking-[0.16em] text-indigo-600">System Administration</div><h1 className="text-3xl font-black tracking-tight text-slate-950 dark:text-white">מרכז ניהול המערכת</h1><p className="mt-1 max-w-2xl text-sm text-slate-500">ניהול מסודר של משתמשים, ספקים, מוצרים, הזמנות וייבואים — עם פעולות ברורות של עריכה, הפעלה, השבתה ומחיקה.</p></div></div><button type="button" onClick={() => void load()} disabled={refreshing} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm hover:border-indigo-300 hover:text-indigo-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"><RefreshCw size={16} className={refreshing ? "animate-spin" : ""}/> רענון נתונים</button></div>
     </header>
     {error && <div className="flex items-center justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"><span>{error}</span><button type="button" onClick={() => setError(null)}><X size={17}/></button></div>}
-    <nav className="overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="flex min-w-max gap-1">{tabs.map(item => { const Icon=item.icon, active=tab===item.id; const count=item.id==="users"?(overview?.users ?? users.length):item.id==="suppliers"?(overview?.suppliers ?? suppliers.length):item.id==="products"?(overview?.products ?? products.length):item.id==="orders"?(overview?.orders ?? orders.length):item.id==="imports"?(overview?.imports ?? imports.length):null; return <button key={item.id} type="button" onClick={()=>{setTab(item.id);setSearch("");}} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-extrabold transition ${active?"bg-indigo-600 text-white shadow-md":"text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"}`}><Icon size={16}/>{item.label}{count!==null&&<span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active?"bg-white/20":"bg-slate-100 text-slate-500 dark:bg-slate-800"}`}>{count}</span>}</button>})}</div></nav>
+    <nav className="overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="flex min-w-max gap-1">{tabs.map(item => { const Icon=item.icon, active=tab===item.id; const count=item.id==="users"?(overview?.users ?? users.length):item.id==="suppliers"?(overview?.suppliers ?? suppliers.length):item.id==="products"?(overview?.products ?? products.length):item.id==="orders"?(overview?.orders ?? orders.length):item.id==="imports"?(overview?.imports ?? imports.length):null; return <button key={item.id} type="button" onClick={()=>{setTab(item.id);setSearch("");void load(false,item.id);}} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-extrabold transition ${active?"bg-indigo-600 text-white shadow-md":"text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"}`}><Icon size={16}/>{item.label}{count!==null&&<span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active?"bg-white/20":"bg-slate-100 text-slate-500 dark:bg-slate-800"}`}>{count}</span>}</button>})}</div></nav>
 
     {tab === "overview" ? <Overview users={users} suppliers={suppliers} products={products} orders={orders} imports={imports} counts={overview} loading={loading} onTab={setTab}/> : <section className="space-y-4">
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900"><div><h2 className="text-lg font-black">{tabs.find(t=>t.id===tab)?.label}</h2><p className="text-xs text-slate-400">הפעולות נמצאות בעמודה הימנית — אין צורך לחפש אותן בתפריטים נסתרים.</p></div><div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">{tab === "users" && <button type="button" onClick={() => setCreateUserOpen(true)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-extrabold text-white shadow-sm hover:bg-indigo-700"><UserPlus size={16}/> הוסף משתמש</button>}<div className="relative w-full sm:w-80"><Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="חיפוש..." className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pr-9 pl-3 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950"/></div></div></div>
