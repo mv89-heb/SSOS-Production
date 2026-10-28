@@ -52,14 +52,14 @@ export default function DocumentIntelligencePage() {
       .catch(() => setOrders([]));
   }, []);
   const analysis = analyses.find((item) => item.id === selectedId) ?? analyses[analyses.length - 1] ?? null;
-  const reconciliation = analysis?.extracted_data?.order_reconciliation as OrderReconciliation | undefined;
+  const data = analysis?.extracted_data;
+  const reconciliation = data?.order_reconciliation as OrderReconciliation | undefined;
   useEffect(() => {
     if (!analysis) return;
     setSelectedOrderId(reconciliation?.order_id ? String(reconciliation.order_id) : "");
-    setInvoiceNumber(analysis.extracted_data?.document_number || "");
-    setInvoiceAmount(analysis.extracted_data?.totals?.total != null ? String(analysis.extracted_data.totals.total) : "");
+    setInvoiceNumber(data?.document_number || "");
+    setInvoiceAmount(data?.totals?.total != null ? String(data.totals.total) : "");
   }, [analysis?.id, reconciliation?.order_id, data?.document_number, data?.totals?.total]);
-  const data = analysis?.extracted_data;
   const productOptions = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name, "he")).map((p) => ({ id: p.id, name: p.name, extra: p.sku })), [products]);
   const supplierOptions = useMemo(() => [...suppliers].sort((a, b) => a.name.localeCompare(b.name, "he")).map((s) => ({ id: s.id, name: s.name, extra: s.customer_number })), [suppliers]);
   const items = useMemo<ExtractedItem[]>(() => Array.isArray(data?.items) ? data.items : [], [data]);
