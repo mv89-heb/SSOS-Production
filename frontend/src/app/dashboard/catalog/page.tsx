@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, Grid2X2, ImageOff, Package, Pencil, Plus, Power, RefreshCw, Save, Scale, Search, X } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
@@ -44,6 +44,10 @@ export default function CatalogPage() {
   const { user } = useAuth();
   const canManage = permissions.canManageCatalog(user);
   const [skuFilter, setSkuFilter] = useState(""); const [nameFilter, setNameFilter] = useState(""); const [supplierFilter, setSupplierFilter] = useState("all"); const [currencyFilter, setCurrencyFilter] = useState("all"); const [statusFilter, setStatusFilter] = useState<StatusFilter>("all"); const [categoryFilter, setCategoryFilter] = useState("all"); const [stockFilter, setStockFilter] = useState<StockFilter>("all"); const [priceMin, setPriceMin] = useState(""); const [priceMax, setPriceMax] = useState(""); const [viewMode, setViewMode] = useState<ViewMode>("list"); const [sortDirection, setSortDirection] = useState<ProductSortDirection>("asc"); const [modalOpen, setModalOpen] = useState(false); const [showMoreFields, setShowMoreFields] = useState(false); const [editingProduct, setEditingProduct] = useState<Product | null>(null); const [comparisonProduct, setComparisonProduct] = useState<Product | null>(null); const [form, setForm] = useState<ProductFormState>({ ...EMPTY_FORM }); const [formError, setFormError] = useState<string | null>(null); const [inlineEdit, setInlineEdit] = useState<{ id: number; field: InlineField; value: string } | null>(null); const [imageEnrichmentBusy, setImageEnrichmentBusy] = useState(false); const [imageEnrichmentMessage, setImageEnrichmentMessage] = useState<string | null>(null);
+  useEffect(() => {
+    const search = new URLSearchParams(window.location.search).get("search");
+    if (search) setNameFilter(search);
+  }, []);
   const { data: products, isLoading, isError, refetch } = useProducts(); const { data: suppliers } = useSuppliers(); const { data: categoryOptions = [] } = useCategories(); const createProduct = useCreateProduct(); const updateProduct = useUpdateProduct(inlineEdit?.id ?? editingProduct?.id ?? -1); const toggleActive = useToggleProductActive();
   const supplierName = (supplierId: number) => suppliers?.find((s) => s.id === supplierId)?.name ?? `#${supplierId}`;
   const categories = useMemo(() => Array.from(new Set([...(categoryOptions ?? []), ...(products ?? []).map((p) => p.category).filter(Boolean) as string[]])).sort((a, b) => a.localeCompare(b, "he")), [categoryOptions, products]); const currencies = useMemo(() => Array.from(new Set((products ?? []).map((p) => p.currency).filter(Boolean))).sort(), [products]);
