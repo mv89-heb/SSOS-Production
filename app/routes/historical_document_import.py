@@ -323,12 +323,20 @@ def review_document(batch_id, document_id):
         reasons = list(record.review_reasons or [])
         if record.supplier_name:
             reasons = [reason for reason in reasons if reason != "supplier_not_identified"]
+        elif "supplier_not_identified" not in reasons:
+            reasons.append("supplier_not_identified")
         if record.document_number:
             reasons = [reason for reason in reasons if reason != "document_number_missing"]
+        elif "document_number_missing" not in reasons:
+            reasons.append("document_number_missing")
         if record.document_date:
             reasons = [reason for reason in reasons if reason != "document_date_missing_or_invalid"]
+        elif "document_date_missing_or_invalid" not in reasons:
+            reasons.append("document_date_missing_or_invalid")
         if record.order_reference:
             reasons = [reason for reason in reasons if reason != "historical_order_reference_not_set"]
+        elif "historical_order_reference_not_set" not in reasons:
+            reasons.append("historical_order_reference_not_set")
         if confirm_duplicate:
             reasons = [reason for reason in reasons if reason != "possible_duplicate"]
         if payload.get("confirm_extraction") is True:
@@ -359,7 +367,7 @@ def finalize_batch(batch_id):
         ).order_by(HistoricalDocumentRecord.id.asc()).with_for_update()).all()
         if not records:
             raise Conflict("Add at least one analyzed invoice or delivery note before finalizing")
-        unresolved = [record.id for record in records if record.needs_review or not record.supplier_name or not record.order_reference]
+        unresolved = [record.id for record in records if record.needs_review or not record.supplier_name or not record.document_number or not record.document_date or not record.order_reference]
         if unresolved:
             raise Conflict("Some documents still require review; resolve supplier, date/number, possible duplicates and order reference before finalizing")
         groups = {}
