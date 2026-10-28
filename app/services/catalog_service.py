@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from app.extensions import db
 from app.models.inventory_movement import InventoryMovement
 from app.models.order_item import OrderItem
+from app.models.supplier_offer import SupplierProductOffer
 
 from werkzeug.exceptions import Conflict, BadRequest, NotFound
 
@@ -224,12 +225,22 @@ class CatalogService:
                 InventoryMovement.product_id == product.id,
             )
         ) or 0)
-        offer_count = len(product.supplier_offers)
-        if order_item_count or movement_count or offer_count:
+        # The product's own supplier offer is part of its live catalog record
+        # and is removed by the established delete-orphan cascade. Offers from
+        # other suppliers are independent price-comparison records, so retain
+        # the product whenever those alternate offers exist.
+        alternate_offer_count = int(db.session.scalar(
+            select(func.count(SupplierProductOffer.id)).where(
+                SupplierProductOffer.tenant_id == self.tenant_id,
+                SupplierProductOffer.product_id == product.id,
+                SupplierProductOffer.supplier_id != product.supplier_id,
+            )
+        ) or 0)
+        if order_item_count or movement_count or alternate_offer_count:
             raise Conflict(
                 f"Product is referenced by {order_item_count} order line(s), "
-                f"{movement_count} inventory movement(s), and {offer_count} supplier offer(s). "
-                "Deactivate the product instead to preserve procurement and inventory history."
+                f"{movement_count} inventory movement(s), and {alternate_offer_count} alternate supplier offer(s). "
+                "Deactivate the product instead to preserve procurement, inventory, and price-comparison history."
             )
         AuditService.log_event(
             self.tenant_id,
