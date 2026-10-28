@@ -126,4 +126,7 @@ def test_supplier_invoice_due_reminders_are_scoped_deduplicated_and_skip_ineligi
         assert worker.process_supplier_invoice_due_reminders(today=today) == 0
         assert db.session.query(Notification).count() == 2
         assert len(pushed) == 2
-        assert all(payload["url"].endswith("/dashboard/orders/" + payload["url"].rsplit("/", 1)[-1]) for _, payload in pushed)
+        pushed_urls = {payload["url"] for _, payload in pushed}
+        assert len(pushed_urls) == 2
+        assert any(url.endswith(f"/dashboard/orders/{due_a.order_id}") for url in pushed_urls)
+        assert any(url.endswith(f"/dashboard/orders/{due_b.order_id}") for url in pushed_urls)
