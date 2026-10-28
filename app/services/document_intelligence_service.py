@@ -425,6 +425,18 @@ class DocumentIntelligenceService:
             extracted_quantity = item.get("quantity")
             expected_price = float(order_line.unit_price)
             extracted_price = item.get("unit_price")
+            catalog_price = None
+            product = order_line.product
+            if product is not None:
+                if product.supplier_id == order.supplier_id and product.current_price is not None:
+                    catalog_price = float(product.current_price)
+                else:
+                    current_offer = SupplierProductOffer.query.filter_by(
+                        tenant_id=self.tenant_id, product_id=product.id,
+                        supplier_id=order.supplier_id, active=True
+                    ).first()
+                    if current_offer is not None:
+                        catalog_price = float(current_offer.price)
             try:
                 quantity_delta = round(float(extracted_quantity) - expected_quantity, 3) if extracted_quantity is not None else None
             except (TypeError, ValueError):
@@ -433,6 +445,10 @@ class DocumentIntelligenceService:
                 price_delta = round(float(extracted_price) - expected_price, 2) if extracted_price is not None else None
             except (TypeError, ValueError):
                 price_delta = None
+            try:
+                catalog_price_delta = round(float(extracted_price) - catalog_price, 2) if extracted_price is not None and catalog_price is not None else None
+            except (TypeError, ValueError):
+                catalog_price_delta = None
             flags = []
             if confidence < 0.93:
                 flags.append("MATCH_REVIEW")
@@ -444,6 +460,8 @@ class DocumentIntelligenceService:
                 flags.append("PRICE_MISSING")
             elif abs(price_delta) > 0.01:
                 flags.append("PRICE_VARIANCE")
+            if catalog_price_delta is not None and abs(catalog_price_delta) > 0.01:
+                flags.append("CATALOG_PRICE_VARIANCE")
             if item.get("unit") and order_line.product and order_line.product.unit:
                 if ProductMatchingService.normalize(item.get("unit")) != ProductMatchingService.normalize(order_line.product.unit):
                     flags.append("UNIT_VARIANCE")
@@ -455,6 +473,7 @@ class DocumentIntelligenceService:
                 "expected_quantity": expected_quantity, "extracted_quantity": extracted_quantity,
                 "quantity_delta": quantity_delta, "expected_unit_price": expected_price,
                 "extracted_unit_price": extracted_price, "price_delta": price_delta,
+                "catalog_unit_price": catalog_price, "catalog_price_delta": catalog_price_delta,
                 "currency": item.get("currency") or extracted.get("currency") or order.currency or "ILS",
                 "unit": item.get("unit"), "confidence": confidence, "flags": flags,
             })
