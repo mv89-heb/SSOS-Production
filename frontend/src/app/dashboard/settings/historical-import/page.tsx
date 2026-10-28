@@ -135,7 +135,6 @@ export default function HistoricalImportPage() {
       await apiClient.patch(`/api/historical-document-import/batches/${batch.id}/documents/${doc.id}`, {
         supplier_name: draft.supplier_name,
         document_number: draft.document_number,
-        document_number: draft.document_number,
         document_date: draft.document_date,
         order_reference: draft.order_reference,
         confirm_duplicate: draft.confirm_duplicate,
