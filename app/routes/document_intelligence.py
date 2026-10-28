@@ -155,6 +155,25 @@ def apply_document(analysis_id):
         return _internal_error(exc, "apply")
 
 
+@document_intelligence_bp.route("/<int:analysis_id>/apply-delivery-note", methods=["POST"])
+@login_required
+def apply_scanned_delivery_note(analysis_id):
+    try:
+        PermissionService.require_permission("documents.process")
+        row, receipt = DocumentIntelligenceService(
+            current_user.tenant_id, current_user.id
+        ).apply_delivery_note(analysis_id, current_user)
+        return jsonify({
+            "success": True, "analysis": row.to_dict(), "receipt": receipt.to_dict(),
+        }), 201
+    except HTTPException as exc:
+        return _handle(exc)
+    except ValueError as exc:
+        return jsonify({"success": False, "error": "validation_error", "message": str(exc)}), 400
+    except Exception as exc:
+        return _internal_error(exc, "delivery note reconciliation")
+
+
 @document_intelligence_bp.route("/<int:analysis_id>/apply-invoice", methods=["POST"])
 @login_required
 def apply_scanned_invoice(analysis_id):
