@@ -5,7 +5,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3, FileSearch, CalendarDays, BrainCircuit, Warehouse } from "lucide-react";
+import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3, FileSearch, CalendarDays, BrainCircuit, Warehouse, Bell, ClipboardCheck } from "lucide-react";
 
 const ORGANIZATION_NAME = "ישיבת אוהבי ירושלים - ראשית";
 const groups = [
@@ -15,6 +15,7 @@ const groups = [
     { name: "ספקים", href: "/dashboard/suppliers", icon: Users },
     { name: "מוצרים ומחירים", href: "/dashboard/catalog", icon: Package },
     { name: "מלאי וספירות", href: "/dashboard/inventory", icon: Warehouse },
+    { name: "דיווח ספירת מלאי", href: "/dashboard/inventory/count", icon: ClipboardCheck },
   ]},
   { label: "ניתוח וקבלת החלטות", items: [
     { name: "השוואת מחירים", href: "/dashboard/price-intelligence", icon: BarChart3 },
@@ -22,7 +23,9 @@ const groups = [
     { name: "מסמכים וקליטה", href: "/dashboard/document-intelligence", icon: FileSearch },
   ]},
   { label: "מעקב וניהול", items: [
-    { name: "יומן ותזכורות", href: "/dashboard/calendar", icon: CalendarDays },
+    { name: "יומן", href: "/dashboard/calendar", icon: CalendarDays },
+    { name: "מרכז תזכורות", href: "/dashboard/reminders", icon: Bell },
+    { name: "Google Calendar", href: "/dashboard/settings/google-calendar", icon: CalendarDays },
     { name: "היסטוריית פעולות", href: "/dashboard/audit", icon: History },
     { name: "הגדרות", href: "/dashboard/settings", icon: Settings },
   ]},
