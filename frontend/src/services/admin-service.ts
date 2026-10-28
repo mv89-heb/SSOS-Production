@@ -27,7 +27,19 @@ export const adminService = {
   async updateProduct(id: number, payload: Record<string, unknown>) { const { data } = await apiClient.put<{ success: boolean; product: AdminProduct }>(`/api/catalog/products/${id}`, payload); return data.product; },
   async deleteProduct(id: number) { await apiClient.delete(`/api/admin/products/${id}`); },
 
-  async listOrders() { const { data } = await apiClient.get<{ success: boolean; orders: AdminOrder[] }>("/api/orders", { params: { limit: 200, offset: 0 } }); return data.orders; },
+  async listOrders() {
+    const pageSize = 200;
+    const all: AdminOrder[] = [];
+    let offset = 0;
+    while (true) {
+      const { data } = await apiClient.get<{ success: boolean; orders: AdminOrder[] }>("/api/orders", { params: { limit: pageSize, offset } });
+      const page = data.orders ?? [];
+      all.push(...page);
+      if (page.length < pageSize) break;
+      offset += page.length;
+    }
+    return all;
+  },
   async getOrder(id: number) { const { data } = await apiClient.get<{ success: boolean; order: AdminOrder }>(`/api/admin/orders/${id}`); return data.order; },
   async updateOrder(id: number, payload: { status?: string; notes?: string | null }) { const { data } = await apiClient.patch<{ success: boolean; order: AdminOrder }>(`/api/admin/orders/${id}`, payload); return data.order; },
   async deleteOrder(id: number) { await apiClient.delete(`/api/admin/orders/${id}`); },
