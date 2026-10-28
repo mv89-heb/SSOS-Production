@@ -1,0 +1,61 @@
+name: SSOS Supplier Invoice Reminders
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ssos-supplier-invoice-reminders
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  supplier-invoice-reminders:
+    name: Notify about invoice due dates
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      FLASK_ENV: production
+      FLASK_APP: wsgi.py
+      PYTHONPATH: .
+      SSOS_WORKER_MODE: "true"
+      SECRET_KEY: ${{ secrets.SSOS_SECRET_KEY }}
+      DATABASE_URL: ${{ secrets.SSOS_DATABASE_URL }}
+      RATELIMIT_STORAGE_URI: memory://
+      CORS_ORIGINS: ${{ secrets.SSOS_CORS_ORIGINS }}
+      FRONTEND_PUBLIC_URL: ${{ secrets.SSOS_FRONTEND_PUBLIC_URL || 'https://ssos-production.onrender.com' }}
+      WEB_PUSH_VAPID_PUBLIC_KEY: ${{ secrets.SSOS_WEB_PUSH_VAPID_PUBLIC_KEY }}
+      WEB_PUSH_VAPID_PRIVATE_KEY: ${{ secrets.SSOS_WEB_PUSH_VAPID_PRIVATE_KEY }}
+      WEB_PUSH_VAPID_CLAIMS_EMAIL: ${{ secrets.SSOS_WEB_PUSH_VAPID_CLAIMS_EMAIL }}
+      SESSION_COOKIE_SECURE: "True"
+      MAX_UPLOAD_SIZE: "5242880"
+      WTF_CSRF_ENABLED: "True"
+      PYTHON_VERSION: "3.11.9"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SECRET_KEY" || { echo 'Missing SSOS_SECRET_KEY repository secret.'; exit 1; }
+          test -n "$DATABASE_URL" || { echo 'Missing SSOS_DATABASE_URL repository secret.'; exit 1; }
+          test -n "$CORS_ORIGINS" || { echo 'Missing SSOS_CORS_ORIGINS repository secret.'; exit 1; }
+          test -n "$FRONTEND_PUBLIC_URL" || { echo 'Frontend public URL is required for actionable reminders.'; exit 1; }
+          case "$FRONTEND_PUBLIC_URL" in https://*) ;; *) echo 'FRONTEND_PUBLIC_URL must use HTTPS.'; exit 1 ;; esac
+
+      - name: Process supplier invoice due reminders
+        run: python scripts/supplier_invoice_due_reminder.py
