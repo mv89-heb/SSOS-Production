@@ -117,8 +117,7 @@ export default function HistoricalImportPage() {
     if (!batch) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const ref = (analysis.extracted_data as any)?.document_number ?? "";
-      await apiClient.post(`/api/historical-document-import/batches/${batch.id}/documents`, { analysis_id: analysis.id, order_reference: ref });
+      await apiClient.post(`/api/historical-document-import/batches/${batch.id}/documents`, { analysis_id: analysis.id, order_reference: "" });
       await refreshBatch(batch.id);
       setMessage(`המסמך ${analysis.filename} נוסף לאצווה. יש להשלים את בדיקת הנתונים והשייכות להזמנה.`);
     } catch (e: unknown) {
@@ -135,6 +134,7 @@ export default function HistoricalImportPage() {
     try {
       await apiClient.patch(`/api/historical-document-import/batches/${batch.id}/documents/${doc.id}`, {
         supplier_name: draft.supplier_name,
+        document_number: draft.document_number,
         document_number: draft.document_number,
         document_date: draft.document_date,
         order_reference: draft.order_reference,
