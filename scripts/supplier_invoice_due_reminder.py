@@ -2,7 +2,8 @@
 
 This worker only creates notifications; it never approves invoices or records payments.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from flask import current_app
 from sqlalchemy import select
@@ -17,10 +18,11 @@ from app.services.web_push_service import send_to_user
 
 
 DUE_SOON_DAYS = 3
+ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 
 
 def process_supplier_invoice_due_reminders(today=None) -> int:
-    today = today or date.today()
+    today = today or datetime.now(ISRAEL_TZ).date()
     due_soon_until = today + timedelta(days=DUE_SOON_DAYS)
     invoices = db.session.scalars(
         select(SupplierInvoice)
@@ -37,30 +39,23 @@ def process_supplier_invoice_due_reminders(today=None) -> int:
     created = 0
     push_events = []
     for invoice in invoices:
-        paid_amount = invoice.paid_amount
-        balance = invoice.amount - paid_amount
+        balance = invoice.amount - invoice.paid_amount
         if balance <= 0:
             continue
 
         overdue = invoice.due_date < today
         if overdue:
             occurrence = today.isoformat()
-            dedupe_key = f"supplier-invoice-overdue:{invoice.id}:{occurrence}"
+            dedupe_prefix = f"supplier-invoice-overdue:{invoice.id}:{occurrence}"
             title = "🔴 חשבונית ספק באיחור"
             days = (today - invoice.due_date).days
             timing = f"באיחור של {days} ימים"
         else:
             occurrence = invoice.due_date.isoformat()
-            dedupe_key = f"supplier-invoice-due-soon:{invoice.id}:{occurrence}"
+            dedupe_prefix = f"supplier-invoice-due-soon:{invoice.id}:{occurrence}"
             title = "🔔 חשבונית ספק מתקרבת לתשלום"
             days = (invoice.due_date - today).days
             timing = "מועד התשלום היום" if days == 0 else f"מועד התשלום בעוד {days} ימים"
-
-        exists = db.session.scalar(
-            select(Notification.id).where(Notification.dedupe_key == dedupe_key).limit(1)
-        )
-        if exists is not None:
-            continue
 
         users = db.session.scalars(
             select(User).where(
@@ -70,17 +65,19 @@ def process_supplier_invoice_due_reminders(today=None) -> int:
             )
         ).all()
         for user in users:
-            # One reminder per invoice occurrence, shared across authorized
-            # users via separate per-user keys to satisfy unique dedupe keys.
-            user_key = f"{dedupe_key}:user:{user.id}"
-            already_notified = db.session.scalar(
-                select(Notification.id).where(Notification.dedupe_key == user_key).limit(1)
+            # Per-user keys prevent duplicates while allowing every authorized
+            # manager/admin in the tenant to receive the reminder.
+            dedupe_key = f"{dedupe_prefix}:user:{user.id}"
+            exists = db.session.scalar(
+                select(Notification.id).where(Notification.dedupe_key == dedupe_key).limit(1)
             )
-            if already_notified is not None:
+            if exists is not None:
                 continue
+
+            supplier_name = invoice.supplier.name if invoice.supplier else f"#{invoice.supplier_id}"
             message = (
-                f"חשבונית {invoice.invoice_number} של ספק {invoice.supplier.name if invoice.supplier else invoice.supplier_id}: "
-                f"{timing}. יתרה לתשלום: {balance:.2f} {invoice.currency}."
+                f"חשבונית {invoice.invoice_number} של ספק {supplier_name}: {timing}. "
+                f"יתרה לתשלום: {balance:.2f} {invoice.currency}."
             )
             action_url = current_app.config.get("FRONTEND_PUBLIC_URL", "").rstrip("/") + "/dashboard/supplier-invoices"
             notification = Notification(
@@ -91,7 +88,7 @@ def process_supplier_invoice_due_reminders(today=None) -> int:
                 status=STATUS_UNREAD,
                 action_url=action_url,
                 notification_type="supplier_invoice_overdue" if overdue else "supplier_invoice_due_soon",
-                dedupe_key=user_key,
+                dedupe_key=dedupe_key,
             )
             db.session.add(notification)
             db.session.flush()
