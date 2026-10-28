@@ -103,7 +103,10 @@ def render_product_code(code_id):
             raise NotFound("Product code not found")
         output = io.BytesIO()
         if row.code_type == "QR":
-            image = qrcode.make(row.code_value, image_factory=SvgPathImage, box_size=8, border=4)
+            qr = qrcode.QRCode(box_size=8, border=4)
+            qr.add_data(row.code_value)
+            qr.make(fit=True)
+            image = qr.make_image(image_factory=SvgPathImage)
             image.save(output)
         elif row.code_type == "CODE128":
             code_class = barcode.get_barcode_class("code128")
