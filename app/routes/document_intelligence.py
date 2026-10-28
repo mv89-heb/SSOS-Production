@@ -6,6 +6,8 @@ from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
 from werkzeug.exceptions import BadRequest, HTTPException
 
+from app.extensions import db
+
 from app.services.document_intelligence_service import DocumentIntelligenceService
 from app.services.permission_service import PermissionService
 
@@ -19,6 +21,7 @@ def _handle(exc):
 
 
 def _internal_error(exc, operation):
+    db.session.rollback()
     logger.exception("Document intelligence %s failed", operation)
     return jsonify({
         "success": False,
@@ -133,6 +136,7 @@ def compare_document_with_order(analysis_id):
         ).compare_with_order(analysis_id, order_id)
         return jsonify({"success": True, "analysis": row.to_dict(), "reconciliation": reconciliation}), 200
     except HTTPException as exc:
+        db.session.rollback()
         return _handle(exc)
     except Exception as exc:
         return _internal_error(exc, "order reconciliation")
@@ -167,6 +171,7 @@ def apply_scanned_delivery_note(analysis_id):
             "success": True, "analysis": row.to_dict(), "receipt": receipt.to_dict(),
         }), 201
     except HTTPException as exc:
+        db.session.rollback()
         return _handle(exc)
     except ValueError as exc:
         return jsonify({"success": False, "error": "validation_error", "message": str(exc)}), 400
@@ -188,6 +193,7 @@ def apply_scanned_invoice(analysis_id):
             "automatic_price_updates": updated_prices,
         }), 201
     except HTTPException as exc:
+        db.session.rollback()
         return _handle(exc)
     except ValueError as exc:
         return jsonify({"success": False, "error": "validation_error", "message": str(exc)}), 400
