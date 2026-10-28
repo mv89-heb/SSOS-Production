@@ -35,7 +35,6 @@ class SupplierInvoice(db.Model):
     attachment_filename = db.Column(db.String(255), nullable=True)
     attachment_mime_type = db.Column(db.String(100), nullable=True)
     attachment_size = db.Column(db.Integer, nullable=True)
-    attachment_data = db.Column(db.LargeBinary, nullable=True)
     line_comparison = db.Column(db.JSON, nullable=False, default=list)
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
