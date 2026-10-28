@@ -151,18 +151,23 @@ def update_order(order_id: int):
     order = _tenant_order(order_id)
     data = request.get_json(silent=True) or {}
     allowed_statuses = {"draft", "submitted", "approved", "sent", "completed", "cancelled"}
+    # Validate the entire payload before mutating the ORM object. Otherwise a
+    # valid notes change combined with an invalid status could remain pending
+    # in the session after the request fails.
+    status = None
+    if "status" in data:
+        status = str(data.get("status") or "").strip().lower()
+        if status not in allowed_statuses:
+            db.session.rollback()
+            raise Conflict("Invalid order status")
     changes = {}
     if "notes" in data:
         order.notes = (data.get("notes") or "").strip() or None
         changes["notes_changed"] = True
-    if "status" in data:
-        status = str(data.get("status") or "").strip().lower()
-        if status not in allowed_statuses:
-            raise Conflict("Invalid order status")
-        if status != order.status:
-            changes["from_status"] = order.status
-            changes["to_status"] = status
-            order.status = status
+    if status is not None and status != order.status:
+        changes["from_status"] = order.status
+        changes["to_status"] = status
+        order.status = status
     if not changes:
         return jsonify({"success": True, "order": order.to_dict(), "changed": False})
     AuditService.log_event(current_user.tenant_id, current_user.id, "admin.order_updated", f"Order {order.order_number} updated by administrator", {"order_id": order.id, **changes})
@@ -177,7 +182,9 @@ def delete_order(order_id: int):
         OrderService(current_user.tenant_id).delete_order_as_admin(current_user, order_id)
         db.session.commit()
         return jsonify({"success": True})
-    except HTTPException as exc: return _handle(exc)
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
 
 
 @admin_bp.route("/audit", methods=["GET"])
