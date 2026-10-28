@@ -284,6 +284,15 @@ def review_document(batch_id, document_id):
         ).with_for_update())
         if record is None:
             raise NotFound("Historical document not found")
+        before = {
+            "supplier_id": record.supplier_id,
+            "supplier_name": record.supplier_name,
+            "document_number": record.document_number,
+            "document_date": record.document_date.isoformat() if record.document_date else None,
+            "order_reference": record.order_reference,
+            "needs_review": record.needs_review,
+            "review_reasons": list(record.review_reasons or []),
+        }
         payload = request.get_json(silent=True) or {}
         original_supplier_name = record.supplier_name
         supplier_name = str(payload.get("supplier_name") or record.supplier_name or "").strip()
@@ -343,9 +352,18 @@ def review_document(batch_id, document_id):
             reasons = [reason for reason in reasons if reason != "no_line_items_extracted"]
         record.review_reasons = reasons
         record.needs_review = bool(reasons)
+        after = {
+            "supplier_id": record.supplier_id,
+            "supplier_name": record.supplier_name,
+            "document_number": record.document_number,
+            "document_date": record.document_date.isoformat() if record.document_date else None,
+            "order_reference": record.order_reference,
+            "needs_review": record.needs_review,
+            "review_reasons": reasons,
+        }
         AuditService.log_event(current_user.tenant_id, current_user.id, "historical_import.document_reviewed",
             f"Historical document {record.id} reviewed", {"batch_id": batch.id, "document_id": record.id,
-            "remaining_review_reasons": reasons, "confirm_duplicate": confirm_duplicate})
+            "before": before, "after": after, "confirm_duplicate": confirm_duplicate})
         db.session.commit()
         return jsonify({"success": True, "document": record.to_dict()})
     except HTTPException as exc:
