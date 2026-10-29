@@ -9,7 +9,14 @@ import type { Product } from "@/types";
 
 const money = (value: number, currency = "ILS") => new Intl.NumberFormat("he-IL", { style: "currency", currency: currency === "ILS" ? "ILS" : currency, maximumFractionDigits: 4 }).format(value);
 const numeric = (value: string) => value.trim() === "" ? null : Number(value);
-const unitKey = (value: string | null | undefined) => (value ?? "").trim().toLocaleLowerCase("he").replace(/[״"'’]/g, "").replace(/\s+/g, "");
+const normalizeSearch = (value: unknown) => String(value ?? "")
+  .normalize("NFKD")
+  .replace(/[\\u0591-\\u05C7]/g, "")
+  .toLocaleLowerCase("he")
+  .replace(/[״“”"'’‘`.,;:!?()[\\]{}\\/_-]+/g, " ")
+  .replace(/\\s+/g, " ")
+  .trim();
+const unitKey = (value: string | null | undefined) => normalizeSearch(value).replace(/\\s+/g, "");
 const conversion = (from: string, to: string): number | null => {
   const f = unitKey(from), t = unitKey(to);
   if (!f || !t) return f === t ? 1 : null;
@@ -41,11 +48,28 @@ export default function CostCalculatorPage() {
   const [useManualPackage, setUseManualPackage] = useState(false);
 
   const selected = products.find((product) => String(product.id) === productId) ?? null;
-  const filteredProducts = useMemo(() => {
-    const q = search.trim().toLocaleLowerCase("he");
-    return products.filter((p) => !q || [p.name, p.sku, p.barcode, p.category].filter(Boolean).some((v) => String(v).toLocaleLowerCase("he").includes(q)));
-  }, [products, search]);
   const supplierName = (product: Product) => suppliers.find((s) => s.id === product.supplier_id)?.name ?? "ספק לא ידוע";
+  const filteredProducts = useMemo(() => {
+    const query = normalizeSearch(search);
+    if (!query) return [...products].sort((a, b) => a.name.localeCompare(b.name, "he"));
+    const terms = query.split(" ").filter(Boolean);
+    return products
+      .map((product) => {
+        const supplier = suppliers.find((item) => item.id === product.supplier_id)?.name ?? "";
+        const fields = [
+          product.name, product.sku, product.supplier_sku, product.barcode,
+          product.category, product.description, supplier,
+        ].map(normalizeSearch).filter(Boolean);
+        const matches = terms.every((term) => fields.some((field) => field.includes(term)));
+        if (!matches) return null;
+        const name = normalizeSearch(product.name);
+        const score = terms.reduce((total, term) => total + (name === term ? 100 : name.startsWith(term) ? 30 : name.includes(term) ? 15 : fields.some((field) => field.startsWith(term)) ? 5 : 0), 0);
+        return { product, score };
+      })
+      .filter((item): item is { product: Product; score: number } => item !== null)
+      .sort((a, b) => b.score - a.score || a.product.name.localeCompare(b.product.name, "he"))
+      .map((item) => item.product);
+  }, [products, suppliers, search]);
   const basePrice = useManualPackage ? numeric(manualPackagePrice) : selected?.current_price == null ? null : Number(selected.current_price);
   const baseQty = useManualPackage ? numeric(packageQuantity) : 1;
   const baseUnit = useManualPackage ? packageUnit : selected?.unit ?? "";
@@ -69,12 +93,14 @@ export default function CostCalculatorPage() {
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center gap-2"><Package className="h-5 w-5 text-indigo-600"/><h2 className="text-lg font-extrabold">בחירת מוצר ומחיר</h2></div>
         <label className="block text-sm font-bold">חיפוש בכל מוצרי הקטלוג
-          <span className="relative mt-1 block"><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="שם מוצר, מק״ט או ברקוד" className={inputClass + " pr-9"}/></span>
+          <span className="relative mt-1 block"><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="שם, מק״ט, ברקוד, ספק או כמה מילים…" autoComplete="off" className={inputClass + " pr-9"}/></span>
+          <span className="mt-1 block text-xs font-normal text-slate-500">{search.trim() ? `נמצאו ${filteredProducts.length} מוצרים מתאימים` : `כל ${products.length} מוצרי הקטלוג זמינים לבחירה`}</span>
         </label>
         <label className="block text-sm font-bold">מוצר מהקטלוג
           <select value={productId} onChange={e => { setProductId(e.target.value); setUseManualPackage(false); setAmountUnit(""); }} className={inputClass + " mt-1"}>
             <option value="">בחרו מוצר</option>
-            {filteredProducts.map(p => <option key={p.id} value={p.id}>{p.name}{p.current_price != null && p.current_price > 0 ? ` — ${money(p.current_price, p.currency)}` : " — חסר מחיר"}</option>)}
+            {filteredProducts.map(p => <option key={p.id} value={p.id}>{p.name} — {supplierName(p)}{p.sku ? ` — מק״ט ${p.sku}` : ""}{p.current_price != null && p.current_price > 0 ? ` — ${money(p.current_price, p.currency)}` : " — חסר מחיר"}</option>)}
+            {search.trim() && filteredProducts.length === 0 && <option value="" disabled>לא נמצאו מוצרים — נסו שם חלקי, מק״ט או שם ספק</option>}
           </select>
         </label>
         {isLoading && <p className="text-sm text-slate-500">טוען מוצרים מהקטלוג…</p>}
