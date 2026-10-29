@@ -44,7 +44,7 @@ export default function CostCalculatorPage() {
   const conversionFactor = amountUnit && baseUnit ? conversion(amountUnit, baseUnit) : null;
   const validInputs = basePrice != null && Number.isFinite(basePrice) && basePrice >= 0 && baseQty != null && Number.isFinite(baseQty) && baseQty > 0 && numeric(amountToCost) != null && Number.isFinite(Number(amountToCost)) && Number(amountToCost) >= 0 && conversionFactor != null;
   const totalCost = validInputs ? (basePrice! / baseQty!) * Number(amountToCost) * conversionFactor! : null;
-  const reset = () => { setSearch(""); setProductId(""); setQuantity(""); setQuantityUnit(""); setManualPackagePrice(""); setPackageQuantity(""); setPackageUnit(""); setAmountToCost(""); setAmountUnit(""); setUseManualPackage(false); };
+  const reset = () => { setSearch(""); setProductId(""); setManualPackagePrice(""); setPackageQuantity(""); setPackageUnit(""); setAmountToCost(""); setAmountUnit(""); setUseManualPackage(false); };
 
   return <div dir="rtl" className="mx-auto max-w-5xl space-y-6 pb-10 text-slate-900 dark:text-slate-100">
     <header className="overflow-hidden rounded-3xl bg-gradient-to-l from-slate-950 via-indigo-950 to-blue-900 p-6 text-white shadow-xl sm:p-8">
