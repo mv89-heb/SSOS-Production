@@ -192,6 +192,7 @@ export default function InventoryPage() {
               <a href="/dashboard/inventory/count" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-black text-indigo-700 shadow-lg hover:bg-indigo-50"><ClipboardCheck size={19}/> ספירת מלאי</a>
               <Link href="/dashboard/inventory/scan" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-black text-indigo-700 shadow-lg hover:bg-indigo-50"><ScanLine size={19}/> סרוק ברקוד</Link>
               <a href="/dashboard/inventory/barcodes" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white/10 px-5 text-sm font-black text-white ring-1 ring-white/25 hover:bg-white/20">ברקודים ומדבקות <span aria-hidden="true">↗</span></a>
+              <Link href="/dashboard/cost-calculator" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white/10 px-5 text-sm font-black text-white ring-1 ring-white/25 hover:bg-white/20"><Calculator size={18}/> מחשבון עלויות גולמיות</Link>
               <button onClick={() => qc.invalidateQueries({ queryKey: ["inventory"] })} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 text-sm font-black hover:bg-white/20"><RefreshCw size={18}/> רענן</button>
             </div>
           </div>
