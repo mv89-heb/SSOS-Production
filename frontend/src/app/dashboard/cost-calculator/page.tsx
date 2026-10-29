@@ -46,6 +46,17 @@ export default function CostCalculatorPage() {
   const [amountToCost, setAmountToCost] = useState("");
   const [amountUnit, setAmountUnit] = useState("");
   const [useManualPackage, setUseManualPackage] = useState(false);
+  const [calculationItems, setCalculationItems] = useState<Array<{
+    key: string;
+    productId: number;
+    name: string;
+    supplier: string;
+    quantity: number;
+    unit: string;
+    unitCost: number;
+    totalCost: number;
+    currency: string;
+  }>>([]);
 
   const selected = products.find((product) => String(product.id) === productId) ?? null;
   const supplierName = (product: Product) => suppliers.find((s) => s.id === product.supplier_id)?.name ?? "ספק לא ידוע";
@@ -76,7 +87,28 @@ export default function CostCalculatorPage() {
   const conversionFactor = amountUnit && baseUnit ? conversion(amountUnit, baseUnit) : null;
   const validInputs = basePrice != null && Number.isFinite(basePrice) && basePrice > 0 && baseQty != null && Number.isFinite(baseQty) && baseQty > 0 && numeric(amountToCost) != null && Number.isFinite(Number(amountToCost)) && Number(amountToCost) >= 0 && conversionFactor != null;
   const totalCost = validInputs ? (basePrice! / baseQty!) * Number(amountToCost) * conversionFactor! : null;
-  const reset = () => { setSearch(""); setProductId(""); setManualPackagePrice(""); setPackageQuantity(""); setPackageUnit(""); setAmountToCost(""); setAmountUnit(""); setUseManualPackage(false); };
+  const addToCalculation = () => {
+    if (!selected || totalCost == null || basePrice == null || baseQty == null || baseQty <= 0 || !amountUnit || useManualPackage) return;
+    const quantity = Number(amountToCost);
+    if (!Number.isFinite(quantity) || quantity <= 0) return;
+    setCalculationItems((items) => [...items, {
+      key: `${selected.id}-${Date.now()}-${items.length}`,
+      productId: selected.id,
+      name: selected.name,
+      supplier: supplierName(selected),
+      quantity,
+      unit: amountUnit,
+      unitCost: basePrice / baseQty,
+      totalCost,
+      currency: selected.currency || "ILS",
+    }]);
+  };
+  const removeCalculationItem = (key: string) => setCalculationItems((items) => items.filter((item) => item.key !== key));
+  const calculationTotals = calculationItems.reduce<Record<string, number>>((totals, item) => {
+    totals[item.currency] = (totals[item.currency] ?? 0) + item.totalCost;
+    return totals;
+  }, {});
+  const reset = () => { setSearch(""); setProductId(""); setManualPackagePrice(""); setPackageQuantity(""); setPackageUnit(""); setAmountToCost(""); setAmountUnit(""); setUseManualPackage(false); setCalculationItems([]); };
 
   return <div dir="rtl" className="mx-auto max-w-5xl space-y-6 pb-10 text-slate-900 dark:text-slate-100">
     <header className="overflow-hidden rounded-3xl bg-gradient-to-l from-slate-950 via-indigo-950 to-blue-900 p-6 text-white shadow-xl sm:p-8">
@@ -125,8 +157,29 @@ export default function CostCalculatorPage() {
           {selected && !useManualPackage && !(selected.current_price != null && selected.current_price > 0) && <p className="mt-2 text-sm font-bold text-amber-700">למוצר הזה אין מחיר תקין בקטלוג. לא מוצג חישוב המבוסס על מחיר חסר.</p>}
           {amountUnit && baseUnit && conversionFactor == null && <p className="mt-2 text-sm font-bold text-amber-700">לא ניתן להמיר בין יחידות המידה האלה. בחרו יחידות זהות או יחידות משקל/נפח תואמות.</p>}
         </div>
+        <button type="button" onClick={addToCalculation} disabled={!selected || totalCost == null || !amountUnit || Number(amountToCost) <= 0 || useManualPackage} className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500">הוספת המוצר לרשימת החישוב</button>
+        {useManualPackage && <p className="text-xs text-amber-700">כדי להוסיף מוצר לרשימה, בחרו מוצר מהקטלוג וכבו את מצב המחיר הידני.</p>}
       </section>
     </div>
+
+    <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><h2 className="text-lg font-extrabold">רשימת המוצרים לחישוב</h2><p className="mt-1 text-sm text-slate-500">הוסיפו כמה מוצרים שתרצו כדי לחשב את העלות המצטברת.</p></div>
+        <span className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">{calculationItems.length} פריטים</span>
+      </div>
+      {calculationItems.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700">עדיין לא הוספתם מוצרים. בחרו מוצר, הזינו כמות ולחצו על „הוספת המוצר לרשימת החישוב”.</div> : <>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[680px] text-right text-sm">
+            <thead><tr className="border-b border-slate-200 text-slate-500 dark:border-slate-700"><th className="px-3 py-3">מוצר</th><th className="px-3 py-3">ספק</th><th className="px-3 py-3">כמות</th><th className="px-3 py-3">מחיר ליחידה</th><th className="px-3 py-3">עלות</th><th className="px-3 py-3">פעולה</th></tr></thead>
+            <tbody>{calculationItems.map((item) => <tr key={item.key} className="border-b border-slate-100 last:border-0 dark:border-slate-800"><td className="px-3 py-3 font-bold">{item.name}</td><td className="px-3 py-3 text-slate-500">{item.supplier}</td><td className="px-3 py-3">{item.quantity.toLocaleString("he-IL")} {item.unit}</td><td className="px-3 py-3">{money(item.unitCost, item.currency)} / {item.unit}</td><td className="px-3 py-3 font-extrabold">{money(item.totalCost, item.currency)}</td><td className="px-3 py-3"><button type="button" onClick={() => removeCalculationItem(item.key)} className="rounded-lg px-2 py-1 font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">הסר</button></td></tr>)}</tbody>
+          </table>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/30">
+          <div><div className="text-sm font-bold text-indigo-800 dark:text-indigo-200">סך העלות לכל המוצרים</div><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-2xl font-black text-indigo-950 dark:text-white">{Object.entries(calculationTotals).map(([currency, total]) => <span key={currency}>{money(total, currency)}</span>)}</div></div>
+          <button type="button" onClick={() => setCalculationItems([])} className="rounded-xl border border-indigo-200 px-3 py-2 text-sm font-bold text-indigo-800 hover:bg-white dark:border-indigo-800 dark:text-indigo-200 dark:hover:bg-indigo-900">נקה רשימה</button>
+        </div>
+      </>}
+    </section>
 
     <div className="flex flex-wrap gap-3 text-sm"><Link href="/dashboard/catalog" className="rounded-xl border border-slate-200 px-4 py-2.5 font-bold hover:border-indigo-300 dark:border-slate-700">חזרה לקטלוג ולמחירים</Link><Link href="/dashboard/inventory" className="rounded-xl border border-slate-200 px-4 py-2.5 font-bold hover:border-indigo-300 dark:border-slate-700">מעבר למלאי</Link></div>
     <p className="text-xs leading-5 text-slate-500">הערה: החישוב משתמש במחיר המוצר הנוכחי שמוצג בקטלוג, ואינו מחליף בדיקת מחיר מול ספק. אין כאן שמירה של חישובים או שינוי מחירי מקור.</p>
