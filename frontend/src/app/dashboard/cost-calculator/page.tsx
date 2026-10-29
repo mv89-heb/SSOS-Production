@@ -42,7 +42,7 @@ export default function CostCalculatorPage() {
   const baseQty = useManualPackage ? numeric(packageQuantity) : 1;
   const baseUnit = useManualPackage ? packageUnit : selected?.unit ?? "";
   const conversionFactor = amountUnit && baseUnit ? conversion(amountUnit, baseUnit) : null;
-  const validInputs = basePrice != null && Number.isFinite(basePrice) && basePrice >= 0 && baseQty != null && Number.isFinite(baseQty) && baseQty > 0 && numeric(amountToCost) != null && Number.isFinite(Number(amountToCost)) && Number(amountToCost) >= 0 && conversionFactor != null;
+  const validInputs = basePrice != null && Number.isFinite(basePrice) && basePrice > 0 && baseQty != null && Number.isFinite(baseQty) && baseQty > 0 && numeric(amountToCost) != null && Number.isFinite(Number(amountToCost)) && Number(amountToCost) >= 0 && conversionFactor != null;
   const totalCost = validInputs ? (basePrice! / baseQty!) * Number(amountToCost) * conversionFactor! : null;
   const reset = () => { setSearch(""); setProductId(""); setManualPackagePrice(""); setPackageQuantity(""); setPackageUnit(""); setAmountToCost(""); setAmountUnit(""); setUseManualPackage(false); };
 
@@ -95,7 +95,7 @@ export default function CostCalculatorPage() {
     </div>
 
     <div className="flex flex-wrap gap-3 text-sm"><Link href="/dashboard/catalog" className="rounded-xl border border-slate-200 px-4 py-2.5 font-bold hover:border-indigo-300 dark:border-slate-700">חזרה לקטלוג ולמחירים</Link><Link href="/dashboard/inventory" className="rounded-xl border border-slate-200 px-4 py-2.5 font-bold hover:border-indigo-300 dark:border-slate-700">מעבר למלאי</Link></div>
-    <p className="text-xs leading-5 text-slate-500">הערה: החישוב משתמש במחיר המוצר הנוכחי שמוצג בקטלוג, ואינו מחליף בדיקת מחיר מול ספק. אין כאן שמירה של חישובים, שינוי מחיר, תמחור מתכון או חישוב רווח.</p>
+    <p className="text-xs leading-5 text-slate-500">הערה: החישוב משתמש במחיר המוצר הנוכחי שמוצג בקטלוג, ואינו מחליף בדיקת מחיר מול ספק. אין כאן שמירה של חישובים או שינוי מחירי מקור.</p>
   </div>;
 }
 
