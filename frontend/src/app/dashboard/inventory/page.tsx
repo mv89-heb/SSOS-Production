@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   AlertTriangle, ArrowDownToLine, ArrowUpFromLine, CheckCircle2,
-  ClipboardCheck, History, Package, RefreshCw, ScanLine, Search,
+  Calculator, ClipboardCheck, History, Package, RefreshCw, ScanLine, Search,
   SlidersHorizontal, Truck, Warehouse, X,
 } from "lucide-react";
 import { inventoryService, type InventoryMovement, type InventoryMovementType } from "@/services/inventory-service";
