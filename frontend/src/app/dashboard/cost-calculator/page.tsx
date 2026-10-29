@@ -11,12 +11,12 @@ const money = (value: number, currency = "ILS") => new Intl.NumberFormat("he-IL"
 const numeric = (value: string) => value.trim() === "" ? null : Number(value);
 const normalizeSearch = (value: unknown) => String(value ?? "")
   .normalize("NFKD")
-  .replace(/[\\u0591-\\u05C7]/g, "")
+  .replace(/[\u0591-\u05C7]/g, "")
   .toLocaleLowerCase("he")
-  .replace(/[״“”"'’‘`.,;:!?()[\\]{}\\/_-]+/g, " ")
-  .replace(/\\s+/g, " ")
+  .replace(/[^\p{L}\p{N}\s]/gu, " ")
+  .replace(/\s+/g, " ")
   .trim();
-const unitKey = (value: string | null | undefined) => normalizeSearch(value).replace(/\\s+/g, "");
+const unitKey = (value: string | null | undefined) => normalizeSearch(value).replace(/\s+/g, "");
 const conversion = (from: string, to: string): number | null => {
   const f = unitKey(from), t = unitKey(to);
   if (!f || !t) return f === t ? 1 : null;
