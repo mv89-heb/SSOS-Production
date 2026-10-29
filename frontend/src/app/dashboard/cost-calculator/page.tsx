@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Calculator, RotateCcw, Search, Package, Scale } from "lucide-react";
-import { useProducts, useSuppliers } from "@/hooks/use-catalog";
+import { catalogService } from "@/services/catalog-service";
 import type { Product } from "@/types";
 
 const money = (value: number, currency = "ILS") => new Intl.NumberFormat("he-IL", { style: "currency", currency: currency === "ILS" ? "ILS" : currency, maximumFractionDigits: 4 }).format(value);
@@ -21,8 +22,15 @@ const conversion = (from: string, to: string): number | null => {
 };
 
 export default function CostCalculatorPage() {
-  const { data: products = [], isLoading, isError, refetch } = useProducts(undefined, true);
-  const { data: suppliers = [] } = useSuppliers();
+  // This page must ignore catalog-wide URL filters and include inactive products too.
+  const { data: products = [], isLoading, isError, refetch } = useQuery({
+    queryKey: ["cost-calculator-products"],
+    queryFn: () => catalogService.listProducts(undefined, false),
+  });
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ["cost-calculator-suppliers"],
+    queryFn: () => catalogService.listSuppliers(false),
+  });
   const [search, setSearch] = useState("");
   const [productId, setProductId] = useState("");
   const [manualPackagePrice, setManualPackagePrice] = useState("");
@@ -35,7 +43,7 @@ export default function CostCalculatorPage() {
   const selected = products.find((product) => String(product.id) === productId) ?? null;
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLocaleLowerCase("he");
-    return products.filter((p) => !q || [p.name, p.sku, p.barcode, p.category].filter(Boolean).some((v) => String(v).toLocaleLowerCase("he").includes(q))).slice(0, 100);
+    return products.filter((p) => !q || [p.name, p.sku, p.barcode, p.category].filter(Boolean).some((v) => String(v).toLocaleLowerCase("he").includes(q)));
   }, [products, search]);
   const supplierName = (product: Product) => suppliers.find((s) => s.id === product.supplier_id)?.name ?? "ספק לא ידוע";
   const basePrice = useManualPackage ? numeric(manualPackagePrice) : selected?.current_price == null ? null : Number(selected.current_price);
@@ -60,7 +68,7 @@ export default function CostCalculatorPage() {
     <div className="grid gap-4 md:grid-cols-2">
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center gap-2"><Package className="h-5 w-5 text-indigo-600"/><h2 className="text-lg font-extrabold">בחירת מוצר ומחיר</h2></div>
-        <label className="block text-sm font-bold">חיפוש בקטלוג המוצרים
+        <label className="block text-sm font-bold">חיפוש בכל מוצרי הקטלוג
           <span className="relative mt-1 block"><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="שם מוצר, מק״ט או ברקוד" className={inputClass + " pr-9"}/></span>
         </label>
         <label className="block text-sm font-bold">מוצר מהקטלוג
@@ -70,7 +78,7 @@ export default function CostCalculatorPage() {
           </select>
         </label>
         {isLoading && <p className="text-sm text-slate-500">טוען מוצרים מהקטלוג…</p>}
-        {isError && <div role="alert" className="text-sm text-rose-600">לא ניתן לטעון את הקטלוג. <button onClick={() => refetch()} className="font-bold underline">נסו שוב</button></div>}
+        {isError && <div role="alert" className="text-sm text-rose-600">לא ניתן לטעון את הקטלוג המלא. <button onClick={() => refetch()} className="font-bold underline">נסו שוב</button></div>}
         {selected && <div className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800/70"><div className="font-extrabold">{selected.name}</div><div className="mt-1 text-slate-500">ספק: {supplierName(selected)}</div><div className="mt-1">מחיר בקטלוג: <strong>{selected.current_price != null && selected.current_price > 0 ? money(selected.current_price, selected.currency) : "לא הוגדר מחיר תקין"}</strong>{selected.unit ? ` לכל ${selected.unit}` : ""}</div></div>}
         <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
           <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={useManualPackage} onChange={e => setUseManualPackage(e.target.checked)} className="h-4 w-4 accent-indigo-600"/> לחשב לפי מחיר אריזה וכמות אריזה אחרת</label>
