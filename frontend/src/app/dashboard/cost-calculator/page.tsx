@@ -55,6 +55,7 @@ export default function CostCalculatorPage() {
     unit: string;
     priceUnit: string;
     unitCost: number;
+    conversionFactor: number;
     totalCost: number;
     currency: string;
   }>>([]);
@@ -101,11 +102,18 @@ export default function CostCalculatorPage() {
       unit: amountUnit,
       priceUnit: baseUnit,
       unitCost: basePrice / baseQty,
+      conversionFactor: conversionFactor!,
       totalCost,
       currency: selected.currency || "ILS",
     }]);
   };
   const removeCalculationItem = (key: string) => setCalculationItems((items) => items.filter((item) => item.key !== key));
+  const updateCalculationQuantity = (key: string, quantity: number) => {
+    if (!Number.isFinite(quantity) || quantity <= 0) return;
+    setCalculationItems((items) => items.map((item) => item.key === key
+      ? { ...item, quantity, totalCost: item.unitCost * quantity * item.conversionFactor }
+      : item));
+  };
   const calculationTotals = calculationItems.reduce<Record<string, number>>((totals, item) => {
     totals[item.currency] = (totals[item.currency] ?? 0) + item.totalCost;
     return totals;
@@ -166,14 +174,14 @@ export default function CostCalculatorPage() {
 
     <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="text-lg font-extrabold">רשימת המוצרים לחישוב</h2><p className="mt-1 text-sm text-slate-500">הוסיפו כמה מוצרים שתרצו כדי לחשב את העלות המצטברת.</p></div>
+        <div><h2 className="text-lg font-extrabold">רשימת המוצרים לחישוב</h2><p className="mt-1 text-sm text-slate-500">הוסיפו מוצרים ושנו כמויות ישירות בטבלה; העלות מתעדכנת אוטומטית.</p></div>
         <span className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">{calculationItems.length} פריטים</span>
       </div>
       {calculationItems.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700">עדיין לא הוספתם מוצרים. בחרו מוצר, הזינו כמות ולחצו על „הוספת המוצר לרשימת החישוב”.</div> : <>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[680px] text-right text-sm">
             <thead><tr className="border-b border-slate-200 text-slate-500 dark:border-slate-700"><th className="px-3 py-3">מוצר</th><th className="px-3 py-3">ספק</th><th className="px-3 py-3">כמות</th><th className="px-3 py-3">מחיר ליחידה</th><th className="px-3 py-3">עלות</th><th className="px-3 py-3">פעולה</th></tr></thead>
-            <tbody>{calculationItems.map((item) => <tr key={item.key} className="border-b border-slate-100 last:border-0 dark:border-slate-800"><td className="px-3 py-3 font-bold">{item.name}</td><td className="px-3 py-3 text-slate-500">{item.supplier}</td><td className="px-3 py-3">{item.quantity.toLocaleString("he-IL")} {item.unit}</td><td className="px-3 py-3">{money(item.unitCost, item.currency)} / {item.priceUnit}</td><td className="px-3 py-3 font-extrabold">{money(item.totalCost, item.currency)}</td><td className="px-3 py-3"><button type="button" onClick={() => removeCalculationItem(item.key)} className="rounded-lg px-2 py-1 font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">הסר</button></td></tr>)}</tbody>
+            <tbody>{calculationItems.map((item) => <tr key={item.key} className="border-b border-slate-100 last:border-0 dark:border-slate-800"><td className="px-3 py-3 font-bold">{item.name}</td><td className="px-3 py-3 text-slate-500">{item.supplier}</td><td className="px-3 py-3"><div className="flex items-center gap-2"><input type="number" min="0.001" step="any" aria-label={`כמות עבור ${item.name}`} value={item.quantity} onChange={e => updateCalculationQuantity(item.key, Number(e.target.value))} className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"/><span>{item.unit}</span></div></td><td className="px-3 py-3">{money(item.unitCost, item.currency)} / {item.priceUnit}</td><td className="px-3 py-3 font-extrabold">{money(item.totalCost, item.currency)}</td><td className="px-3 py-3"><button type="button" onClick={() => removeCalculationItem(item.key)} className="rounded-lg px-2 py-1 font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">הסר</button></td></tr>)}</tbody>
           </table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/30">
