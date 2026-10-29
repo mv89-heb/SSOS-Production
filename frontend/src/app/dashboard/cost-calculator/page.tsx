@@ -25,8 +25,6 @@ export default function CostCalculatorPage() {
   const { data: suppliers = [] } = useSuppliers();
   const [search, setSearch] = useState("");
   const [productId, setProductId] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [quantityUnit, setQuantityUnit] = useState("");
   const [manualPackagePrice, setManualPackagePrice] = useState("");
   const [packageQuantity, setPackageQuantity] = useState("");
   const [packageUnit, setPackageUnit] = useState("");
