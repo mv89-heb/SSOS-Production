@@ -18,6 +18,7 @@ export default function CostCalculatorPage() {
   const [weight, setWeight] = useState("250");
   const [weightUnit, setWeightUnit] = useState<"g" | "kg">("g");
   const [unitPrice, setUnitPrice] = useState("4.5");
+  const [unitPricingMode, setUnitPricingMode] = useState<"package" | "direct">("package");
   const [quantity, setQuantity] = useState("3");
   const [packagePrice, setPackagePrice] = useState("36");
   const [unitsPerPackage, setUnitsPerPackage] = useState("12");
@@ -40,12 +41,12 @@ export default function CostCalculatorPage() {
     const sell = targetSellingPrice.trim() === "" ? suggested : numberValue(targetSellingPrice);
     return {
       weightCost: numberValue(pricePerKg) * numberValue(weight) / (weightUnit === "g" ? 1000 : 1),
-      unitCost: (numberValue(packagePrice) / (numberValue(unitsPerPackage) || 1)) * numberValue(quantity),
+      unitCost: (unitPricingMode === "package" ? numberValue(packagePrice) / (numberValue(unitsPerPackage) || 1) : numberValue(unitPrice)) * numberValue(quantity),
       rawRecipeCost, costWithWaste, suggested,
       profit: sell - costWithWaste,
       margin: sell > 0 ? (sell - costWithWaste) / sell * 100 : 0,
     };
-  }, [pricePerKg, weight, weightUnit, packagePrice, unitsPerPackage, quantity, ingredients, waste, multiplier, targetSellingPrice]);
+  }, [pricePerKg, weight, weightUnit, packagePrice, unitsPerPackage, quantity, unitPrice, unitPricingMode, ingredients, waste, multiplier, targetSellingPrice]);
 
   const updateIngredient = (id: number, key: keyof Ingredient, value: string) =>
     setIngredients((items) => items.map((item) => item.id === id ? { ...item, [key]: value } : item));
@@ -55,7 +56,7 @@ export default function CostCalculatorPage() {
   };
   const reset = () => {
     setMode("recipe"); setPricePerKg("24"); setWeight("250"); setWeightUnit("g");
-    setUnitPrice("4.5"); setQuantity("3"); setPackagePrice("36"); setUnitsPerPackage("12");
+    setUnitPrice("4.5"); setUnitPricingMode("package"); setQuantity("3"); setPackagePrice("36"); setUnitsPerPackage("12");
     setIngredients(initialIngredients); setWaste("5"); setMultiplier("3"); setTargetSellingPrice(""); setNextId(2);
   };
 
@@ -95,9 +96,15 @@ export default function CostCalculatorPage() {
           </div>}
           {mode === "unit" && <div className="space-y-4">
             <h2 className="text-lg font-extrabold">חישוב לפי יחידה או אריזה</h2>
-            <div className="grid gap-4 sm:grid-cols-2"><Field label="מחיר אריזה (₪)" value={packagePrice} onChange={setPackagePrice} /><Field label="יחידות באריזה" value={unitsPerPackage} onChange={setUnitsPerPackage} /><Field label="כמות נדרשת" value={quantity} onChange={setQuantity} /><Field label="מחיר יחידה ידני (לחלופה)" value={unitPrice} onChange={setUnitPrice} /></div>
-            <Formula>עלות = (מחיר אריזה ÷ מספר יחידות באריזה) × כמות נדרשת</Formula>
-            <p className="text-xs text-slate-500">החישוב משתמש במחיר האריזה ובמספר היחידות. שדה מחיר היחידה הידני הוא לעזר ואינו משפיע על התוצאה כרגע.</p>
+            <div className="flex flex-wrap gap-2 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+              <button type="button" onClick={() => setUnitPricingMode("package")} className={`rounded-lg px-3 py-2 text-sm font-bold ${unitPricingMode === "package" ? "bg-white text-indigo-700 shadow-sm dark:bg-slate-700 dark:text-indigo-200" : "text-slate-500"}`}>חישוב ממחיר אריזה</button>
+              <button type="button" onClick={() => setUnitPricingMode("direct")} className={`rounded-lg px-3 py-2 text-sm font-bold ${unitPricingMode === "direct" ? "bg-white text-indigo-700 shadow-sm dark:bg-slate-700 dark:text-indigo-200" : "text-slate-500"}`}>מחיר יחידה ישיר</button>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {unitPricingMode === "package" ? <><Field label="מחיר אריזה (₪)" value={packagePrice} onChange={setPackagePrice} /><Field label="יחידות באריזה" value={unitsPerPackage} onChange={setUnitsPerPackage} /></> : <Field label="מחיר ליחידה (₪)" value={unitPrice} onChange={setUnitPrice} />}
+              <Field label="כמות נדרשת" value={quantity} onChange={setQuantity} />
+            </div>
+            <Formula>{unitPricingMode === "package" ? "עלות = (מחיר אריזה ÷ מספר יחידות באריזה) × כמות נדרשת" : "עלות = מחיר ליחידה × כמות נדרשת"}</Formula>
           </div>}
           {mode === "recipe" && <div className="space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold">מרכיבי המתכון</h2><p className="mt-1 text-sm text-slate-500">הזינו מחיר אריזה, כמות באריזה והכמות הנדרשת למנה.</p></div><button onClick={addIngredient} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white hover:bg-indigo-700"><Plus className="h-4 w-4" /> הוספת מרכיב</button></div>
@@ -120,7 +127,7 @@ export default function CostCalculatorPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-center gap-2"><CircleDollarSign className="h-5 w-5 text-indigo-600" /><h2 className="font-extrabold">תוצאות החישוב</h2></div>
             {mode === "weight" && <Result label="עלות המשקל המבוקש" value={money(results.weightCost)} />}
-            {mode === "unit" && <><Result label="מחיר ליחידה" value={money(numberValue(packagePrice) / (numberValue(unitsPerPackage) || 1))} /><Result label={`עלות ${numberValue(quantity)} יחידות`} value={money(results.unitCost)} /></>}
+            {mode === "unit" && <><Result label="מחיר ליחידה" value={money(unitPricingMode === "package" ? numberValue(packagePrice) / (numberValue(unitsPerPackage) || 1) : numberValue(unitPrice))} /><Result label={`עלות ${numberValue(quantity)} יחידות`} value={money(results.unitCost)} /></>}
             {mode === "recipe" && <>
               <Result label="עלות חומרי גלם למנה" value={money(results.rawRecipeCost)} />
               <Result label="עלות למנה כולל פחת" value={money(results.costWithWaste)} />
