@@ -28,6 +28,26 @@ const conversion = (from: string, to: string): number | null => {
   return null;
 };
 
+const commonUnitOptions = [
+  { value: "ק״ג", label: "קילוגרם (ק״ג)" },
+  { value: "גרם", label: "גרם" },
+  { value: "מ״ג", label: "מיליגרם (מ״ג)" },
+  { value: "ליטר", label: "ליטר" },
+  { value: "מ״ל", label: "מיליליטר (מ״ל)" },
+  { value: "יחידה", label: "יחידה" },
+  { value: "קרטון", label: "קרטון" },
+  { value: "מארז", label: "מארז" },
+  { value: "אריזה", label: "אריזה" },
+  { value: "בקבוק", label: "בקבוק" },
+  { value: "חבילה", label: "חבילה" },
+];
+
+const compatibleUnitOptions = (baseUnit: string) => {
+  if (!baseUnit) return [];
+  const candidates = commonUnitOptions.filter((option) => conversion(option.value, baseUnit) != null);
+  return [{ value: baseUnit, label: `${baseUnit} (יחידת המחיר בקטלוג)` }, ...candidates.filter((option) => unitKey(option.value) !== unitKey(baseUnit))];
+};
+
 export default function CostCalculatorPage() {
   // This page must ignore catalog-wide URL filters and include inactive products too.
   const { data: products = [], isLoading, isError, refetch } = useQuery({
@@ -55,6 +75,7 @@ export default function CostCalculatorPage() {
     unit: string;
     priceUnit: string;
     unitCost: number;
+    conversionFactor: number;
     totalCost: number;
     currency: string;
   }>>([]);
@@ -101,11 +122,18 @@ export default function CostCalculatorPage() {
       unit: amountUnit,
       priceUnit: baseUnit,
       unitCost: basePrice / baseQty,
+      conversionFactor: conversionFactor!,
       totalCost,
       currency: selected.currency || "ILS",
     }]);
   };
   const removeCalculationItem = (key: string) => setCalculationItems((items) => items.filter((item) => item.key !== key));
+  const updateCalculationQuantity = (key: string, quantity: number) => {
+    if (!Number.isFinite(quantity) || quantity <= 0) return;
+    setCalculationItems((items) => items.map((item) => item.key === key
+      ? { ...item, quantity, totalCost: item.unitCost * quantity * item.conversionFactor }
+      : item));
+  };
   const calculationTotals = calculationItems.reduce<Record<string, number>>((totals, item) => {
     totals[item.currency] = (totals[item.currency] ?? 0) + item.totalCost;
     return totals;
@@ -142,16 +170,16 @@ export default function CostCalculatorPage() {
         {selected && <div className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800/70"><div className="font-extrabold">{selected.name}</div><div className="mt-1 text-slate-500">ספק: {supplierName(selected)}</div><div className="mt-1">מחיר בקטלוג: <strong>{selected.current_price != null && selected.current_price > 0 ? money(selected.current_price, selected.currency) : "לא הוגדר מחיר תקין"}</strong>{selected.unit ? ` לכל ${selected.unit}` : ""}</div></div>}
         <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
           <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={useManualPackage} onChange={e => setUseManualPackage(e.target.checked)} className="h-4 w-4 accent-indigo-600"/> לחשב לפי מחיר אריזה וכמות אריזה אחרת</label>
-          {useManualPackage && <div className="mt-3 grid gap-3 sm:grid-cols-2"><Field label="מחיר אריזה (₪)" value={manualPackagePrice} onChange={setManualPackagePrice}/><Field label="כמות באריזה" value={packageQuantity} onChange={setPackageQuantity}/><Field label="יחידת מידה באריזה" value={packageUnit} onChange={setPackageUnit} placeholder="למשל ק״ג, ליטר, יחידה"/></div>}
+          {useManualPackage && <div className="mt-3 grid gap-3 sm:grid-cols-2"><Field label="מחיר אריזה (₪)" value={manualPackagePrice} onChange={setManualPackagePrice}/><Field label="כמות ביחידת המחיר" value={packageQuantity} onChange={setPackageQuantity}/><label className="block text-sm font-bold">יחידת המידה של המחיר<select value={packageUnit} onChange={e => { setPackageUnit(e.target.value); setAmountUnit(""); }} className={inputClass + " mt-1"}><option value="">בחרו יחידת מידה</option>{[...(selected?.unit ? [{ value: selected.unit, label: `${selected.unit} (מהקטלוג)` }] : []), ...commonUnitOptions.filter(option => unitKey(option.value) !== unitKey(selected?.unit ?? ""))].map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label></div>}
         </div>
       </section>
 
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center gap-2"><Scale className="h-5 w-5 text-indigo-600"/><h2 className="text-lg font-extrabold">חישוב עלות כמות</h2></div>
-        <p className="text-sm leading-6 text-slate-500">הזינו כמות ויחידת מידה. המערכת תמיר בין גרם לק״ג ובין מ״ל לליטר. יחידות שאינן ניתנות להמרה יחושבו רק כאשר יחידת המידה זהה.</p>
+        <p className="text-sm leading-6 text-slate-500">תחילה בדקו מהי יחידת המחיר שמוגדרת בקטלוג. לאחר בחירת מוצר, רשימת היחידות תציג רק יחידות תואמות: משקל עם משקל, נפח עם נפח, או אותה יחידה בדיוק. קרטון/מארז לא יומרו ליחידות אחרות בלי נתוני תכולה ידועים.</p>
         <Field label="כמות לחישוב" value={amountToCost} onChange={setAmountToCost} placeholder="למשל 250"/>
-        <Field label="יחידת מידה של הכמות" value={amountUnit} onChange={setAmountUnit} placeholder="למשל גרם, ק״ג, ליטר, יחידה"/>
-        {selected && !useManualPackage && <p className="text-xs text-slate-500">יחידת המידה שמוגדרת בקטלוג: {selected.unit || "לא הוגדרה"}. ודאו שהמחיר בקטלוג מתייחס ליחידה זו.</p>}
+        <label className="block text-sm font-bold">יחידת מידה של הכמות<select value={amountUnit} onChange={e => setAmountUnit(e.target.value)} disabled={!baseUnit} className={inputClass + " mt-1 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800"}><option value="">{baseUnit ? "בחרו יחידת מידה" : "בחרו מוצר או יחידת מחיר תחילה"}</option>{compatibleUnitOptions(baseUnit).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        {selected && !useManualPackage && <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"><strong>יחידת המחיר/הרכש בקטלוג:</strong> {selected.unit || "לא הוגדרה"}. זה הנתון הקובע איך המחיר נשמר. אם הספק מוכר בקרטון אך הקטלוג מציין יחידה אחרת, יש לוודא ולעדכן את נתוני המוצר/האריזה בקטלוג לפני שמסתמכים על החישוב.</div>}
         <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 dark:border-indigo-900/60 dark:bg-indigo-950/30">
           <div className="text-sm font-bold text-indigo-800 dark:text-indigo-200">עלות הכמות המבוקשת</div>
           <div className="mt-2 text-3xl font-black tabular-nums text-indigo-950 dark:text-white">{totalCost == null ? "—" : money(totalCost, useManualPackage ? "ILS" : selected?.currency ?? "ILS")}</div>
@@ -166,14 +194,14 @@ export default function CostCalculatorPage() {
 
     <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="text-lg font-extrabold">רשימת המוצרים לחישוב</h2><p className="mt-1 text-sm text-slate-500">הוסיפו כמה מוצרים שתרצו כדי לחשב את העלות המצטברת.</p></div>
+        <div><h2 className="text-lg font-extrabold">רשימת המוצרים לחישוב</h2><p className="mt-1 text-sm text-slate-500">הוסיפו מוצרים ושנו כמויות ישירות בטבלה; העלות מתעדכנת אוטומטית.</p></div>
         <span className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">{calculationItems.length} פריטים</span>
       </div>
       {calculationItems.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700">עדיין לא הוספתם מוצרים. בחרו מוצר, הזינו כמות ולחצו על „הוספת המוצר לרשימת החישוב”.</div> : <>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[680px] text-right text-sm">
             <thead><tr className="border-b border-slate-200 text-slate-500 dark:border-slate-700"><th className="px-3 py-3">מוצר</th><th className="px-3 py-3">ספק</th><th className="px-3 py-3">כמות</th><th className="px-3 py-3">מחיר ליחידה</th><th className="px-3 py-3">עלות</th><th className="px-3 py-3">פעולה</th></tr></thead>
-            <tbody>{calculationItems.map((item) => <tr key={item.key} className="border-b border-slate-100 last:border-0 dark:border-slate-800"><td className="px-3 py-3 font-bold">{item.name}</td><td className="px-3 py-3 text-slate-500">{item.supplier}</td><td className="px-3 py-3">{item.quantity.toLocaleString("he-IL")} {item.unit}</td><td className="px-3 py-3">{money(item.unitCost, item.currency)} / {item.priceUnit}</td><td className="px-3 py-3 font-extrabold">{money(item.totalCost, item.currency)}</td><td className="px-3 py-3"><button type="button" onClick={() => removeCalculationItem(item.key)} className="rounded-lg px-2 py-1 font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">הסר</button></td></tr>)}</tbody>
+            <tbody>{calculationItems.map((item) => <tr key={item.key} className="border-b border-slate-100 last:border-0 dark:border-slate-800"><td className="px-3 py-3 font-bold">{item.name}</td><td className="px-3 py-3 text-slate-500">{item.supplier}</td><td className="px-3 py-3"><div className="flex items-center gap-2"><input type="number" min="0.001" step="any" aria-label={`כמות עבור ${item.name}`} value={item.quantity} onChange={e => updateCalculationQuantity(item.key, Number(e.target.value))} className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"/><span>{item.unit}</span></div></td><td className="px-3 py-3">{money(item.unitCost, item.currency)} / {item.priceUnit}</td><td className="px-3 py-3 font-extrabold">{money(item.totalCost, item.currency)}</td><td className="px-3 py-3"><button type="button" onClick={() => removeCalculationItem(item.key)} className="rounded-lg px-2 py-1 font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">הסר</button></td></tr>)}</tbody>
           </table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/30">
