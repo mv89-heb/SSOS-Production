@@ -53,6 +53,7 @@ export default function CostCalculatorPage() {
     supplier: string;
     quantity: number;
     unit: string;
+    priceUnit: string;
     unitCost: number;
     totalCost: number;
     currency: string;
@@ -98,6 +99,7 @@ export default function CostCalculatorPage() {
       supplier: supplierName(selected),
       quantity,
       unit: amountUnit,
+      priceUnit: baseUnit,
       unitCost: basePrice / baseQty,
       totalCost,
       currency: selected.currency || "ILS",
@@ -171,7 +173,7 @@ export default function CostCalculatorPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[680px] text-right text-sm">
             <thead><tr className="border-b border-slate-200 text-slate-500 dark:border-slate-700"><th className="px-3 py-3">מוצר</th><th className="px-3 py-3">ספק</th><th className="px-3 py-3">כמות</th><th className="px-3 py-3">מחיר ליחידה</th><th className="px-3 py-3">עלות</th><th className="px-3 py-3">פעולה</th></tr></thead>
-            <tbody>{calculationItems.map((item) => <tr key={item.key} className="border-b border-slate-100 last:border-0 dark:border-slate-800"><td className="px-3 py-3 font-bold">{item.name}</td><td className="px-3 py-3 text-slate-500">{item.supplier}</td><td className="px-3 py-3">{item.quantity.toLocaleString("he-IL")} {item.unit}</td><td className="px-3 py-3">{money(item.unitCost, item.currency)} / {item.unit}</td><td className="px-3 py-3 font-extrabold">{money(item.totalCost, item.currency)}</td><td className="px-3 py-3"><button type="button" onClick={() => removeCalculationItem(item.key)} className="rounded-lg px-2 py-1 font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">הסר</button></td></tr>)}</tbody>
+            <tbody>{calculationItems.map((item) => <tr key={item.key} className="border-b border-slate-100 last:border-0 dark:border-slate-800"><td className="px-3 py-3 font-bold">{item.name}</td><td className="px-3 py-3 text-slate-500">{item.supplier}</td><td className="px-3 py-3">{item.quantity.toLocaleString("he-IL")} {item.unit}</td><td className="px-3 py-3">{money(item.unitCost, item.currency)} / {item.priceUnit}</td><td className="px-3 py-3 font-extrabold">{money(item.totalCost, item.currency)}</td><td className="px-3 py-3"><button type="button" onClick={() => removeCalculationItem(item.key)} className="rounded-lg px-2 py-1 font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">הסר</button></td></tr>)}</tbody>
           </table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/30">
