@@ -8,6 +8,7 @@ export interface RegulatedEggPrice {
   effective_date: string;
   published_at: string | null;
   change_percent: number | null;
+  verification_status: string;
   source_url: string;
   source_title: string;
   created_at: string | null;
@@ -42,6 +43,7 @@ export const regulatoryPricesService = {
     source_url: string;
     source_title: string;
     change_percent?: number;
+    verified_official?: boolean;
     items: Array<{ size_code: "M" | "L" | "XL"; max_consumer_price: number }>;
   }) => (await apiClient.post("/api/regulatory-prices/eggs/releases", payload)).data,
 };
