@@ -15,7 +15,7 @@ def _add_egg_product(client, name, sku):
     return response.get_json()["product"]["id"]
 
 
-def test_regulated_egg_price_history_is_seeded_and_does_not_touch_catalog(logged_in_client_a):
+def test_regulated_egg_price_history_is_seeded_and_does_not_touch_catalog(logged_in_client_a, db):
     product_id = _add_egg_product(logged_in_client_a, "ביצים L 12 יחידות", "EGG-L-12")
     _add_egg_product(logged_in_client_a, "ביצי חופש L 12 יחידות", "EGG-FREE-L")
     # The test fixture creates tables directly rather than applying Alembic data migrations.
