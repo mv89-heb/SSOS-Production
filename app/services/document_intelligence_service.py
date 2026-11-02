@@ -7,11 +7,14 @@ from decimal import Decimal, InvalidOperation
 
 from flask import current_app
 from werkzeug.exceptions import BadRequest, Conflict, NotFound, HTTPException
+from sqlalchemy import func
 
 from app.extensions import db
 from app.models.document_analysis import DocumentAnalysis
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.receipt import Receipt, RECEIPT_POSTED
+from app.models.receipt_item import ReceiptItem
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.supplier_offer import SupplierProductOffer
 from app.services.receipt_service import ReceiptService
@@ -519,6 +522,15 @@ class DocumentIntelligenceService:
         for line in lines:
             if not isinstance(line, dict) or not line.get("matched") or not isinstance(line.get("order_item_id"), int):
                 raise Conflict("Every delivery note line must be matched to an order item before posting")
+            # A product candidate is not an approved reconciliation. Only a clean,
+            # high-confidence MATCH may post inventory; REVIEW lines must be resolved
+            # in the reconciliation workflow before a receipt can be created.
+            try:
+                confidence = Decimal(str(line.get("confidence") or 0))
+            except (InvalidOperation, TypeError, ValueError):
+                confidence = Decimal("0")
+            if line.get("status") != "MATCH" or line.get("flags") or not confidence.is_finite() or confidence < Decimal("0.93"):
+                raise Conflict("Delivery note contains lines requiring manual reconciliation; resolve them before posting")
             index = line.get("line_index")
             if not isinstance(index, int) or index < 0 or index >= len(extracted_items):
                 raise BadRequest("Delivery note line mapping is invalid")
@@ -611,6 +623,27 @@ class DocumentIntelligenceService:
         auto_updated = []
         intelligence = PriceIntelligenceService(self.tenant_id)
         order_item_ids = {line.get("order_item_id") for line in lines if isinstance(line, dict) and line.get("order_item_id")}
+        # Compare invoice quantities with the sum of posted receipt quantities for
+        # this order only. Draft/cancelled receipts and other tenants are excluded.
+        received_quantities = {}
+        if order_item_ids:
+            received_rows = (
+                db.session.query(
+                    ReceiptItem.order_item_id,
+                    func.coalesce(func.sum(ReceiptItem.quantity), 0),
+                )
+                .join(Receipt, Receipt.id == ReceiptItem.receipt_id)
+                .filter(
+                    ReceiptItem.tenant_id == self.tenant_id,
+                    Receipt.tenant_id == self.tenant_id,
+                    Receipt.order_id == order.id,
+                    Receipt.status == RECEIPT_POSTED,
+                    ReceiptItem.order_item_id.in_(order_item_ids),
+                )
+                .group_by(ReceiptItem.order_item_id)
+                .all()
+            )
+            received_quantities = {item_id: Decimal(str(quantity or 0)) for item_id, quantity in received_rows}
         order_items = {
             item.id: item for item in OrderItem.query.filter(
                 OrderItem.tenant_id == self.tenant_id, OrderItem.order_id == order.id,
@@ -623,10 +656,16 @@ class DocumentIntelligenceService:
             item = data.get("items", [])[line["line_index"]] if isinstance(line.get("line_index"), int) and 0 <= line["line_index"] < len(data.get("items", [])) else {}
             quantity = item.get("quantity") if isinstance(item, dict) else None
             invoice_price = item.get("unit_price") if isinstance(item, dict) else None
+            order_item_id = line.get("order_item_id")
+            received_quantity = (
+                received_quantities.get(order_item_id, Decimal("0"))
+                if isinstance(order_item_id, int) and not isinstance(order_item_id, bool)
+                else None
+            )
             invoice_lines.append({
                 **line,
                 "invoiced_quantity": quantity,
-                "received_quantity": None,
+                "received_quantity": str(received_quantity) if received_quantity is not None else None,
                 "invoice_unit_price": invoice_price,
             })
             if not allow_price_updates or not line.get("matched") or line.get("confidence", 0) < 0.93:
