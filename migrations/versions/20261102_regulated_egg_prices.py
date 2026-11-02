@@ -51,9 +51,9 @@ def upgrade():
     # Official 12-egg consumer ceiling prices. Previous release is retained for
     # transparent history; this does not alter supplier offers or product prices.
     rows = [
-        ("M", 13.13, date(2025, 11, 1), None, 0.0),
-        ("L", 14.24, date(2025, 11, 1), None, 0.0),
-        ("XL", 15.48, date(2025, 11, 1), None, 0.0),
+        ("M", 13.13, date(2025, 11, 1), None, None),
+        ("L", 14.24, date(2025, 11, 1), None, None),
+        ("XL", 15.48, date(2025, 11, 1), None, None),
         ("M", 13.40, date(2026, 11, 1), date(2026, 10, 22), 2.1),
         ("L", 14.54, date(2026, 11, 1), date(2026, 10, 22), 2.1),
         ("XL", 15.81, date(2026, 11, 1), date(2026, 10, 22), 2.1),
