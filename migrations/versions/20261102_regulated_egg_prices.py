@@ -22,7 +22,8 @@ def upgrade():
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("size_code", sa.String(length=2), nullable=False),
         sa.Column("pack_size", sa.Integer(), nullable=False, server_default="12"),
-        sa.Column("max_consumer_price", sa.Numeric(10, 2), nullable=False),
+        sa.Column("max_consumer_price", sa.Numeric(10, 2), nullable=True),
+        sa.Column("verification_status", sa.String(length=30), nullable=False, server_default="OFFICIAL"),
         sa.Column("effective_date", sa.Date(), nullable=False),
         sa.Column("published_at", sa.Date(), nullable=True),
         sa.Column("change_percent", sa.Numeric(6, 3), nullable=True),
@@ -51,18 +52,19 @@ def upgrade():
     # Official 12-egg consumer ceiling prices. Previous release is retained for
     # transparent history; this does not alter supplier offers or product prices.
     rows = [
-        ("M", 13.13, date(2025, 11, 1), None, None),
-        ("L", 14.24, date(2025, 11, 1), None, None),
-        ("XL", 15.48, date(2025, 11, 1), None, None),
-        ("M", 13.40, date(2026, 11, 1), date(2026, 10, 22), 2.1),
-        ("L", 14.54, date(2026, 11, 1), date(2026, 10, 22), 2.1),
-        ("XL", 15.81, date(2026, 11, 1), date(2026, 10, 22), 2.1),
+        ("M", 13.13, date(2025, 11, 1), None, None, "OFFICIAL"),
+        ("L", 14.24, date(2025, 11, 1), None, None, "OFFICIAL"),
+        ("XL", 15.48, date(2025, 11, 1), None, None, "OFFICIAL"),
+        ("M", None, date(2026, 11, 1), date(2026, 10, 22), 2.1, "ANNOUNCED_RATE_ONLY"),
+        ("L", None, date(2026, 11, 1), date(2026, 10, 22), 2.1, "ANNOUNCED_RATE_ONLY"),
+        ("XL", None, date(2026, 11, 1), date(2026, 10, 22), 2.1, "ANNOUNCED_RATE_ONLY"),
     ]
     table = sa.table(
         "regulated_egg_prices",
         sa.column("size_code", sa.String),
         sa.column("pack_size", sa.Integer),
         sa.column("max_consumer_price", sa.Numeric(10, 2)),
+        sa.column("verification_status", sa.String),
         sa.column("effective_date", sa.Date),
         sa.column("published_at", sa.Date),
         sa.column("change_percent", sa.Numeric(6, 3)),
@@ -73,10 +75,10 @@ def upgrade():
         {
             "size_code": size, "pack_size": 12, "max_consumer_price": price,
             "effective_date": effective, "published_at": published,
-            "change_percent": change, "source_url": SOURCE_URL,
+            "change_percent": change, "verification_status": verification_status, "source_url": SOURCE_URL,
             "source_title": SOURCE_TITLE,
         }
-        for size, price, effective, published, change in rows
+        for size, price, effective, published, change, verification_status in rows
     ])
 
 
