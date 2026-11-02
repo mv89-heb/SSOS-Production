@@ -164,7 +164,6 @@ def _register_blueprints(app):
     from app.routes.price_overview import price_overview_bp
     from app.routes.regulatory_prices import regulated_prices_bp
     from app.routes.historical_document_import import historical_document_import_bp
-    from app.routes.regulatory_prices import regulated_prices_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(orders_bp)
@@ -192,7 +191,6 @@ def _register_blueprints(app):
     app.register_blueprint(price_overview_bp)
     app.register_blueprint(regulated_prices_bp)
     app.register_blueprint(historical_document_import_bp)
-    app.register_blueprint(regulated_prices_bp)
     csrf.exempt(health_bp)
     csrf.exempt(web_push_bp)
 
