@@ -53,7 +53,7 @@ export default function RegulatoryPricesPage() {
     </header>
 
     <section className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 dark:border-indigo-900 dark:bg-indigo-950/20">
-      <div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-indigo-600" size={21}/><div><h2 className="font-bold text-slate-900 dark:text-white">המחיר המפוקח אינו מחיר הרכש</h2><p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">הנתונים מתייחסים למחיר מרבי לצרכן עבור אריזת 12 ביצים. הם אינם מחליפים מחיר ספק, הצעת מחיר או מחיר בהזמנת רכש. ביצי חופש, אורגניות וביצים מועשרות באומגה מוחרגות מהפיקוח ולא יסווגו כמפוקחות.</p></div></div>
+      <div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-indigo-600" size={21}/><div><h2 className="font-bold text-slate-900 dark:text-white">המחיר המפוקח אינו מחיר הרכש</h2><p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">הודעת העדכון מ־1.11.2026 מציינת עלייה של 2.1% במחיר הסופי לצרכן עבור כלל אריזות הביצים — מפוקחות ולא מפוקחות, לרבות חופש ואורגניות. זהו שיעור עדכון לצרכן בלבד: הוא אינו מחיר ספק ואינו הוראה להעלות מחיר רכש בקטלוג. טבלת הפיקוח להלן מתייחסת לתקרת המחיר הרשמית של אריזות מפוקחות בלבד; ביצי חופש, אורגניות ומועשרות באומגה אינן מסווגות כמוצרים מפוקחים, אך הן עדיין נכללות בהודעת ההתייקרות הכללית לצרכן.</p></div></div>
     </section>
 
     {query.isLoading && <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-950">טוען נתוני פיקוח…</div>}
