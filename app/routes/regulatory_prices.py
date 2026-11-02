@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import select
-from werkzeug.exceptions import BadRequest, Conflict, Forbidden, HTTPException
+from werkzeug.exceptions import BadRequest, Conflict, HTTPException
 
 from app.extensions import db
 from app.models.product import Product
@@ -106,6 +106,8 @@ def add_regulated_egg_release():
             raise BadRequest("נדרשים כותרת מקור ושלושה מחירים: M, L, XL.")
         normalized = {}
         for item in items:
+            if not isinstance(item, dict):
+                raise BadRequest("פרטי מחיר אינם תקינים.")
             size = str(item.get("size_code") or "").upper()
             if size not in SIZE_LABELS or size in normalized:
                 raise BadRequest("יש לספק בדיוק גדלים M, L ו-XL.")
