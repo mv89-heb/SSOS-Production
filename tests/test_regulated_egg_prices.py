@@ -1,6 +1,3 @@
-from datetime import date
-
-
 def _add_egg_product(client, name, sku):
     supplier_response = client.post("/api/catalog/suppliers", json={"name": f"Egg Supplier {sku}"})
     assert supplier_response.status_code == 201, supplier_response.get_json()
