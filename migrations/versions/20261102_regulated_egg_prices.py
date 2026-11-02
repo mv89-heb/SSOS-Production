@@ -37,6 +37,17 @@ def upgrade():
     )
     op.create_index("ix_regulated_egg_price_effective", "regulated_egg_prices", ["effective_date"])
 
+    op.create_table(
+        "regulatory_price_monitor_state",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("last_article_url", sa.String(length=1000), nullable=True),
+        sa.Column("last_article_title", sa.String(length=500), nullable=True),
+        sa.Column("last_published_at", sa.String(length=30), nullable=True),
+        sa.Column("last_checked_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("last_error", sa.String(length=500), nullable=True),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+    )
+
     # Official 12-egg consumer ceiling prices. Previous release is retained for
     # transparent history; this does not alter supplier offers or product prices.
     rows = [
@@ -70,5 +81,6 @@ def upgrade():
 
 
 def downgrade():
+    op.drop_table("regulatory_price_monitor_state")
     op.drop_index("ix_regulated_egg_price_effective", table_name="regulated_egg_prices")
     op.drop_table("regulated_egg_prices")
