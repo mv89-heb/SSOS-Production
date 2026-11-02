@@ -10,6 +10,7 @@ from werkzeug.exceptions import BadRequest, Conflict, Forbidden, HTTPException
 from app.extensions import db
 from app.models.product import Product
 from app.models.regulated_egg_price import RegulatedEggPrice
+from app.models.regulatory_price_monitor_state import RegulatoryPriceMonitorState
 from app.services.audit_service import AuditService
 from app.services.permission_service import PermissionService
 
@@ -69,8 +70,10 @@ def list_regulated_egg_prices():
                 "product_current_price": float(product.current_price) if product.current_price is not None else None,
                 "note": "מחיר המוצר בקטלוג הוא מחיר ספק/רכש ואינו מוחלף במחיר תקרה לצרכן.",
             })
+        monitor_state = db.session.get(RegulatoryPriceMonitorState, 1)
         return jsonify({
             "success": True,
+            "monitor": monitor_state.to_dict() if monitor_state else None,
             "current_release": current,
             "history": [row.to_dict() for row in rows],
             "matched_products": matches,
