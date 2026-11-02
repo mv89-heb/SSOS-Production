@@ -51,3 +51,21 @@ def test_regulated_egg_price_release_requires_official_source_and_is_idempotent(
     invalid = dict(payload, effective_date="2027-06-01", source_url="https://example.com/egg-prices")
     rejected = logged_in_client_a.post("/api/regulatory-prices/eggs/releases", json=invalid)
     assert rejected.status_code == 400
+
+
+
+def test_official_announcement_parser_only_matches_egg_price_updates():
+    from scripts.check_regulated_egg_prices import find_latest_egg_announcement
+
+    html = """
+    <html><body>
+      <a href="/he/news/egg-price-update">22/10/26 הודעות לעיתונות מחירי הביצים שבפיקוח יתעדכנו בכ-2.1%</a>
+      <a href="/he/news/other">הודעה אחרת על חקלאות</a>
+    </body></html>
+    """
+    result = find_latest_egg_announcement(html)
+    assert result is not None
+    assert result["url"] == "https://www.gov.il/he/news/egg-price-update"
+    assert "2.1%" in result["title"]
+    assert result["published_at"] == "22/10/26"
+    assert find_latest_egg_announcement("<html><a href='/news/other'>עדכון אחר</a></html>") is None
