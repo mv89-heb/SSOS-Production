@@ -12,7 +12,7 @@ down_revision = "20261028_hist_doc_import"
 branch_labels = None
 depends_on = None
 
-OFFICIAL_2025_URL = "https://www.gov.il/BlobFolder/guide/egg_price_years/he/investment_publication_order_price_2025_signed.pdf"
+OFFICIAL_2025_URL = "https://www.gov.il/BlobFolder/guide/egg_price_years/he/investment_publication_order_price2025.pdf"
 ANNOUNCEMENT_2026_URL = "https://www.gov.il/he/Departments/ministry_of_agriculture_and_food_security/govil-landing-page"
 SOURCE_TITLE_2025 = "הודעת פיקוח – מחירים מרביים לביצי מאכל, 1.11.2025"
 SOURCE_TITLE_2026 = "משרד החקלאות – הודעה על עדכון מחירי ביצים ב-2.1%, 22.10.2026"
