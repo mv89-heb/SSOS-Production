@@ -54,9 +54,10 @@ def list_regulated_egg_prices():
         ).scalars().all()
         matches = []
         for product in products:
-            if "ביצ" not in str(product.name or "").lower() and "egg" not in str(product.name or "").lower():
+            searchable = " ".join((product.name or "", product.description or "", product.category or "")).lower()
+            if "ביצ" not in searchable and "egg" not in searchable:
                 continue
-            size = _size_for_name(product.name)
+            size = _size_for_name(searchable)
             matches.append({
                 "product_id": product.id,
                 "product_name": product.name,
@@ -92,7 +93,7 @@ def add_regulated_egg_release():
         payload = request.get_json(silent=True) or {}
         source_url = str(payload.get("source_url") or "").strip()
         host = (urlparse(source_url).hostname or "").lower()
-        if host not in {"gov.il", "www.gov.il", "data.gov.il", "www.data.gov.il"}:
+        if urlparse(source_url).scheme != "https" or host not in {"gov.il", "www.gov.il", "data.gov.il", "www.data.gov.il"}:
             raise BadRequest("יש להזין קישור למקור ממשלתי רשמי בלבד.")
         try:
             effective = date.fromisoformat(str(payload.get("effective_date") or ""))
@@ -123,7 +124,10 @@ def add_regulated_egg_release():
         if existing:
             raise Conflict("כבר קיים עדכון מחירים לתאריך התחילה הזה.")
         change = payload.get("change_percent")
-        change = Decimal(str(change)) if change not in (None, "") else None
+        try:
+            change = Decimal(str(change)) if change not in (None, "") else None
+        except (InvalidOperation, TypeError):
+            raise BadRequest("אחוז השינוי אינו תקין.")
         if change is not None and (not change.is_finite() or abs(change) > 100):
             raise BadRequest("אחוז השינוי אינו תקין.")
         created = []
