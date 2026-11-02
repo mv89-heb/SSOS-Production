@@ -162,6 +162,7 @@ def _register_blueprints(app):
     from app.routes.inventory_planning import inventory_planning_bp
     from app.routes.inventory_count import inventory_count_bp
     from app.routes.price_overview import price_overview_bp
+    from app.routes.regulatory_prices import regulated_prices_bp
     from app.routes.historical_document_import import historical_document_import_bp
     from app.routes.regulatory_prices import regulated_prices_bp
 
@@ -189,6 +190,7 @@ def _register_blueprints(app):
     app.register_blueprint(inventory_planning_bp)
     app.register_blueprint(inventory_count_bp)
     app.register_blueprint(price_overview_bp)
+    app.register_blueprint(regulated_prices_bp)
     app.register_blueprint(historical_document_import_bp)
     app.register_blueprint(regulated_prices_bp)
     csrf.exempt(health_bp)
