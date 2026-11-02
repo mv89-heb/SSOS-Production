@@ -32,6 +32,7 @@ export interface RegulatedEggPricesResponse {
   matched_products: RegulatedEggProductMatch[];
   effective_date: string | null;
   source_scope: string;
+  monitor: { last_article_url: string | null; last_article_title: string | null; last_published_at: string | null; last_checked_at: string | null; last_error: string | null } | null;
 }
 export const regulatoryPricesService = {
   getEggPrices: async () => (await apiClient.get<RegulatedEggPricesResponse>("/api/regulatory-prices/eggs")).data,
