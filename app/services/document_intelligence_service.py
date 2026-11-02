@@ -612,7 +612,6 @@ class DocumentIntelligenceService:
             raise Conflict("Invoice number already exists for this supplier")
         receipt_id = payload.get("receipt_id")
         if receipt_id not in (None, ""):
-            from app.models.receipt import Receipt, RECEIPT_POSTED
             receipt = Receipt.query.filter_by(id=receipt_id, order_id=order.id, tenant_id=self.tenant_id).first()
             if receipt is None or receipt.status != RECEIPT_POSTED:
                 raise BadRequest("receipt_id must refer to a posted receipt for the selected order")
