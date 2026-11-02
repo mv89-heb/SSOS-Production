@@ -1,3 +1,9 @@
+from datetime import date
+
+from app.extensions import db
+from app.models.regulated_egg_price import RegulatedEggPrice
+
+
 def _add_egg_product(client, name, sku):
     supplier_response = client.post("/api/catalog/suppliers", json={"name": f"Egg Supplier {sku}"})
     assert supplier_response.status_code == 201, supplier_response.get_json()
@@ -12,6 +18,17 @@ def _add_egg_product(client, name, sku):
 def test_regulated_egg_price_history_is_seeded_and_does_not_touch_catalog(logged_in_client_a):
     product_id = _add_egg_product(logged_in_client_a, "ביצים L 12 יחידות", "EGG-L-12")
     _add_egg_product(logged_in_client_a, "ביצי חופש L 12 יחידות", "EGG-FREE-L")
+    # The test fixture creates tables directly rather than applying Alembic data migrations.
+    # Seed the same 2026 rate-only release here so this API test is deterministic.
+    for size in ("M", "L", "XL"):
+        db.session.add(RegulatedEggPrice(
+            size_code=size, pack_size=12, max_consumer_price=None,
+            effective_date=date(2026, 11, 1), published_at=date(2026, 10, 22),
+            change_percent=2.1, verification_status="ANNOUNCED_RATE_ONLY",
+            source_url="https://www.gov.il/he/Departments/ministry_of_agriculture_and_food_security/govil-landing-page",
+            source_title="הודעת עדכון מחירי ביצים בפיקוח",
+        ))
+    db.session.commit()
     response = logged_in_client_a.get("/api/regulatory-prices/eggs")
     assert response.status_code == 200
     payload = response.get_json()
