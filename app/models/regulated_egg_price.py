@@ -15,10 +15,11 @@ class RegulatedEggPrice(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     size_code = db.Column(db.String(2), nullable=False)
     pack_size = db.Column(db.Integer, nullable=False, default=12)
-    max_consumer_price = db.Column(db.Numeric(10, 2), nullable=False)
+    max_consumer_price = db.Column(db.Numeric(10, 2), nullable=True)
     effective_date = db.Column(db.Date, nullable=False)
     published_at = db.Column(db.Date, nullable=True)
     change_percent = db.Column(db.Numeric(6, 3), nullable=True)
+    verification_status = db.Column(db.String(30), nullable=False, default="OFFICIAL")
     source_url = db.Column(db.String(1000), nullable=False)
     source_title = db.Column(db.String(300), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
@@ -30,7 +31,8 @@ class RegulatedEggPrice(db.Model):
             "id": self.id,
             "size_code": self.size_code,
             "pack_size": self.pack_size,
-            "max_consumer_price": float(self.max_consumer_price),
+            "max_consumer_price": float(self.max_consumer_price) if self.max_consumer_price is not None else None,
+            "verification_status": self.verification_status,
             "effective_date": self.effective_date.isoformat(),
             "published_at": self.published_at.isoformat() if self.published_at else None,
             "change_percent": float(self.change_percent) if self.change_percent is not None else None,
