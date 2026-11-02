@@ -21,7 +21,8 @@ def test_regulated_egg_price_history_is_seeded_and_does_not_touch_catalog(logged
     assert all(row["verification_status"] == "ANNOUNCED_RATE_ONLY" for row in payload["current_release"])
     matches = {row["product_name"]: row for row in payload["matched_products"]}
     assert matches["ביצים L 12 יחידות"]["regulated"] is True
-    assert matches["ביצים L 12 יחידות"]["max_consumer_price"] == 14.54
+    assert matches["ביצים L 12 יחידות"]["max_consumer_price"] is None
+    assert matches["ביצים L 12 יחידות"]["product_current_price"] == 12.5
     assert matches["ביצי חופש L 12 יחידות"]["regulated"] is False
     assert matches["ביצי חופש L 12 יחידות"]["max_consumer_price"] is None
     catalog = logged_in_client_a.get("/api/catalog/products").get_json()["products"]
