@@ -16,6 +16,7 @@ export default function RegulatoryPricesPage() {
   const [sourceUrl, setSourceUrl] = useState("https://www.gov.il/he/Departments/ministry_of_agriculture_and_food_security/govil-landing-page");
   const [sourceTitle, setSourceTitle] = useState("משרד החקלאות וביטחון המזון – עדכון מחירי ביצים");
   const [changePercent, setChangePercent] = useState("2.1");
+  const [verifiedOfficial, setVerifiedOfficial] = useState(false);
   const [prices, setPrices] = useState({ M: "13.40", L: "14.54", XL: "15.81" });
   const [notice, setNotice] = useState("");
   const mutation = useMutation({
@@ -40,6 +41,7 @@ export default function RegulatoryPricesPage() {
       source_url: sourceUrl,
       source_title: sourceTitle,
       change_percent: changePercent ? Number(changePercent) : undefined,
+      verified_official: verifiedOfficial,
       items: (["M", "L", "XL"] as const).map((size_code) => ({ size_code, max_consumer_price: Number(prices[size_code]) })),
     });
   };
@@ -61,7 +63,7 @@ export default function RegulatoryPricesPage() {
 
     {!query.isLoading && !query.isError && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
       <div className="flex items-center justify-between gap-3"><div><h2 className="font-bold">מחירים בתוקף</h2><p className="mt-1 text-xs text-slate-500">החל מ־{data?.effective_date ? new Date(data.effective_date + "T00:00:00").toLocaleDateString("he-IL") : "לא הוגדר"}</p></div><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">מחיר מרבי לצרכן · 12 ביצים</span></div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">{(["M", "L", "XL"] as const).map((size) => { const row = current.find((item) => item.size_code === size); return <div key={size} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><div className="text-sm font-bold text-slate-500">{sizeLabels[size]}</div><div className="mt-2 text-3xl font-black tabular-nums text-slate-900 dark:text-white">{row ? money(row.max_consumer_price) : "—"}</div>{row?.change_percent != null && <div className="mt-1 text-xs text-slate-500">שינוי שפורסם: {row.change_percent}%</div>}</div>; })}</div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">{(["M", "L", "XL"] as const).map((size) => { const row = current.find((item) => item.size_code === size); return <div key={size} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><div className="text-sm font-bold text-slate-500">{sizeLabels[size]}</div><div className="mt-2 text-3xl font-black tabular-nums text-slate-900 dark:text-white">{row?.max_consumer_price != null ? money(row.max_consumer_price) : "ממתין לאימות"}</div>{row?.change_percent != null && <div className="mt-1 text-xs text-slate-500">שינוי שפורסם: {row.change_percent}%</div>}{row && row.verification_status !== "OFFICIAL" && <div className="mt-2 text-xs font-semibold text-amber-700">הודעה בלבד — המחיר הסופי טרם אומת בצו</div>}</div>; })}</div>
       {current[0]?.source_url && <a href={current[0].source_url} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-indigo-600 hover:underline">מקור ממשלתי <ExternalLink size={14}/></a>}
     </section>}
 
@@ -73,16 +75,17 @@ export default function RegulatoryPricesPage() {
 
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
       <div className="flex items-center gap-2"><History size={18} className="text-indigo-600"/><h2 className="font-bold">היסטוריית מחירים מפוקחים</h2></div>
-      <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[620px] text-right text-sm"><thead><tr className="border-b text-xs text-slate-500"><th className="p-2">תאריך תחילה</th><th className="p-2">גודל</th><th className="p-2">מחיר לצרכן</th><th className="p-2">שינוי</th><th className="p-2">מקור</th></tr></thead><tbody>{history.map((row) => <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800"><td className="p-2">{new Date(row.effective_date + "T00:00:00").toLocaleDateString("he-IL")}</td><td className="p-2">{sizeLabels[row.size_code]}</td><td className="p-2 font-semibold tabular-nums">{money(row.max_consumer_price)}</td><td className="p-2">{row.change_percent != null ? row.change_percent + "%" : "—"}</td><td className="p-2"><a href={row.source_url} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">מסמך מקור</a></td></tr>)}</tbody></table></div>
+      <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[620px] text-right text-sm"><thead><tr className="border-b text-xs text-slate-500"><th className="p-2">תאריך תחילה</th><th className="p-2">גודל</th><th className="p-2">מחיר לצרכן</th><th className="p-2">שינוי</th><th className="p-2">מקור</th></tr></thead><tbody>{history.map((row) => <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800"><td className="p-2">{new Date(row.effective_date + "T00:00:00").toLocaleDateString("he-IL")}</td><td className="p-2">{sizeLabels[row.size_code]}</td><td className="p-2 font-semibold tabular-nums">{money(row.max_consumer_price)}</td><td className="p-2">{row.change_percent != null ? row.change_percent + "%" : "—"}{row.verification_status !== "OFFICIAL" ? " · ממתין לאימות" : ""}</td><td className="p-2"><a href={row.source_url} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">מסמך מקור</a></td></tr>)}</tbody></table></div>
     </section>
 
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-      <h2 className="font-bold">רישום עדכון רשמי עתידי</h2><p className="mt-1 text-sm text-slate-500">לאחר פרסום צו או הודעה ממשלתית חדשה, מנהל יכול לתעד את שלושת המחירים. הרשומה מתווספת להיסטוריה ואינה מעדכנת מחירי ספקים.</p>
+      <h2 className="font-bold">רישום עדכון רשמי עתידי</h2><p className="mt-1 text-sm text-slate-500">לאחר פרסום צו או הודעה ממשלתית חדשה, מנהל יכול לתעד את שלושת המחירים. סימון אימות נדרש כדי לסווג אותם כמחירים רשמיים מאומתים. הרשומה מתווספת להיסטוריה ואינה מעדכנת מחירי ספקים.</p>
       <form onSubmit={submit} className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="text-sm font-semibold">תאריך תחילת תוקף<input required type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"/></label>
         <label className="text-sm font-semibold">תאריך פרסום<input type="date" value={publishedAt} onChange={(e) => setPublishedAt(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"/></label>
         {(["M", "L", "XL"] as const).map((size) => <label key={size} className="text-sm font-semibold">מחיר {sizeLabels[size]} (₪ / 12 ביצים)<input required type="number" min="0.01" max="1000" step="0.01" value={prices[size]} onChange={(e) => setPrices((current) => ({ ...current, [size]: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"/></label>)}
         <label className="text-sm font-semibold">אחוז שינוי<input type="number" step="0.001" value={changePercent} onChange={(e) => setChangePercent(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"/></label>
+        <label className="sm:col-span-2 flex items-start gap-2 text-sm"><input type="checkbox" checked={verifiedOfficial} onChange={(e) => setVerifiedOfficial(e.target.checked)} className="mt-1"/><span>אימתתי את המחירים מול הצו/הפרסום הרשמי עצמו. אם לא סומן, העדכון יישמר כהודעה/הערכה ולא כמחיר רשמי מאומת.</span></label>
         <label className="text-sm font-semibold sm:col-span-2">כותרת המקור<input required value={sourceTitle} onChange={(e) => setSourceTitle(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"/></label>
         <label className="text-sm font-semibold sm:col-span-2">קישור ממשלתי<input required type="url" value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"/></label>
         <div className="sm:col-span-2"><button type="submit" disabled={mutation.isPending} className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{mutation.isPending ? "שומר…" : "שמור עדכון רשמי"}</button>{notice && <p role="status" className="mt-2 text-sm text-slate-600">{notice}</p>}</div>
