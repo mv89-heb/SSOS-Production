@@ -98,7 +98,7 @@ def run_monitor():
             return 0
 
         is_first_run = not state.last_article_url
-        is_new = not is_first_run and announcement["url"] != state.last_article_url
+        is_new = not is_first_run and (announcement["url"] != state.last_article_url or announcement["title"] != state.last_article_title)
         if is_first_run:
             print("Initial baseline established; no notification sent.")
         elif is_new:
