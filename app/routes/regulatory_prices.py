@@ -131,11 +131,13 @@ def add_regulated_egg_release():
         if change is not None and (not change.is_finite() or abs(change) > 100):
             raise BadRequest("אחוז השינוי אינו תקין.")
         created = []
+        verification_status = "OFFICIAL" if payload.get("verified_official") is True else "ANNOUNCED_ESTIMATE"
         for size, price in normalized.items():
             row = RegulatedEggPrice(
                 size_code=size, pack_size=12, max_consumer_price=price,
                 effective_date=effective, published_at=published,
-                change_percent=change, source_url=source_url, source_title=title,
+                change_percent=change, verification_status=verification_status,
+                source_url=source_url, source_title=title,
                 created_by_tenant_id=current_user.tenant_id, created_by_user_id=current_user.id,
             )
             db.session.add(row)
