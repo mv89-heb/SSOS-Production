@@ -2,7 +2,7 @@ from datetime import date
 
 
 def _add_egg_product(client, name, sku):
-    supplier_response = client.post("/api/catalog/suppliers", json={"name": "Egg Supplier"})
+    supplier_response = client.post("/api/catalog/suppliers", json={"name": f"Egg Supplier {sku}"})
     assert supplier_response.status_code == 201, supplier_response.get_json()
     supplier_id = supplier_response.get_json()["supplier"]["id"]
     response = client.post("/api/catalog/products", json={
@@ -19,7 +19,9 @@ def test_regulated_egg_price_history_is_seeded_and_does_not_touch_catalog(logged
     assert response.status_code == 200
     payload = response.get_json()
     current = {row["size_code"]: row["max_consumer_price"] for row in payload["current_release"]}
-    assert current == {"M": 13.40, "L": 14.54, "XL": 15.81}
+    assert current == {"M": None, "L": None, "XL": None}
+    assert all(row["change_percent"] == 2.1 for row in payload["current_release"])
+    assert all(row["verification_status"] == "ANNOUNCED_RATE_ONLY" for row in payload["current_release"])
     matches = {row["product_name"]: row for row in payload["matched_products"]}
     assert matches["ביצים L 12 יחידות"]["regulated"] is True
     assert matches["ביצים L 12 יחידות"]["max_consumer_price"] == 14.54
@@ -36,6 +38,7 @@ def test_regulated_egg_price_release_requires_official_source_and_is_idempotent(
         "published_at": "2027-04-20",
         "source_url": "https://www.gov.il/he/example",
         "source_title": "הודעת עדכון רשמית",
+        "verified_official": True,
         "change_percent": 1.5,
         "items": [
             {"size_code": "M", "max_consumer_price": 13.60},
