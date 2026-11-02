@@ -8,6 +8,7 @@ from app.models.supplier_product import SupplierProduct
 from app.models.price_history import PriceHistory
 from app.models.price_observation import PriceObservation
 from app.models.regulated_egg_price import RegulatedEggPrice
+from app.models.regulatory_price_monitor_state import RegulatoryPriceMonitorState
 from app.models.document_analysis import DocumentAnalysis
 from app.models.product_classification_feedback import ProductClassificationFeedback
 from app.models.order import Order
@@ -26,7 +27,7 @@ from app.models.historical_document_import import HistoricalImportBatch, Histori
 
 __all__ = [
     "Tenant", "User", "Supplier", "Product", "SupplierProductOffer",
-    "MasterProduct", "SupplierProduct", "PriceHistory", "PriceObservation", "RegulatedEggPrice",
+    "MasterProduct", "SupplierProduct", "PriceHistory", "PriceObservation", "RegulatedEggPrice", "RegulatoryPriceMonitorState",
     "DocumentAnalysis", "ProductClassificationFeedback", "Order", "OrderItem", "Receipt", "ReceiptItem", "SupplierInvoice", "SupplierInvoicePayment", "IdempotencyKey", "AuditLog",
     "Notification", "GoogleCalendarConnection", "InventoryMovement",
     "InventoryPlanningPeriod", "HistoricalImportBatch", "HistoricalPurchaseOrder", "HistoricalDocumentRecord",
