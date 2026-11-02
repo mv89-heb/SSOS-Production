@@ -4,7 +4,7 @@ export interface RegulatedEggPrice {
   id: number;
   size_code: "M" | "L" | "XL";
   pack_size: number;
-  max_consumer_price: number;
+  max_consumer_price: number | null;
   effective_date: string;
   published_at: string | null;
   change_percent: number | null;
