@@ -205,7 +205,7 @@ export default function DocumentIntelligencePage() {
         <span className={`rounded-full px-3 py-1 text-xs font-bold ${data.workflow_routing.status === "READY_FOR_REVIEW" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"}`}>{data.workflow_routing.status_label}</span>
       </div>
       <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-950/50"><div className="text-xs text-slate-500">זיהוי ספק</div><div className="mt-1 font-semibold">{data.workflow_routing.supplier_identified ? "זוהה" : "נדרשת בדיקה"}</div></div>
+        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-950/50"><div className="text-xs text-slate-500">זיהוי ספק</div><div className="mt-1 font-semibold">{data.workflow_routing.supplier_identified ? "כל הספקים זוהו" : "חסרים פרטי ספק"}</div></div>
         <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-950/50"><div className="text-xs text-slate-500">שורות פריטים</div><div className="mt-1 font-semibold">{data.workflow_routing.item_count}</div></div>
         <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-950/50"><div className="text-xs text-slate-500">מספר מסמך</div><div className="mt-1 font-semibold">{data.workflow_routing.document_number_identified ? "זוהה" : "לא זוהה"}</div></div>
       </div>
