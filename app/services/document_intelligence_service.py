@@ -11,7 +11,7 @@ from sqlalchemy import func
 
 from app.extensions import db
 from app.models.document_analysis import DocumentAnalysis
-from app.models.order import Order
+from app.models.order import Order, STATUS_APPROVED, STATUS_SENT, STATUS_COMPLETED
 from app.models.order_item import OrderItem
 from app.models.receipt import Receipt, RECEIPT_POSTED
 from app.models.receipt_item import ReceiptItem
@@ -393,6 +393,15 @@ class DocumentIntelligenceService:
         if order is None:
             raise NotFound("Purchase order not found")
         extracted = row.extracted_data
+        document_type = str(extracted.get("document_type") or row.document_type or "").upper()
+        if document_type not in {"INVOICE", "DELIVERY_NOTE"}:
+            raise BadRequest("Only supplier invoices and delivery notes can be reconciled with purchase orders")
+        eligible_statuses = (
+            {STATUS_SENT} if document_type == "DELIVERY_NOTE"
+            else {STATUS_APPROVED, STATUS_SENT, STATUS_COMPLETED}
+        )
+        if order.status not in eligible_statuses:
+            raise Conflict("The purchase order is not in a valid status for this document type")
         supplier_match = extracted.get("supplier_matching") if isinstance(extracted.get("supplier_matching"), dict) else {}
         detected_supplier_id = supplier_match.get("supplier_id")
         if detected_supplier_id and order.supplier_id and detected_supplier_id != order.supplier_id:
@@ -584,6 +593,8 @@ class DocumentIntelligenceService:
         order = Order.query.filter_by(id=reconciliation.get("order_id"), tenant_id=self.tenant_id).first()
         if order is None:
             raise NotFound("Reconciled purchase order not found")
+        if order.status not in {STATUS_APPROVED, STATUS_SENT, STATUS_COMPLETED}:
+            raise Conflict("The purchase order is not in a valid status for recording a supplier invoice")
         if reconciliation.get("supplier_check") not in {"MATCH", "MATCH_MANUAL"}:
             raise Conflict("Verify the invoice supplier against the purchase order before recording the invoice")
         invoice_number = str(payload.get("invoice_number") or data.get("document_number") or "").strip()
