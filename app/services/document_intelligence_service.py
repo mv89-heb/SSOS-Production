@@ -404,11 +404,32 @@ class DocumentIntelligenceService:
             raise Conflict("The purchase order is not in a valid status for this document type")
         supplier_match = extracted.get("supplier_matching") if isinstance(extracted.get("supplier_matching"), dict) else {}
         detected_supplier_id = supplier_match.get("supplier_id")
-        if detected_supplier_id and order.supplier_id and detected_supplier_id != order.supplier_id:
+        section_supplier_ids = set()
+        section_identity_incomplete = False
+        supplier_sections = extracted.get("supplier_sections")
+        if isinstance(supplier_sections, list) and supplier_sections:
+            for section in supplier_sections:
+                section = section if isinstance(section, dict) else {}
+                section_match = section.get("supplier_matching") if isinstance(section.get("supplier_matching"), dict) else {}
+                section_supplier_id = section_match.get("supplier_id")
+                if isinstance(section_supplier_id, int) and not isinstance(section_supplier_id, bool):
+                    section_supplier_ids.add(section_supplier_id)
+                else:
+                    section_identity_incomplete = True
+        explicit_supplier_mismatch = (
+            (detected_supplier_id is not None and detected_supplier_id != order.supplier_id)
+            or any(supplier_id != order.supplier_id for supplier_id in section_supplier_ids)
+            or len(section_supplier_ids) > 1
+        )
+        if explicit_supplier_mismatch:
             supplier_check = "MISMATCH"
+        elif section_supplier_ids == {order.supplier_id} and not section_identity_incomplete:
+            supplier_check = "MATCH"
+        elif detected_supplier_id == order.supplier_id and detected_supplier_id and not section_identity_incomplete:
+            supplier_check = "MATCH"
         else:
-            supplier_check = "MATCH" if detected_supplier_id == order.supplier_id and detected_supplier_id else "REVIEW"
-            if supplier_check == "REVIEW" and confirm_supplier is True:
+            supplier_check = "REVIEW"
+            if confirm_supplier is True:
                 supplier_check = "MATCH_MANUAL"
         order_items = list(OrderItem.query.filter_by(tenant_id=self.tenant_id, order_id=order.id).all())
         by_product = {}
@@ -417,6 +438,18 @@ class DocumentIntelligenceService:
         lines = []
         for index, item in enumerate(extracted.get("items") if isinstance(extracted.get("items"), list) else []):
             if not isinstance(item, dict):
+                continue
+            item_supplier_match = item.get("supplier_matching") if isinstance(item.get("supplier_matching"), dict) else {}
+            item_supplier_id = item_supplier_match.get("supplier_id")
+            if isinstance(item_supplier_id, int) and not isinstance(item_supplier_id, bool) and item_supplier_id != order.supplier_id:
+                lines.append({
+                    "line_index": index, "description": item.get("description"),
+                    "matched": False, "status": "SUPPLIER_MISMATCH",
+                    "reason": "שורת הפריט זוהתה כשייכת לספק אחר",
+                    "extracted_quantity": item.get("quantity"),
+                    "extracted_unit_price": item.get("unit_price"),
+                    "confidence": 0,
+                })
                 continue
             match = item.get("product_matching") if isinstance(item.get("product_matching"), dict) else {}
             best = match.get("best_match") if isinstance(match.get("best_match"), dict) else {}
