@@ -121,7 +121,7 @@ class DocumentIntelligenceService:
             "label": label,
             "description": description,
             "status": "NEEDS_REVIEW" if needs_review else "READY_FOR_REVIEW",
-            "status_label": "נדרשת השלמת נתונים" if needs_review else "מוכן לבדיקה",
+            "status_label": ("נדרשת השלמת נתונים" if missing else "נדרשת בדיקה ידנית") if needs_review else "מוכן לבדיקה",
             "missing_fields": missing,
             "supplier_identified": bool(supplier_identified),
             "item_count": len(valid_items),
