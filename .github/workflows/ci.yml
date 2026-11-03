@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   backend:
@@ -56,6 +56,8 @@ jobs:
         run: npm install
       - name: Apply compatible security updates
         run: npm audit fix || true
+      - name: Verify clean lockfile install
+        run: npm ci
       - name: Capture npm audit report
         run: npm audit --json > npm-audit.json || true
       - name: Upload refreshed lockfile and audit report
@@ -69,6 +71,24 @@ jobs:
         run: npx tsc --noEmit
       - name: Build frontend
         run: npm run build
+      - name: Commit refreshed lockfile to the PR branch
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'frontend/package-lock.json';
+            const branch = context.payload.pull_request.head.ref;
+            const current = await github.rest.repos.getContent({ owner: context.repo.owner, repo: context.repo.repo, path, ref: branch });
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              message: 'security: refresh npm lockfile with patched dependencies',
+              content: fs.readFileSync(path).toString('base64'),
+              branch,
+              sha: current.data.sha
+            });
 
   postgres-migrations:
     runs-on: ubuntu-22.04
