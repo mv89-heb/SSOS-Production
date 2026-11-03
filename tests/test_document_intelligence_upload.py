@@ -2,6 +2,7 @@ from io import BytesIO
 from types import SimpleNamespace
 
 from app.models.document_analysis import DocumentAnalysis
+from app.services.document_intelligence_service import DocumentIntelligenceService
 
 
 def test_svg_upload_accepts_browser_octet_stream(logged_in_client_a, monkeypatch):
@@ -123,3 +124,47 @@ def test_rematch_refreshes_saved_analysis_without_calling_gemini(logged_in_clien
     assert refreshed["status"] == "ANALYZED"
     assert refreshed["extracted_data"]["matching_version"] == "deterministic-v2-multi-supplier"
     assert calls["generate"] == 1
+
+
+
+def test_document_workflow_routing_is_classification_only():
+    invoice = DocumentIntelligenceService.build_workflow_routing({
+        "document_type": "INVOICE",
+        "document_number": "INV-100",
+        "supplier": {"name": "ספק לדוגמה"},
+        "items": [{"description": "חלב", "quantity": 2}],
+    })
+    assert invoice["route"] == "INVOICE_RECONCILIATION"
+    assert invoice["status"] == "READY_FOR_REVIEW"
+    assert invoice["business_data_changed"] is False
+    assert invoice["automatic_actions_performed"] == []
+
+    delivery_note = DocumentIntelligenceService.build_workflow_routing({
+        "document_type": "DELIVERY_NOTE",
+        "document_number": "DN-200",
+        "supplier_sections": [{"supplier": {"name": "ספק לדוגמה"}, "items": [{"description": "לחם"}]}],
+        "items": [{"description": "לחם", "quantity": 3}],
+    })
+    assert delivery_note["route"] == "DELIVERY_NOTE_RECONCILIATION"
+    assert delivery_note["status"] == "READY_FOR_REVIEW"
+
+    price_list = DocumentIntelligenceService.build_workflow_routing({
+        "document_type": "PRICE_LIST",
+        "supplier": {"name": "ספק לדוגמה"},
+        "items": [{"description": "אורז", "unit_price": 12}],
+    })
+    assert price_list["route"] == "PRICE_LIST_REVIEW"
+    assert price_list["status"] == "READY_FOR_REVIEW"
+
+    incomplete_invoice = DocumentIntelligenceService.build_workflow_routing({
+        "document_type": "INVOICE",
+        "supplier": {},
+        "items": [],
+    })
+    assert incomplete_invoice["route"] == "INVOICE_RECONCILIATION"
+    assert incomplete_invoice["status"] == "NEEDS_REVIEW"
+    assert set(incomplete_invoice["missing_fields"]) == {"זיהוי ספק", "שורות פריטים", "מספר מסמך"}
+
+    unknown = DocumentIntelligenceService.build_workflow_routing({"document_type": "OTHER"})
+    assert unknown["route"] == "GENERAL_DOCUMENT_REVIEW"
+    assert unknown["status"] == "NEEDS_REVIEW"
