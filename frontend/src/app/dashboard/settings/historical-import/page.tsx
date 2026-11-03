@@ -24,7 +24,7 @@ type Batch = {
   id: number; name: string; status: string; document_count: number; order_count: number;
   documents?: HistoricalDocument[]; orders?: HistoricalOrder[]; created_at: string | null;
 };
-type Progress = { name: string; stage: string; percent: number; error?: string };
+type Progress = { id: string; name: string; stage: string; percent: number; error?: string };
 type Draft = { supplier_name: string; document_number: string; document_date: string; order_reference: string; confirm_duplicate: boolean; confirm_extraction: boolean };
 
 const typeLabel: Record<string, string> = { INVOICE: "חשבונית", DELIVERY_NOTE: "תעודת משלוח" };
@@ -91,9 +91,14 @@ export default function HistoricalImportPage() {
         activeBatch = data.batch;
         setBatch(activeBatch);
       }
-      setProgress(files.map((file) => ({ name: file.name, stage: "ממתין לסריקה", percent: 0 })));
-      const results = await documentIntelligenceService.uploadManyAndAnalyze(files, (file, analysis, stage, percent, errorText) => {
-        setProgress((current) => current.map((item) => item.name === file.name ? { ...item, stage: stage === "done" ? "הסתיים" : stage === "failed" ? "נכשל" : stage === "processing" ? "מנתח" : stage === "uploaded" ? "הועלה" : "מעלה", percent, error: errorText } : item));
+      setProgress([]);
+      const results = await documentIntelligenceService.uploadManyAndAnalyze(files, (file, uploadId, analysis, stage, percent, errorText) => {
+        setProgress((current) => {
+          const next = { id: uploadId, name: file.name, stage: stage === "done" ? "הסתיים" : stage === "failed" ? "נכשל" : stage === "processing" ? "מנתח" : stage === "uploaded" ? "הועלה" : "מעלה", percent, error: errorText };
+          return current.some((item) => item.id === uploadId)
+            ? current.map((item) => item.id === uploadId ? next : item)
+            : [...current, next];
+        });
         if (analysis) setScans((current) => {
           const next = current.filter((item) => item.id !== analysis.id);
           return [...next, analysis];
@@ -178,7 +183,7 @@ export default function HistoricalImportPage() {
       <label className="block space-y-1 text-sm"><span className="font-semibold">שם האצווה (אופציונלי)</span><input value={batchName} onChange={(e) => setBatchName(e.target.value)} disabled={Boolean(batch)} maxLength={200} placeholder="לדוגמה: מסמכי ספקים 2023–2025" className="w-full rounded-lg border px-3 py-2 disabled:bg-slate-50 sm:max-w-xl" /></label>
       <label className="block space-y-1 text-sm"><span className="font-semibold">קובצי מקור לסריקה</span><input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.svg,application/pdf,image/*" disabled={busy || batch?.status === "finalized"} onChange={(e) => setFiles(Array.from(e.target.files ?? []))} className="block w-full rounded-lg border p-2 sm:max-w-xl" /><span className="text-xs text-slate-500">אפשר לבחור הרבה קבצים בבת אחת. הקבצים מעובדים זמנית לצורך חילוץ הנתונים ולא נשמרים כקבצים מצורפים.</span></label>
       <button onClick={startScan} disabled={busy || files.length === 0 || batch?.status === "finalized"} className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busy ? <Loader2 size={16} className="animate-spin" /> : <ScanText size={16} />} {busy ? "מעבד..." : "סריקה וניתוח של כל הקבצים"}</button>
-      {progress.length > 0 && <div className="space-y-2">{progress.map((item) => <div key={item.name} className="rounded-lg border p-3 text-sm"><div className="flex justify-between gap-3"><span className="break-all font-medium">{item.name}</span><span>{item.stage} · {item.percent}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded bg-slate-100"><div className="h-full bg-indigo-600" style={{ width: `${item.percent}%` }} /></div>{item.error && <p className="mt-1 text-xs text-red-600">{item.error}</p>}</div>)}</div>}
+      {progress.length > 0 && <div className="space-y-2">{progress.map((item) => <div key={item.id} className="rounded-lg border p-3 text-sm"><div className="flex justify-between gap-3"><span className="break-all font-medium">{item.name}</span><span>{item.stage} · {item.percent}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded bg-slate-100"><div className="h-full bg-indigo-600" style={{ width: `${item.percent}%` }} /></div>{item.error && <p className="mt-1 text-xs text-red-600">{item.error}</p>}</div>)}</div>}
     </section>
 
     {scans.length > 0 && <section className="space-y-3 rounded-2xl border bg-white p-5 shadow-sm">
