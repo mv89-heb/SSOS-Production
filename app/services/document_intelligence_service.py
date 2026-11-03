@@ -210,6 +210,7 @@ class DocumentIntelligenceService:
                 row.error_message = "Structured extraction was empty"
             else:
                 enriched = ProductMatchingService(self.tenant_id).enrich_document(result.data)
+                enriched["workflow_routing"] = self.build_workflow_routing(enriched)
                 row.status = "ANALYZED"
                 row.document_type = enriched.get("document_type")
                 row.extracted_data = enriched
@@ -238,6 +239,7 @@ class DocumentIntelligenceService:
         # Work from the saved extraction. The original temporary upload is already
         # deleted after analysis, and re-running Gemini would spend API credits.
         refreshed_data = ProductMatchingService(self.tenant_id).enrich_document(dict(row.extracted_data))
+        refreshed_data["workflow_routing"] = self.build_workflow_routing(refreshed_data)
         row.extracted_data = refreshed_data
         db.session.commit()
         return row
