@@ -163,7 +163,28 @@ def test_document_workflow_routing_is_classification_only():
     })
     assert incomplete_invoice["route"] == "INVOICE_RECONCILIATION"
     assert incomplete_invoice["status"] == "NEEDS_REVIEW"
-    assert set(incomplete_invoice["missing_fields"]) == {"זיהוי ספק", "שורות פריטים", "מספר מסמך"}
+    assert set(incomplete_invoice["missing_fields"]) == {"זיהוי כל הספקים", "שורות פריטים", "מספר מסמך"}
+
+    partial_multi_supplier = DocumentIntelligenceService.build_workflow_routing({
+        "document_type": "INVOICE",
+        "document_number": "INV-300",
+        "supplier_sections": [
+            {"supplier": {"name": "ספק א"}},
+            {"supplier": {"name": ""}},
+        ],
+        "items": [{"description": "קמח"}],
+    })
+    assert partial_multi_supplier["supplier_identified"] is False
+    assert partial_multi_supplier["status"] == "NEEDS_REVIEW"
+    assert "זיהוי כל הספקים" in partial_multi_supplier["missing_fields"]
+
+    empty_line = DocumentIntelligenceService.build_workflow_routing({
+        "document_type": "PRICE_LIST",
+        "supplier": {"name": "ספק"},
+        "items": [{}],
+    })
+    assert empty_line["item_count"] == 0
+    assert empty_line["status"] == "NEEDS_REVIEW"
 
     unknown = DocumentIntelligenceService.build_workflow_routing({"document_type": "OTHER"})
     assert unknown["route"] == "GENERAL_DOCUMENT_REVIEW"
