@@ -638,8 +638,13 @@ class DocumentIntelligenceService:
         receipt_quantities = {}
         seen_line_indexes = set()
         for line in lines:
-            if not isinstance(line, dict) or not line.get("matched") or not isinstance(line.get("order_item_id"), int):
-                raise Conflict("Every delivery note line must be matched to an order item before posting")
+            order_item_id_value = line.get("order_item_id") if isinstance(line, dict) else None
+            if (
+                not isinstance(line, dict) or not line.get("matched")
+                or not isinstance(order_item_id_value, int)
+                or isinstance(order_item_id_value, bool) or order_item_id_value <= 0
+            ):
+                raise Conflict("Every delivery note line must be matched to a valid order item before posting")
             # A product candidate is not an approved reconciliation. Only a clean,
             # high-confidence MATCH may post inventory; REVIEW lines must be resolved
             # in the reconciliation workflow before a receipt can be created.
