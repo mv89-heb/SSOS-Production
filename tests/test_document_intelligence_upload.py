@@ -121,12 +121,20 @@ def test_rematch_refreshes_saved_analysis_without_calling_gemini(logged_in_clien
     db.session.expire_all()
     row = db.session.get(DocumentAnalysis, analysis_id)
     assert row.storage_path is None
+    row.extracted_data = {
+        **row.extracted_data,
+        "workflow_routing": {"route": "GENERAL_DOCUMENT_REVIEW", "status": "NEEDS_REVIEW"},
+    }
+    db.session.commit()
 
     rematch_response = logged_in_client_a.post(f"/api/document-intelligence/{analysis_id}/rematch")
     assert rematch_response.status_code == 200, rematch_response.get_json()
     refreshed = rematch_response.get_json()["analysis"]
     assert refreshed["status"] == "ANALYZED"
     assert refreshed["extracted_data"]["matching_version"] == "deterministic-v2-multi-supplier"
+    routing = refreshed["extracted_data"]["workflow_routing"]
+    assert routing["route"] == "PRICE_LIST_REVIEW"
+    assert routing["status"] == "READY_FOR_REVIEW"
     assert calls["generate"] == 1
 
 
@@ -211,6 +219,12 @@ def test_document_workflow_routing_is_classification_only():
     assert empty_line["item_count"] == 0
     assert empty_line["status"] == "NEEDS_REVIEW"
 
-    unknown = DocumentIntelligenceService.build_workflow_routing({"document_type": "OTHER"})
+    unknown = DocumentIntelligenceService.build_workflow_routing({
+        "document_type": "OTHER",
+        "supplier": {"name": "ספק לדוגמה"},
+        "items": [{"description": "מסמך"}],
+    })
     assert unknown["route"] == "GENERAL_DOCUMENT_REVIEW"
     assert unknown["status"] == "NEEDS_REVIEW"
+    assert unknown["status_label"] == "נדרשת בדיקה ידנית"
+    assert unknown["missing_fields"] == []
