@@ -69,20 +69,25 @@ class DocumentIntelligenceService:
         supplier = data.get("supplier") if isinstance(data.get("supplier"), dict) else {}
         supplier_name = str(supplier.get("name") or "").strip()
         supplier_sections = data.get("supplier_sections")
-        section_supplier_names = [
-            str(section.get("supplier", {}).get("name") or "").strip()
+        section_supplier_identities = [
+            (
+                str(section.get("supplier", {}).get("name") or "").strip(),
+                str(section.get("supplier", {}).get("customer_number") or "").strip(),
+            )
             for section in supplier_sections
             if isinstance(section, dict) and isinstance(section.get("supplier"), dict)
         ] if isinstance(supplier_sections, list) else []
-        if not supplier_name and section_supplier_names:
-            supplier_name = next((name for name in section_supplier_names if name), "")
-        # Multi-supplier files are ready only when every supplier section has
-        # an identifiable issuer; one identified supplier must not mask another.
+        if not supplier_name and section_supplier_identities:
+            supplier_name = next((name for name, _ in section_supplier_identities if name), "")
+        # A supplier can be identified by its registered name or its supplier
+        # number. Every section in a multi-supplier file must carry one of them.
         supplier_identified = (
-            bool(section_supplier_names)
-            and len(section_supplier_names) == len(supplier_sections)
-            and all(section_supplier_names)
-        ) if isinstance(supplier_sections, list) and supplier_sections else bool(supplier_name)
+            bool(section_supplier_identities)
+            and len(section_supplier_identities) == len(supplier_sections)
+            and all(name or number for name, number in section_supplier_identities)
+        ) if isinstance(supplier_sections, list) and supplier_sections else bool(
+            supplier_name or str(supplier.get("customer_number") or "").strip()
+        )
         items = data.get("items") if isinstance(data.get("items"), list) else []
         valid_items = [
             item for item in items
