@@ -2,6 +2,7 @@ from io import BytesIO
 from types import SimpleNamespace
 
 from app.models.document_analysis import DocumentAnalysis
+from app.models.user import User
 from app.services.document_intelligence_service import DocumentIntelligenceService
 
 
@@ -228,3 +229,39 @@ def test_document_workflow_routing_is_classification_only():
     assert unknown["status"] == "NEEDS_REVIEW"
     assert unknown["status_label"] == "נדרשת בדיקה ידנית"
     assert unknown["missing_fields"] == []
+
+
+
+def test_document_analysis_history_is_persistent_and_tenant_scoped(
+    logged_in_client_a, logged_in_client_b, db
+):
+    user_a = User.query.filter_by(email="admin@acme.test").one()
+    user_b = User.query.filter_by(email="admin@beta.test").one()
+    own = DocumentAnalysis(
+        tenant_id=user_a.tenant_id,
+        uploaded_by=user_a.id,
+        filename="invoice-a.pdf",
+        mime_type="application/pdf",
+        status="ANALYZED",
+        document_type="INVOICE",
+        extracted_data={"document_type": "INVOICE", "workflow_routing": {"route": "INVOICE_RECONCILIATION"}},
+    )
+    foreign = DocumentAnalysis(
+        tenant_id=user_b.tenant_id,
+        uploaded_by=user_b.id,
+        filename="invoice-b.pdf",
+        mime_type="application/pdf",
+        status="ANALYZED",
+        document_type="INVOICE",
+        extracted_data={"document_type": "INVOICE", "workflow_routing": {"route": "INVOICE_RECONCILIATION"}},
+    )
+    db.session.add_all([own, foreign])
+    db.session.commit()
+
+    response = logged_in_client_a.get("/api/document-intelligence?limit=100")
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    assert [row["id"] for row in payload["analyses"]] == [own.id]
+    assert payload["analyses"][0]["filename"] == "invoice-a.pdf"
+    assert payload["analyses"][0]["extracted_data"]["workflow_routing"]["route"] == "INVOICE_RECONCILIATION"
+    assert "storage_path" not in payload["analyses"][0]
