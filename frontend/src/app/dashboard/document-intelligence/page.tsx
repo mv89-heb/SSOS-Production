@@ -60,6 +60,7 @@ export default function DocumentIntelligencePage() {
     setInvoiceNumber(data?.document_number || "");
     setInvoiceAmount(data?.totals?.total != null ? String(data.totals.total) : "");
   }, [analysis?.id, reconciliation?.order_id, data?.document_number, data?.totals?.total]);
+  useEffect(() => { setAllowPriceUpdates(false); }, [analysis?.id]);
   const productOptions = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name, "he")).map((p) => ({ id: p.id, name: p.name, extra: p.sku })), [products]);
   const supplierOptions = useMemo(() => [...suppliers].sort((a, b) => a.name.localeCompare(b.name, "he")).map((s) => ({ id: s.id, name: s.name, extra: s.customer_number })), [suppliers]);
   const items = useMemo<ExtractedItem[]>(() => Array.isArray(data?.items) ? data.items : [], [data]);
