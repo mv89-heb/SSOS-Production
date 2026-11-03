@@ -51,6 +51,23 @@ export default function DocumentIntelligencePage() {
       .then(({ data }) => setOrders(data.orders ?? []))
       .catch(() => setOrders([]));
   }, []);
+  useEffect(() => {
+    let active = true;
+    documentIntelligenceService.list(100)
+      .then((records) => {
+        if (!active) return;
+        setAnalyses((current) => {
+          const merged = new Map(records.map((item) => [item.id, item]));
+          current.forEach((item) => merged.set(item.id, item));
+          return [...merged.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+        });
+        setSelectedId((current) => current ?? records[0]?.id ?? null);
+      })
+      .catch((err: any) => {
+        if (active) setError(err?.friendlyMessage || err?.response?.data?.message || "לא ניתן לטעון את היסטוריית המסמכים.");
+      });
+    return () => { active = false; };
+  }, []);
   const analysis = analyses.find((item) => item.id === selectedId) ?? analyses[analyses.length - 1] ?? null;
   const data = analysis?.extracted_data;
   const reconciliation = data?.order_reconciliation as OrderReconciliation | undefined;
@@ -246,10 +263,28 @@ export default function DocumentIntelligencePage() {
 
     {notice && <div role="status" className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800"><CheckCircle2 size={18}/>{notice}</div>}
     {error && <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700"><AlertTriangle size={18}/>{error}</div>}
-    {analyses.length > 0 && <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="border-b border-slate-100 p-5 dark:border-slate-800"><h2 className="font-bold">מסמכים שהועלו ({analyses.length})</h2></div><div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3">{analyses.map((item) => <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className={`rounded-xl border p-3 text-right ${item.id === analysis?.id ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950/30" : "border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"}`}><div className="truncate font-semibold">{item.filename}</div><div className="mt-1 text-xs text-slate-500">{statusLabel[item.status] || item.status}</div></button>)}</div></section>}
+    {analyses.length > 0 && <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="border-b border-slate-100 p-5 dark:border-slate-800"><h2 className="font-bold">היסטוריית ניתוחים ({analyses.length})</h2><p className="mt-1 text-xs text-slate-500">עד 100 הניתוחים האחרונים, כולל ביקורים קודמים</p></div><div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3">{analyses.map((item) => { const routing = item.extracted_data?.workflow_routing; return <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className={`rounded-xl border p-3 text-right ${item.id === analysis?.id ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950/30" : "border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"}`}><div className="truncate font-semibold">{item.filename}</div>{routing?.label && <div className="mt-1 text-xs font-semibold text-indigo-700 dark:text-indigo-300">{routing.label}</div>}<div className="mt-1 text-xs text-slate-500">{statusLabel[item.status] || item.status} · {new Date(item.created_at).toLocaleDateString("he-IL")}</div></button>; })}</div></section>}
     {!analysis && <section className="rounded-2xl border-2 border-dashed border-slate-300 bg-white p-14 text-center dark:border-slate-700 dark:bg-slate-950"><FileSearch className="mx-auto mb-4 text-slate-400" size={44}/><h2 className="text-xl font-bold">אין מסמכים לניתוח</h2><p className="mt-2 text-sm text-slate-500">בחר מסמך אחד או כמה מסמכים כדי להתחיל.</p></section>}
 
     {analysis && <><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex flex-wrap items-center gap-3"><div className="rounded-xl bg-indigo-50 p-3 text-indigo-600"><FileSearch size={22}/></div><div className="min-w-0 flex-1"><div className="truncate font-bold">{analysis.filename}</div><div className="text-sm text-slate-500">{analysis.document_type || "מסמך"} · {analysis.provider || "—"} {analysis.model ? `· ${analysis.model}` : ""}</div></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{statusLabel[analysis.status] || analysis.status}</span>{(analysis.status === "ANALYZED" || analysis.status === "PARTIALLY_APPLIED") && <button type="button" onClick={rematch} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300"><RefreshCw size={15} className={busy ? "animate-spin" : ""}/> רענן התאמות מוצרים</button>}</div>{analysis.error_message && <p className="mt-3 whitespace-pre-wrap text-sm text-red-600">{analysis.error_message}</p>}</section>
+
+    {data?.workflow_routing && <section className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/20">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-bold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">ניתוב אוטומטי</div>
+          <h2 className="mt-1 text-lg font-bold">{data.workflow_routing.label}</h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{data.workflow_routing.description}</p>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${data.workflow_routing.status === "READY_FOR_REVIEW" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"}`}>{data.workflow_routing.status_label}</span>
+      </div>
+      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-950/50"><div className="text-xs text-slate-500">זיהוי ספק</div><div className="mt-1 font-semibold">{data.workflow_routing.supplier_identified ? "כל הספקים זוהו" : "חסרים פרטי ספק"}</div></div>
+        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-950/50"><div className="text-xs text-slate-500">שורות פריטים</div><div className="mt-1 font-semibold">{data.workflow_routing.item_count}</div></div>
+        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-950/50"><div className="text-xs text-slate-500">מספר מסמך</div><div className="mt-1 font-semibold">{data.workflow_routing.document_number_identified ? "זוהה" : "לא זוהה"}</div></div>
+      </div>
+      {data.workflow_routing.missing_fields.length > 0 && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"><strong>להשלמת הניתוב:</strong> {data.workflow_routing.missing_fields.join(" · ")}</div>}
+      <p className="mt-3 text-xs text-slate-500">המסמך סווג אוטומטית בלבד. לא נוצרה קבלה או חשבונית, לא עודכן מחירון ולא השתנה המלאי.</p>
+    </section>}
 
     {(analysis.status === "ANALYZED" || analysis.status === "PARTIALLY_APPLIED" || analysis.status === "APPLIED") && <section className="rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm dark:border-indigo-900 dark:bg-slate-950">
       <div className="mb-3"><h2 className="font-bold">סריקה, הצלבה ובקרה מול הזמנת רכש</h2><p className="mt-1 text-sm text-slate-500">{analysis.document_type === "DELIVERY_NOTE" ? "לתעודת משלוח ניתן לבחור הזמנה שנשלחה בלבד." : "לחשבונית ניתן לבחור הזמנה מאושרת, שנשלחה או הושלמה."} השווה כמויות ומחירים, ולאחר בדיקה רשום קבלה או חשבונית.</p></div>
