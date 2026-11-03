@@ -10,6 +10,10 @@ export interface ExtractedData { workflow_routing?: WorkflowRouting; document_ty
 export interface DocumentAnalysis { id: number; filename: string; mime_type: string; document_type: string | null; status: string; extracted_data: ExtractedData | null; error_message: string | null; provider: string | null; model: string | null; created_at: string; analyzed_at: string | null; applied_at: string | null; applied_by: number | null; }
 
 export const documentIntelligenceService = {
+  list: async (limit = 100) => {
+    const { data } = await apiClient.get<{ success: boolean; analyses: DocumentAnalysis[] }>(`/api/document-intelligence?limit=${limit}`);
+    return data.analyses;
+  },
   upload: async (file: File, onProgress?: (percent: number) => void) => {
     const form = new FormData(); form.append("file", file);
     const { data } = await apiClient.post<{ success: boolean; analysis: DocumentAnalysis }>("/api/document-intelligence/upload", form, { onUploadProgress: (event) => { if (event.total) onProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100))); } });
