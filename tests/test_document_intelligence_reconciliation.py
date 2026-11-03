@@ -1,5 +1,7 @@
 from app.models.document_analysis import DocumentAnalysis
 from app.models.order import Order, STATUS_APPROVED, STATUS_DRAFT, STATUS_SENT
+from app.models.order_item import OrderItem
+from app.models.product import Product
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.user import User
 
@@ -195,3 +197,60 @@ def test_same_analysis_cannot_create_a_second_invoice_with_a_different_number(
     )
     assert retry.status_code == 409, retry.get_json()
     assert SupplierInvoice.query.filter_by(tenant_id=user.tenant_id).count() == 1
+
+
+
+def test_invoice_price_update_requires_posted_receipt_quantity(
+    logged_in_client_a, db, make_order
+):
+    response, _, product_id = make_order(logged_in_client_a)
+    assert response.status_code == 201, response.get_json()
+    order = db.session.get(Order, response.get_json()["order"]["id"])
+    order.status = STATUS_SENT
+    db.session.commit()
+    order_item = OrderItem.query.filter_by(
+        tenant_id=order.tenant_id, order_id=order.id, product_id=product_id
+    ).one()
+    product = db.session.get(Product, product_id)
+    original_price = product.current_price
+    invoice_price = float(original_price or 10) + 5
+    user = User.query.filter_by(email="admin@acme.test").one()
+
+    analysis = _analysis(db, user, "invoice-before-receipt.pdf", "INVOICE", {
+        "document_type": "INVOICE",
+        "document_number": "INV-BEFORE-RECEIPT-1",
+        "currency": order.currency or "ILS",
+        "totals": {"total": invoice_price},
+        "items": [{
+            "quantity": float(order_item.quantity),
+            "unit": product.unit or "יחידה",
+            "unit_price": invoice_price,
+        }],
+        "order_reconciliation": {
+            "order_id": order.id,
+            "supplier_check": "MATCH",
+            "lines": [{
+                "line_index": 0,
+                "matched": True,
+                "status": "REVIEW",
+                "order_item_id": order_item.id,
+                "product_id": product.id,
+                "confidence": 0.99,
+                "quantity_delta": 0,
+                "flags": ["PRICE_VARIANCE"],
+            }],
+        },
+    })
+
+    result = logged_in_client_a.post(
+        f"/api/document-intelligence/{analysis.id}/apply-invoice",
+        json={
+            "invoice_number": "INV-BEFORE-RECEIPT-1",
+            "amount": invoice_price * float(order_item.quantity),
+            "allow_price_updates": True,
+        },
+    )
+    assert result.status_code == 201, result.get_json()
+    db.session.refresh(product)
+    assert product.current_price == original_price
+    assert result.get_json()["automatic_price_updates"] == []
