@@ -65,6 +65,10 @@ def test_analyze_deletes_temporary_document(logged_in_client_a, db, monkeypatch)
     analyze_response = logged_in_client_a.post(f"/api/document-intelligence/{analysis_id}/analyze")
     assert analyze_response.status_code == 200, analyze_response.get_json()
     assert analyze_response.get_json()["analysis"]["status"] == "ANALYZED"
+    routing = analyze_response.get_json()["analysis"]["extracted_data"]["workflow_routing"]
+    assert routing["route"] == "INVOICE_RECONCILIATION"
+    assert routing["status"] == "NEEDS_REVIEW"
+    assert routing["business_data_changed"] is False
 
     db.session.expire_all()
     row = db.session.get(DocumentAnalysis, analysis_id)
