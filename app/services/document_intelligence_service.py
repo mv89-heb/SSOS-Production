@@ -790,6 +790,33 @@ class DocumentIntelligenceService:
             })
             if not allow_price_updates or not line.get("matched") or line.get("confidence", 0) < 0.93:
                 continue
+            # Price changes are allowed only when the reconciliation has no
+            # quantity, unit, or identity uncertainty. Price variance itself is
+            # expected to be reviewable here; all other flags block mutation.
+            blocking_flags = set(line.get("flags") or []) - {
+                "PRICE_VARIANCE", "CATALOG_PRICE_VARIANCE",
+            }
+            if blocking_flags:
+                continue
+            # Require the invoice quantity to match both the order comparison
+            # and posted physical receipts. An invoice alone must never change
+            # the supplier catalog price for goods not yet received/verified.
+            if line.get("quantity_delta") is None:
+                continue
+            try:
+                quantity_delta = Decimal(str(line.get("quantity_delta")))
+                invoice_quantity = Decimal(str(quantity))
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+            if (
+                not quantity_delta.is_finite()
+                or abs(quantity_delta) > Decimal("0.001")
+                or received_quantity is None
+                or not invoice_quantity.is_finite()
+                or invoice_quantity <= 0
+                or invoice_quantity != received_quantity
+            ):
+                continue
             order_item = order_items.get(line.get("order_item_id"))
             if order_item is None or invoice_price in (None, ""):
                 continue
