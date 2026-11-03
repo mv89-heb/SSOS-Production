@@ -195,6 +195,24 @@ export default function DocumentIntelligencePage() {
 
     {analysis && <><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex flex-wrap items-center gap-3"><div className="rounded-xl bg-indigo-50 p-3 text-indigo-600"><FileSearch size={22}/></div><div className="min-w-0 flex-1"><div className="truncate font-bold">{analysis.filename}</div><div className="text-sm text-slate-500">{analysis.document_type || "מסמך"} · {analysis.provider || "—"} {analysis.model ? `· ${analysis.model}` : ""}</div></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{statusLabel[analysis.status] || analysis.status}</span>{(analysis.status === "ANALYZED" || analysis.status === "PARTIALLY_APPLIED") && <button type="button" onClick={rematch} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300"><RefreshCw size={15} className={busy ? "animate-spin" : ""}/> רענן התאמות מוצרים</button>}</div>{analysis.error_message && <p className="mt-3 whitespace-pre-wrap text-sm text-red-600">{analysis.error_message}</p>}</section>
 
+    {data?.workflow_routing && <section className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/20">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-bold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">ניתוב אוטומטי</div>
+          <h2 className="mt-1 text-lg font-bold">{data.workflow_routing.label}</h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{data.workflow_routing.description}</p>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${data.workflow_routing.status === "READY_FOR_REVIEW" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"}`}>{data.workflow_routing.status_label}</span>
+      </div>
+      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-950/50"><div className="text-xs text-slate-500">זיהוי ספק</div><div className="mt-1 font-semibold">{data.workflow_routing.supplier_identified ? "זוהה" : "נדרשת בדיקה"}</div></div>
+        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-950/50"><div className="text-xs text-slate-500">שורות פריטים</div><div className="mt-1 font-semibold">{data.workflow_routing.item_count}</div></div>
+        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-950/50"><div className="text-xs text-slate-500">מספר מסמך</div><div className="mt-1 font-semibold">{data.workflow_routing.document_number_identified ? "זוהה" : "לא זוהה"}</div></div>
+      </div>
+      {data.workflow_routing.missing_fields.length > 0 && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"><strong>להשלמת הניתוב:</strong> {data.workflow_routing.missing_fields.join(" · ")}</div>}
+      <p className="mt-3 text-xs text-slate-500">המסמך סווג אוטומטית בלבד. לא נוצרה קבלה או חשבונית, לא עודכן מחירון ולא השתנה המלאי.</p>
+    </section>}
+
     {(analysis.status === "ANALYZED" || analysis.status === "PARTIALLY_APPLIED" || (analysis.status === "PROCESSING" && items.length > 0)) && <>
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold">זוהו {data?.supplier_count ?? sections.length} ספקים</h2><p className="mt-1 text-xs text-slate-500">כל ספק הוא קבוצה עצמאית. שורות מסומנות לפי הקשר הספקי שנמצא במסמך.</p></div><span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">הפרדה אוטומטית</span></div><div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">{sections.map((section, index) => { const match = section.supplier_matching; return <div key={index} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><div className="font-bold">{supplierLabel(section)}</div><div className="mt-1 text-xs text-slate-500">מספר ספק: {section.supplier?.customer_number || "—"}</div><div className="mt-2 text-xs">{section.items?.length || 0} שורות · עמודים {(section.page_numbers || []).join(", ") || "—"}</div><div className={`mt-2 text-xs font-semibold ${match ? "text-emerald-600" : "text-amber-600"}`}>{match ? `התאמת ספק: ${Math.round((match.confidence || 0) * 100)}%` : "הספק לא נמצא בקטלוג — בדיקה נדרשת"}</div></div>})}</div></section>
 
