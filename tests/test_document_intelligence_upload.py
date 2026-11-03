@@ -265,3 +265,4 @@ def test_document_analysis_history_is_persistent_and_tenant_scoped(
     assert payload["analyses"][0]["filename"] == "invoice-a.pdf"
     assert payload["analyses"][0]["extracted_data"]["workflow_routing"]["route"] == "INVOICE_RECONCILIATION"
     assert "storage_path" not in payload["analyses"][0]
+    assert payload["limit"] == 100
