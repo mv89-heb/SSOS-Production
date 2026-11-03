@@ -2,6 +2,7 @@ from app.models.document_analysis import DocumentAnalysis
 from app.models.order import Order, STATUS_APPROVED, STATUS_DRAFT, STATUS_SENT
 from app.models.order_item import OrderItem
 from app.models.product import Product
+from app.models.receipt import Receipt
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.user import User
 
@@ -254,3 +255,46 @@ def test_invoice_price_update_requires_posted_receipt_quantity(
     db.session.refresh(product)
     assert product.current_price == original_price
     assert result.get_json()["automatic_price_updates"] == []
+
+
+
+def test_delivery_note_without_explicit_unit_cannot_post_inventory(
+    logged_in_client_a, db, make_order
+):
+    response, supplier_id, product_id = make_order(logged_in_client_a)
+    assert response.status_code == 201, response.get_json()
+    order = db.session.get(Order, response.get_json()["order"]["id"])
+    order.status = STATUS_SENT
+    db.session.commit()
+    order_item = OrderItem.query.filter_by(
+        tenant_id=order.tenant_id, order_id=order.id, product_id=product_id
+    ).one()
+    user = User.query.filter_by(email="admin@acme.test").one()
+    analysis = _analysis(db, user, "delivery-note-unit-missing.pdf", "DELIVERY_NOTE", {
+        "document_type": "DELIVERY_NOTE",
+        "document_number": "DN-UNIT-MISSING-1",
+        "items": [{"description": "Test Product", "quantity": 1}],
+        "order_reconciliation": {
+            "order_id": order.id,
+            "supplier_check": "MATCH",
+            "lines": [{
+                "line_index": 0,
+                "matched": True,
+                "status": "MATCH",
+                "order_item_id": order_item.id,
+                "product_id": product_id,
+                "confidence": 0.99,
+                "flags": [],
+            }],
+        },
+    })
+
+    result = logged_in_client_a.post(
+        f"/api/document-intelligence/{analysis.id}/apply-delivery-note",
+        json={},
+    )
+    assert result.status_code == 409, result.get_json()
+    assert "unit" in result.get_json()["message"].lower()
+    assert Receipt.query.filter_by(
+        tenant_id=order.tenant_id, order_id=order.id
+    ).count() == 0

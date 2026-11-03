@@ -636,9 +636,15 @@ class DocumentIntelligenceService:
             raise BadRequest("The delivery note has no reconciled lines")
         extracted_items = data.get("items") if isinstance(data.get("items"), list) else []
         receipt_quantities = {}
+        seen_line_indexes = set()
         for line in lines:
-            if not isinstance(line, dict) or not line.get("matched") or not isinstance(line.get("order_item_id"), int):
-                raise Conflict("Every delivery note line must be matched to an order item before posting")
+            order_item_id_value = line.get("order_item_id") if isinstance(line, dict) else None
+            if (
+                not isinstance(line, dict) or not line.get("matched")
+                or not isinstance(order_item_id_value, int)
+                or isinstance(order_item_id_value, bool) or order_item_id_value <= 0
+            ):
+                raise Conflict("Every delivery note line must be matched to a valid order item before posting")
             # A product candidate is not an approved reconciliation. Only a clean,
             # high-confidence MATCH may post inventory; REVIEW lines must be resolved
             # in the reconciliation workflow before a receipt can be created.
@@ -651,8 +657,13 @@ class DocumentIntelligenceService:
             index = line.get("line_index")
             if not isinstance(index, int) or index < 0 or index >= len(extracted_items):
                 raise BadRequest("Delivery note line mapping is invalid")
+            if isinstance(index, bool) or index in seen_line_indexes:
+                raise Conflict("Delivery note contains a duplicate or invalid line mapping")
+            seen_line_indexes.add(index)
             item = extracted_items[index]
-            quantity = item.get("quantity") if isinstance(item, dict) else None
+            if not isinstance(item, dict):
+                raise Conflict(f"Delivery note line {index + 1} is invalid")
+            quantity = item.get("quantity")
             try:
                 amount = Decimal(str(quantity))
             except (InvalidOperation, TypeError, ValueError):
@@ -660,6 +671,16 @@ class DocumentIntelligenceService:
             if not amount.is_finite() or amount <= 0:
                 raise Conflict(f"Missing or invalid quantity on delivery note line {index + 1}")
             order_item_id = line["order_item_id"]
+            order_item = OrderItem.query.filter_by(
+                id=order_item_id, tenant_id=self.tenant_id,
+                order_id=reconciliation.get("order_id"),
+            ).first()
+            if order_item is None or line.get("product_id") != order_item.product_id:
+                raise Conflict(f"Delivery note line {index + 1} does not match the selected purchase order item")
+            extracted_unit = ProductMatchingService.normalize(item.get("unit"))
+            expected_unit = ProductMatchingService.normalize(order_item.product.unit if order_item.product else None)
+            if not extracted_unit or not expected_unit or extracted_unit != expected_unit:
+                raise Conflict(f"Delivery note line {index + 1} has a missing or mismatched unit; resolve it manually before posting")
             receipt_quantities[order_item_id] = receipt_quantities.get(order_item_id, Decimal("0")) + amount
         receipt_items = [{"order_item_id": item_id, "quantity": str(quantity)} for item_id, quantity in sorted(receipt_quantities.items())]
         receipt_number = str(data.get("document_number") or "").strip() or f"SCAN-DN-{analysis_id}"
