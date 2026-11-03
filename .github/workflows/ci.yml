@@ -54,6 +54,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies and refresh lockfile
         run: npm install
+      - name: Apply compatible security updates
+        run: npm audit fix || true
       - name: Capture npm audit report
         run: npm audit --json > npm-audit.json || true
       - name: Upload refreshed lockfile and audit report
