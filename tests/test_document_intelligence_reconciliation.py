@@ -164,3 +164,34 @@ def test_multi_supplier_delivery_note_cannot_be_reconciled_to_one_supplier_order
     assert reconciliation["supplier_check"] == "MISMATCH"
     assert reconciliation["unmatched_count"] == 1
     assert reconciliation["lines"][0]["status"] == "SUPPLIER_MISMATCH"
+
+
+def test_same_analysis_cannot_create_a_second_invoice_with_a_different_number(
+    logged_in_client_a, db, make_order
+):
+    response, _, _ = make_order(logged_in_client_a)
+    assert response.status_code == 201, response.get_json()
+    order_id = response.get_json()["order"]["id"]
+    order = db.session.get(Order, order_id)
+    order.status = STATUS_APPROVED
+    db.session.commit()
+    user = User.query.filter_by(email="admin@acme.test").one()
+    analysis = _analysis(db, user, "invoice-retry.pdf", "INVOICE", {
+        "document_type": "INVOICE",
+        "document_number": "INV-RETRY-1",
+        "totals": {"total": 100},
+        "order_reconciliation": {"order_id": order.id, "supplier_check": "MATCH", "lines": []},
+    })
+
+    first = logged_in_client_a.post(
+        f"/api/document-intelligence/{analysis.id}/apply-invoice",
+        json={"invoice_number": "INV-RETRY-1", "amount": 100, "allow_price_updates": False},
+    )
+    assert first.status_code == 201, first.get_json()
+
+    retry = logged_in_client_a.post(
+        f"/api/document-intelligence/{analysis.id}/apply-invoice",
+        json={"invoice_number": "INV-RETRY-2", "amount": 100, "allow_price_updates": False},
+    )
+    assert retry.status_code == 409, retry.get_json()
+    assert SupplierInvoice.query.filter_by(tenant_id=user.tenant_id).count() == 1
