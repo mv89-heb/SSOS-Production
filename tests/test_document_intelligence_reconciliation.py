@@ -118,3 +118,49 @@ def test_invoice_can_be_recorded_against_approved_order_without_price_updates(lo
     ).one()
     assert invoice.approval_status == "pending_approval"
     assert result.get_json()["automatic_price_updates"] == []
+
+
+
+def test_multi_supplier_delivery_note_cannot_be_reconciled_to_one_supplier_order(
+    logged_in_client_a, db, make_order
+):
+    response, supplier_id, product_id = make_order(logged_in_client_a)
+    assert response.status_code == 201, response.get_json()
+    order_id = response.get_json()["order"]["id"]
+    order = db.session.get(Order, order_id)
+    order.status = STATUS_SENT
+    db.session.commit()
+    other_supplier_response = logged_in_client_a.post(
+        "/api/catalog/suppliers", json={"name": "Other supplier"}
+    )
+    assert other_supplier_response.status_code == 201, other_supplier_response.get_json()
+    other_supplier_id = other_supplier_response.get_json()["supplier"]["id"]
+    user = User.query.filter_by(email="admin@acme.test").one()
+    analysis = _analysis(db, user, "multi-supplier-delivery.pdf", "DELIVERY_NOTE", {
+        "document_type": "DELIVERY_NOTE",
+        "supplier_matching": {"supplier_id": supplier_id, "decision": "AUTO_MATCH"},
+        "supplier_sections": [
+            {"supplier_matching": {"supplier_id": supplier_id, "decision": "AUTO_MATCH"}},
+            {"supplier_matching": {"supplier_id": other_supplier_id, "decision": "AUTO_MATCH"}},
+        ],
+        "items": [{
+            "description": "Test Product",
+            "quantity": 1,
+            "unit_price": 10,
+            "unit": "יחידה",
+            "supplier_matching": {"supplier_id": other_supplier_id, "decision": "AUTO_MATCH"},
+            "product_matching": {
+                "best_match": {"product_id": product_id, "confidence": 0.99, "decision": "AUTO_MATCH"}
+            },
+        }],
+    })
+
+    result = logged_in_client_a.post(
+        f"/api/document-intelligence/{analysis.id}/compare-order",
+        json={"order_id": order.id, "confirm_supplier": True},
+    )
+    assert result.status_code == 200, result.get_json()
+    reconciliation = result.get_json()["reconciliation"]
+    assert reconciliation["supplier_check"] == "MISMATCH"
+    assert reconciliation["unmatched_count"] == 1
+    assert reconciliation["lines"][0]["status"] == "SUPPLIER_MISMATCH"
