@@ -2,6 +2,8 @@ from io import BytesIO
 from types import SimpleNamespace
 
 from app.models.document_analysis import DocumentAnalysis
+from app.models.user import User
+from app.services.document_intelligence_service import DocumentIntelligenceService
 
 
 def test_svg_upload_accepts_browser_octet_stream(logged_in_client_a, monkeypatch):

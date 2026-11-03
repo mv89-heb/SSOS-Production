@@ -66,6 +66,79 @@ class DocumentIntelligenceService:
     ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".svg"}
     ALLOWED_MIMES = {"application/pdf", "image/png", "image/jpeg", "image/webp", "image/svg+xml"}
 
+    @staticmethod
+    def build_workflow_routing(extracted_data: dict) -> dict:
+        """Classify an extracted document into a safe next-step queue.
+
+        Routing is advisory only: it never posts receipts, creates invoices,
+        changes supplier prices, or mutates inventory.
+        """
+        data = extracted_data if isinstance(extracted_data, dict) else {}
+        document_type = str(data.get("document_type") or "OTHER").strip().upper()
+        supplier = data.get("supplier") if isinstance(data.get("supplier"), dict) else {}
+        supplier_name = str(supplier.get("name") or "").strip()
+        supplier_sections = data.get("supplier_sections")
+        section_supplier_identities = [
+            (
+                str(section.get("supplier", {}).get("name") or "").strip(),
+                str(section.get("supplier", {}).get("customer_number") or "").strip(),
+            )
+            for section in supplier_sections
+            if isinstance(section, dict) and isinstance(section.get("supplier"), dict)
+        ] if isinstance(supplier_sections, list) else []
+        if not supplier_name and section_supplier_identities:
+            supplier_name = next((name for name, _ in section_supplier_identities if name), "")
+        # A supplier can be identified by its registered name or its supplier
+        # number. Every section in a multi-supplier file must carry one of them.
+        supplier_identified = (
+            bool(section_supplier_identities)
+            and len(section_supplier_identities) == len(supplier_sections)
+            and all(name or number for name, number in section_supplier_identities)
+        ) if isinstance(supplier_sections, list) and supplier_sections else bool(
+            supplier_name or str(supplier.get("customer_number") or "").strip()
+        )
+        items = data.get("items") if isinstance(data.get("items"), list) else []
+        valid_items = [
+            item for item in items
+            if isinstance(item, dict)
+            and any(str(item.get(key) or "").strip() for key in ("description", "supplier_sku", "barcode"))
+        ]
+        has_items = bool(valid_items)
+        document_number = str(data.get("document_number") or "").strip()
+
+        routes = {
+            "INVOICE": ("INVOICE_RECONCILIATION", "חשבונית ספק", "בדיקת חשבונית מול הזמנת רכש, אספקה ומחירים"),
+            "DELIVERY_NOTE": ("DELIVERY_NOTE_RECONCILIATION", "תעודת משלוח", "התאמת כמויות מול הזמנת רכש לפני קליטת אספקה"),
+            "PRICE_LIST": ("PRICE_LIST_REVIEW", "מחירון ספק", "בדיקת מחירים והצעת עדכון למחירון הספק"),
+        }
+        route, label, description = routes.get(
+            document_type,
+            ("GENERAL_DOCUMENT_REVIEW", "מסמך כללי", "בדיקה ידנית וסיווג המסמך"),
+        )
+
+        missing = []
+        if not supplier_identified:
+            missing.append("זיהוי כל הספקים")
+        if not has_items:
+            missing.append("שורות פריטים")
+        if document_type in {"INVOICE", "DELIVERY_NOTE"} and not document_number:
+            missing.append("מספר מסמך")
+
+        needs_review = bool(missing) or document_type not in routes
+        return {
+            "route": route,
+            "label": label,
+            "description": description,
+            "status": "NEEDS_REVIEW" if needs_review else "READY_FOR_REVIEW",
+            "status_label": ("נדרשת השלמת נתונים" if missing else "נדרשת בדיקה ידנית") if needs_review else "מוכן לבדיקה",
+            "missing_fields": missing,
+            "supplier_identified": bool(supplier_identified),
+            "item_count": len(valid_items),
+            "document_number_identified": bool(document_number),
+            "automatic_actions_performed": [],
+            "business_data_changed": False,
+        }
+
     def __init__(self, tenant_id: int, user_id: int):
         self.tenant_id = tenant_id
         self.user_id = user_id
@@ -162,6 +235,7 @@ class DocumentIntelligenceService:
                 row.error_message = "Structured extraction was empty"
             else:
                 enriched = ProductMatchingService(self.tenant_id).enrich_document(result.data)
+                enriched["workflow_routing"] = self.build_workflow_routing(enriched)
                 row.status = "ANALYZED"
                 row.document_type = enriched.get("document_type")
                 row.extracted_data = enriched
@@ -190,6 +264,7 @@ class DocumentIntelligenceService:
         # Work from the saved extraction. The original temporary upload is already
         # deleted after analysis, and re-running Gemini would spend API credits.
         refreshed_data = ProductMatchingService(self.tenant_id).enrich_document(dict(row.extracted_data))
+        refreshed_data["workflow_routing"] = self.build_workflow_routing(refreshed_data)
         row.extracted_data = refreshed_data
         db.session.commit()
         return row
