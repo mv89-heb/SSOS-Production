@@ -9,7 +9,7 @@ import { documentIntelligenceService, type DocumentAnalysis, type ExtractedItem,
 const statusLabel: Record<string, string> = { UPLOADED: "הועלה", PROCESSING: "מנתח...", ANALYZED: "נותח — מוכן לבדיקה", PARTIALLY_APPLIED: "יושם חלקית — נותרו שורות לבדיקה", AI_UNAVAILABLE: "Gemini אינו מוגדר", FAILED: "הניתוח נכשל", APPLIED: "יושם בהצלחה" };
 const allowed = ".pdf,.png,.jpg,.jpeg,.webp,.svg";
 type Mapping = { product?: number; supplier?: number; update?: boolean };
-type UploadProgress = { id: string; stage: "uploading" | "uploaded" | "processing" | "done" | "failed"; percent: number; status?: string; error?: string; eta?: number | null; elapsed?: number; pages?: string };
+type UploadProgress = { id: string; name: string; analysisId?: number; stage: "uploading" | "uploaded" | "processing" | "done" | "failed"; percent: number; status?: string; error?: string; eta?: number | null; elapsed?: number; pages?: string };
 
 function formatSeconds(value: number | null | undefined) { if (value == null || !Number.isFinite(value)) return "—"; const seconds = Math.max(0, Math.round(value)); if (seconds < 60) return `${seconds} שנ׳`; const minutes = Math.floor(seconds / 60); return `${minutes}:${String(seconds % 60).padStart(2, "0")} דק׳`; }
 function supplierLabel(section: SupplierSection | undefined) { return section?.supplier?.name || "ספק לא מזוהה — נדרשת בדיקה"; }
@@ -122,11 +122,11 @@ export default function DocumentIntelligencePage() {
   });
 
   async function handleFiles(fileList: FileList | null) {
-    const files = Array.from(fileList || []); if (!files.length) return; setBusy(true); setError(""); setProgress(files.map((file) => ({ name: file.name, stage: "uploading", percent: 0 })));
+    const files = Array.from(fileList || []); if (!files.length) return; setBusy(true); setError(""); setProgress([]);
     try {
-      const results = await documentIntelligenceService.uploadManyAndAnalyze(files, (file, item, stage, percent, fileError) => {
+      const results = await documentIntelligenceService.uploadManyAndAnalyze(files, (file, uploadId, item, stage, percent, fileError) => {
         const p = item?.extracted_data?.processing;
-        updateProgress(file, { stage, percent: p?.percent ?? percent, status: item?.status, error: fileError || item?.error_message || undefined, eta: p?.eta_seconds, elapsed: p?.elapsed_seconds, pages: p?.pages_total ? `${p.pages_processed || 0}/${p.pages_total} עמודים` : undefined });
+        updateProgress(uploadId, file, { stage, percent: p?.percent ?? percent, analysisId: item?.id, status: item?.status, error: fileError || item?.error_message || undefined, eta: p?.eta_seconds, elapsed: p?.elapsed_seconds, pages: p?.pages_total ? `${p.pages_processed || 0}/${p.pages_total} עמודים` : undefined });
         if (item) { setAnalyses((current) => current.some((row) => row.id === item.id) ? current.map((row) => row.id === item.id ? item : row) : [item, ...current]); setSelectedId(item.id); }
       });
       setAnalyses((current) => { const incoming = new Map(results.map((item) => [item.id, item])); return [...results, ...current.filter((item) => !incoming.has(item.id))]; }); setSelectedId(results[0]?.id ?? null); setProgress((current) => current.map((item) => item.stage === "failed" ? item : ({ ...item, stage: "done", percent: 100 })));
