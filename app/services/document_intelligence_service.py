@@ -69,16 +69,27 @@ class DocumentIntelligenceService:
         supplier = data.get("supplier") if isinstance(data.get("supplier"), dict) else {}
         supplier_name = str(supplier.get("name") or "").strip()
         supplier_sections = data.get("supplier_sections")
-        if not supplier_name and isinstance(supplier_sections, list):
-            supplier_name = next((
-                str(section.get("supplier", {}).get("name") or "").strip()
-                for section in supplier_sections
-                if isinstance(section, dict)
-                and isinstance(section.get("supplier"), dict)
-                and str(section.get("supplier", {}).get("name") or "").strip()
-            ), "")
+        section_supplier_names = [
+            str(section.get("supplier", {}).get("name") or "").strip()
+            for section in supplier_sections
+            if isinstance(section, dict) and isinstance(section.get("supplier"), dict)
+        ] if isinstance(supplier_sections, list) else []
+        if not supplier_name and section_supplier_names:
+            supplier_name = next((name for name in section_supplier_names if name), "")
+        # Multi-supplier files are ready only when every supplier section has
+        # an identifiable issuer; one identified supplier must not mask another.
+        supplier_identified = (
+            bool(section_supplier_names)
+            and len(section_supplier_names) == len(supplier_sections)
+            and all(section_supplier_names)
+        ) if isinstance(supplier_sections, list) and supplier_sections else bool(supplier_name)
         items = data.get("items") if isinstance(data.get("items"), list) else []
-        has_items = any(isinstance(item, dict) for item in items)
+        valid_items = [
+            item for item in items
+            if isinstance(item, dict)
+            and any(str(item.get(key) or "").strip() for key in ("description", "supplier_sku", "barcode"))
+        ]
+        has_items = bool(valid_items)
         document_number = str(data.get("document_number") or "").strip()
 
         routes = {
@@ -92,8 +103,8 @@ class DocumentIntelligenceService:
         )
 
         missing = []
-        if not supplier_name:
-            missing.append("זיהוי ספק")
+        if not supplier_identified:
+            missing.append("זיהוי כל הספקים")
         if not has_items:
             missing.append("שורות פריטים")
         if document_type in {"INVOICE", "DELIVERY_NOTE"} and not document_number:
@@ -107,8 +118,8 @@ class DocumentIntelligenceService:
             "status": "NEEDS_REVIEW" if needs_review else "READY_FOR_REVIEW",
             "status_label": "נדרשת השלמת נתונים" if needs_review else "מוכן לבדיקה",
             "missing_fields": missing,
-            "supplier_identified": bool(supplier_name),
-            "item_count": sum(1 for item in items if isinstance(item, dict)),
+            "supplier_identified": bool(supplier_identified),
+            "item_count": len(valid_items),
             "document_number_identified": bool(document_number),
             "automatic_actions_performed": [],
             "business_data_changed": False,
