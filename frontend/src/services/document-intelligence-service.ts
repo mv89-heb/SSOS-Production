@@ -75,21 +75,25 @@ export const documentIntelligenceService = {
     onAnalysisStatus?.(result);
     return result;
   },
-  uploadManyAndAnalyze: async (files: File[], onFileStatus?: (file: File, analysis: DocumentAnalysis | null, stage: "uploading" | "uploaded" | "processing" | "done" | "failed", percent: number, error?: string) => void) => {
+  uploadManyAndAnalyze: async (files: File[], onFileStatus?: (file: File, uploadId: string, analysis: DocumentAnalysis | null, stage: "uploading" | "uploaded" | "processing" | "done" | "failed", percent: number, error?: string) => void) => {
     const results: Array<DocumentAnalysis | undefined> = new Array(files.length);
-    const concurrency = Math.min(2, Math.max(1, files.length));
+    // One document at a time: the production Render service runs one synchronous
+    // Gunicorn worker, so parallel long-running Gemini requests only queue behind it.
     let nextIndex = 0;
     async function worker() {
       while (true) {
         const index = nextIndex++;
         if (index >= files.length) return;
         const file = files[index];
+        const uploadId = crypto.randomUUID();
+        onFileStatus?.(file, uploadId, null, "uploading", 0);
         try {
           const result = await documentIntelligenceService.uploadAndAnalyze(
             file,
-            (percent) => onFileStatus?.(file, null, "uploading", percent),
+            (percent) => onFileStatus?.(file, uploadId, null, "uploading", percent),
             (analysis) => onFileStatus?.(
               file,
+              uploadId,
               analysis,
               ["FAILED", "AI_UNAVAILABLE"].includes(analysis.status) ? "failed" : analysis.status === "UPLOADED" ? "uploaded" : analysis.status === "PROCESSING" ? "processing" : "done",
               analysis.extracted_data?.processing?.percent ?? (analysis.status === "UPLOADED" ? 100 : 0),
@@ -97,14 +101,14 @@ export const documentIntelligenceService = {
             ),
           );
           results[index] = result;
-          onFileStatus?.(file, result, result.status === "FAILED" || result.status === "AI_UNAVAILABLE" ? "failed" : "done", 100, result.error_message || undefined);
+          onFileStatus?.(file, uploadId, result, result.status === "FAILED" || result.status === "AI_UNAVAILABLE" ? "failed" : "done", 100, result.error_message || undefined);
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : "העלאת המסמך או ניתוחו נכשלו";
-          onFileStatus?.(file, null, "failed", 0, message);
+          onFileStatus?.(file, uploadId, null, "failed", 0, message);
         }
       }
     }
-    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    await worker();
     return results.filter((item): item is DocumentAnalysis => Boolean(item));
   },
   analyze: async (id: number) => { const { data } = await apiClient.post<{ success: boolean; analysis: DocumentAnalysis }>(`/api/document-intelligence/${id}/analyze`); return data.analysis; },
