@@ -117,6 +117,7 @@ export default function SettingsPage() {
         {canManageImports && <SettingsCard title="ייבוא היסטורי" description="קליטת חשבוניות ותעודות משלוח היסטוריות עם סקירת כפילויות, ללא יצירת תנועות מלאי פעילות." href="/dashboard/settings/historical-import" icon={Archive} tag="כלי ייעודי" />}
         <SettingsCard title="מסמכים וקליטה" description="ניתוח מסמכים, בדיקת חילוץ נתונים והתאמת פריטים וספקים." href="/dashboard/document-intelligence" icon={FileText} />
         <SettingsCard title="מוצרים ומחירים" description="ניהול קטלוג, בדיקת נתוני מוצרים והצעות מחיר של ספקים." href="/dashboard/catalog" icon={Package} />
+        {canManageImports && <SettingsCard title="ברקודים ותוויות" description="יצירת ברקוד פנימי ו־QR למוצרים, הצגה והדפסה בלי לשנות ברקודי ספק." href="/dashboard/settings/product-codes" icon={Package} tag="חדש" />}
       </Section>
 
       <Section title="ניהול, בקרה ותיעוד" description="כלים לבדיקת פעולות המערכת, הרשאות ותהליכי עבודה.">
