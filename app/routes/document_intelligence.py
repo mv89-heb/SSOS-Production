@@ -7,6 +7,7 @@ from flask_login import current_user, login_required
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.extensions import db
+from app.models.document_analysis import DocumentAnalysis
 
 from app.services.document_intelligence_service import DocumentIntelligenceService
 from app.services.permission_service import PermissionService
@@ -38,6 +39,29 @@ def _delete_file(path):
             os.remove(path)
     except OSError:
         logger.warning("Could not delete temporary document %s", path, exc_info=True)
+
+
+@document_intelligence_bp.route("", methods=["GET"])
+@login_required
+def list_document_analyses():
+    """Return recent document-analysis records for the current tenant."""
+    try:
+        PermissionService.require_permission("documents.view")
+        try:
+            limit = int(request.args.get("limit", 100))
+        except (TypeError, ValueError):
+            raise BadRequest("limit must be an integer")
+        limit = max(1, min(limit, 200))
+        rows = DocumentAnalysis.query.filter_by(
+            tenant_id=current_user.tenant_id
+        ).order_by(DocumentAnalysis.created_at.desc(), DocumentAnalysis.id.desc()).limit(limit).all()
+        return jsonify({"success": True, "analyses": [row.to_dict() for row in rows], "limit": limit}), 200
+    except HTTPException as exc:
+        return _handle(exc)
+    except Exception as exc:
+        return _internal_error(exc, "list")
+
+
 
 
 @document_intelligence_bp.route("/upload", methods=["POST"])
