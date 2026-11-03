@@ -251,7 +251,7 @@ export default function DocumentIntelligencePage() {
       <div className="flex flex-col gap-3 sm:flex-row">
         <select value={selectedOrderId} onChange={(e) => setSelectedOrderId(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm dark:border-slate-700 dark:bg-slate-900">
           <option value="">בחר הזמנת רכש...</option>
-          {orders.map((order) => <option key={order.id} value={order.id}>{order.order_number} · {order.supplier_name || "ספק"} · {order.status || ""}</option>)}
+          {orders.filter((order) => analysis.document_type === "DELIVERY_NOTE" ? order.status === "sent" : ["approved", "sent", "completed"].includes(order.status || "")).map((order) => <option key={order.id} value={order.id}>{order.order_number} · {order.supplier_name || "ספק"} · {order.status || ""}</option>)}
         </select>
         <button type="button" onClick={compareWithOrder} disabled={busy || !selectedOrderId} className="rounded-xl bg-indigo-600 px-5 py-3 font-bold text-white disabled:opacity-50">השווה להזמנה</button>
       </div>
