@@ -24,7 +24,7 @@ type Batch = {
   id: number; name: string; status: string; document_count: number; order_count: number;
   documents?: HistoricalDocument[]; orders?: HistoricalOrder[]; created_at: string | null;
 };
-type Progress = { name: string; stage: string; percent: number; error?: string };
+type Progress = { id: string; name: string; stage: string; percent: number; error?: string };
 type Draft = { supplier_name: string; document_number: string; document_date: string; order_reference: string; confirm_duplicate: boolean; confirm_extraction: boolean };
 
 const typeLabel: Record<string, string> = { INVOICE: "חשבונית", DELIVERY_NOTE: "תעודת משלוח" };
@@ -91,9 +91,14 @@ export default function HistoricalImportPage() {
         activeBatch = data.batch;
         setBatch(activeBatch);
       }
-      setProgress(files.map((file) => ({ name: file.name, stage: "ממתין לסריקה", percent: 0 })));
-      const results = await documentIntelligenceService.uploadManyAndAnalyze(files, (file, analysis, stage, percent, errorText) => {
-        setProgress((current) => current.map((item) => item.name === file.name ? { ...item, stage: stage === "done" ? "הסתיים" : stage === "failed" ? "נכשל" : stage === "processing" ? "מנתח" : stage === "uploaded" ? "הועלה" : "מעלה", percent, error: errorText } : item));
+      setProgress([]);
+      const results = await documentIntelligenceService.uploadManyAndAnalyze(files, (file, uploadId, analysis, stage, percent, errorText) => {
+        setProgress((current) => {
+          const next = { id: uploadId, name: file.name, stage: stage === "done" ? "הסתיים" : stage === "failed" ? "נכשל" : stage === "processing" ? "מנתח" : stage === "uploaded" ? "הועלה" : "מעלה", percent, error: errorText };
+          return current.some((item) => item.id === uploadId)
+            ? current.map((item) => item.id === uploadId ? next : item)
+            : [...current, next];
+        });
         if (analysis) setScans((current) => {
           const next = current.filter((item) => item.id !== analysis.id);
           return [...next, analysis];
