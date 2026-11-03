@@ -618,6 +618,8 @@ class DocumentIntelligenceService:
         if not isinstance(row.extracted_data, dict):
             raise BadRequest("Document must be analyzed before recording an invoice")
         data = row.extracted_data
+        if isinstance(data.get("invoice_reconciliation_result"), dict):
+            raise Conflict("This document analysis has already been recorded as a supplier invoice")
         reconciliation = data.get("order_reconciliation")
         if not isinstance(reconciliation, dict):
             raise BadRequest("Compare the document with a purchase order before recording the invoice")
