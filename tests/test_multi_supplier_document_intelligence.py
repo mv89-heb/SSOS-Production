@@ -133,3 +133,26 @@ def test_hebrew_document_reference_detection_handles_unicode_word_boundaries():
 
     assert not ProductMatchingService.is_document_reference_line("חלה גדולה")
     assert not ProductMatchingService.is_document_reference_line("תעודת משלוחים מיוחדת")
+
+
+
+def test_stream_parser_deduplicates_top_level_and_supplier_section_item_arrays():
+    import json
+
+    line = {
+        "description": "חלה גדולה",
+        "supplier_sku": "1",
+        "quantity": 174,
+        "unit": "יח",
+        "unit_price": 8,
+    }
+    nested = {**line, "page_number": 1, "supplier_context": {"name": "מאפיית קויליטש בע״מ"}}
+    payload = {
+        "supplier_sections": [{"supplier": {"name": "מאפיית קויליטש בע״מ"}, "items": [nested]}],
+        "items": [line],
+    }
+
+    extracted = GeminiProvider._extract_completed_json_items(json.dumps(payload, ensure_ascii=False))
+    assert len(extracted) == 1
+    assert extracted[0]["description"] == "חלה גדולה"
+    assert extracted[0]["supplier_context"]["name"] == "מאפיית קויליטש בע״מ"
