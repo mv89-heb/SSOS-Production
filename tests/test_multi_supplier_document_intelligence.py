@@ -118,3 +118,18 @@ def test_document_reference_text_is_not_matched_as_a_product_or_counted_as_a_lin
     routing = DocumentIntelligenceService.build_workflow_routing(data)
     assert routing["item_count"] == 1
     assert routing["status"] == "READY_FOR_REVIEW"
+
+
+
+def test_hebrew_document_reference_detection_handles_unicode_word_boundaries():
+    references = [
+        "תעודת משלוח מספר 90190 מיום 15/10/2026",
+        "חשבונית מס 12345",
+        "מספר מסמך: 77",
+        "מסמך מספר 88",
+    ]
+    for description in references:
+        assert ProductMatchingService.is_document_reference_line(description)
+
+    assert not ProductMatchingService.is_document_reference_line("חלה גדולה")
+    assert not ProductMatchingService.is_document_reference_line("תעודת משלוחים מיוחדת")
