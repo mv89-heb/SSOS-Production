@@ -15,6 +15,13 @@ type UploadProgress = { id: string; name: string; analysisId?: number; stage: "u
 function formatSeconds(value: number | null | undefined) { if (value == null || !Number.isFinite(value)) return "—"; const seconds = Math.max(0, Math.round(value)); if (seconds < 60) return `${seconds} שנ׳`; const minutes = Math.floor(seconds / 60); return `${minutes}:${String(seconds % 60).padStart(2, "0")} דק׳`; }
 function supplierLabel(section: SupplierSection | undefined) { return section?.supplier?.name || "ספק לא מזוהה — נדרשת בדיקה"; }
 function hasProductEvidence(item: ExtractedItem) {
+  const description = (item.description || "").toLocaleLowerCase("he").trim();
+  const referenceMarkers = [
+    "תעודת משלוח מספר", "תעודת משלוח מס׳", "תעודת משלוח מס'",
+    "חשבונית מספר", "חשבונית מס׳", "חשבונית מס'",
+    "מספר מסמך", "מסמך מספר",
+  ];
+  if (referenceMarkers.some((marker) => description.includes(marker))) return false;
   return Boolean(item.supplier_sku?.trim() || item.barcode?.trim() ||
     (Number.isFinite(Number(item.quantity)) && Number(item.quantity) > 0) ||
     (Number.isFinite(Number(item.unit_price)) && Number(item.unit_price) > 0));
