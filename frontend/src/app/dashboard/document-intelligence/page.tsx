@@ -232,7 +232,7 @@ export default function DocumentIntelligencePage() {
       const map = mappings[index] || {};
       const product = item.product_matching?.best_match;
       const supplier = item.supplier_matching;
-      const autoProduct = product && (product.decision === "AUTO_MATCH" || ((product.confidence || 0) >= 0.75 && product.decision !== "LOW_CONFIDENCE")) ? product.product_id : undefined;
+      const autoProduct = product?.decision === "AUTO_MATCH" && (product.confidence || 0) >= 0.93 ? product.product_id : undefined;
       const autoSupplier = supplier?.decision === "AUTO_MATCH" ? supplier.supplier_id : undefined;
       const numericPrice = Number(item.unit_price);
       const productId = map.product || autoProduct;
@@ -279,7 +279,7 @@ export default function DocumentIntelligencePage() {
   }
 
   const setMap = (index: number, patch: Mapping) => setMappings((current) => ({ ...current, [index]: { ...current[index], ...patch } }));
-  const defaultProduct = (item: ExtractedItem, index: number) => { const match = item.product_matching?.best_match; const auto = match && (match.decision === "AUTO_MATCH" || ((match.confidence || 0) >= 0.75 && match.decision !== "LOW_CONFIDENCE")); return mappings[index]?.product || (auto ? match?.product_id || "" : ""); };
+  const defaultProduct = (item: ExtractedItem, index: number) => { const match = item.product_matching?.best_match; const auto = match?.decision === "AUTO_MATCH" && (match.confidence || 0) >= 0.93; return mappings[index]?.product || (auto ? match?.product_id || "" : ""); };
   const defaultSupplier = (item: ExtractedItem, index: number) => mappings[index]?.supplier || (item.supplier_matching?.decision === "AUTO_MATCH" ? item.supplier_matching.supplier_id || "" : "");
 
   return <div dir="rtl" className="space-y-6 pb-10">
@@ -370,7 +370,7 @@ export default function DocumentIntelligencePage() {
       </div>
     </div>}
   </>}
-</td><td className="p-3"><SearchableSelect value={defaultSupplier(item,index)} onChange={(value) => setMap(index,{supplier:value})} options={supplierOptions} placeholder="בחר ספק..." /></td><td className="p-3"><label className="inline-flex items-center gap-2 text-xs"><input type="checkbox" checked={mappings[index]?.update ?? Boolean(productMatch && (productMatch.decision === "AUTO_MATCH" || ((productMatch.confidence || 0) >= 0.75 && productMatch.decision !== "LOW_CONFIDENCE")) && supplierMatch?.decision === "AUTO_MATCH" && Number(item.unit_price) > 0)} onChange={(e)=>setMap(index,{update:e.target.checked})}/><span>{productMatch?.decision === "AUTO_MATCH" && supplierMatch?.decision === "AUTO_MATCH" ? "אוטומטי" : "ידני"}</span></label></td></tr>; })}</tbody></table></div><div className="flex justify-end border-t border-slate-100 p-5 dark:border-slate-800"><button type="button" onClick={apply} disabled={busy || analysis.status === "PROCESSING"} className="rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white disabled:opacity-50">{selectedLines.size ? `אישור ויישום ${selectedLines.size} שורות מסומנות` : "סמן שורות ליישום"}</button></div></section>
+</td><td className="p-3"><SearchableSelect value={defaultSupplier(item,index)} onChange={(value) => setMap(index,{supplier:value})} options={supplierOptions} placeholder="בחר ספק..." /></td><td className="p-3"><label className="inline-flex items-center gap-2 text-xs"><input type="checkbox" checked={mappings[index]?.update ?? Boolean(productMatch?.decision === "AUTO_MATCH" && (productMatch.confidence || 0) >= 0.93 && supplierMatch?.decision === "AUTO_MATCH" && Number(item.unit_price) > 0)} onChange={(e)=>setMap(index,{update:e.target.checked})}/><span>{productMatch?.decision === "AUTO_MATCH" && supplierMatch?.decision === "AUTO_MATCH" ? "אוטומטי" : "ידני"}</span></label></td></tr>; })}</tbody></table></div><div className="flex justify-end border-t border-slate-100 p-5 dark:border-slate-800"><button type="button" onClick={apply} disabled={busy || analysis.status === "PROCESSING"} className="rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white disabled:opacity-50">{selectedLines.size ? `אישור ויישום ${selectedLines.size} שורות מסומנות` : "סמן שורות ליישום"}</button></div></section>
     </>}
     </>}
   </div>;
