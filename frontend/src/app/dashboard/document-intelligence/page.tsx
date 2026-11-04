@@ -237,7 +237,11 @@ export default function DocumentIntelligencePage() {
       const numericPrice = Number(item.unit_price);
       const productId = map.product || autoProduct;
       const supplierId = map.supplier || autoSupplier;
-      const autoUpdatePrice = Boolean(productId && supplierId && Number.isFinite(numericPrice) && numericPrice > 0);
+      const autoUpdatePrice = Boolean(
+        product?.decision === "AUTO_MATCH" && (product.confidence || 0) >= 0.93 &&
+        supplier?.decision === "AUTO_MATCH" && product.product_id === productId &&
+        supplier.supplier_id === supplierId && Number.isFinite(numericPrice) && numericPrice > 0
+      );
       return { line_index: index, product_id: productId, supplier_id: supplierId, price: Number.isFinite(numericPrice) && numericPrice > 0 ? numericPrice : undefined, currency: data?.currency || "ILS", unit: item.unit, package_quantity: item.package_quantity, update_price: map.update ?? autoUpdatePrice, match_method: product?.method || "MANUAL_REVIEW", match_confidence: product?.confidence };
     });
     const pending = lines.filter((line) => !appliedIndexes.has(line.line_index) && selectedLines.has(line.line_index));
