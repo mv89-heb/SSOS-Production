@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from app.services.gemini_provider import GeminiProvider
 from app.services.product_matching_service import ProductMatchingService
+from app.services.document_intelligence_service import DocumentIntelligenceService
 
 
 def test_merge_page_results_keeps_multiple_suppliers_on_same_and_different_pages():
@@ -79,3 +80,41 @@ def test_stream_parser_exposes_complete_product_rows_before_json_finishes():
     )
     items = GeminiProvider._extract_completed_json_items(partial)
     assert [item["description"] for item in items] == ["חלב 3%", "לחם"]
+
+
+
+def test_document_reference_text_is_not_matched_as_a_product_or_counted_as_a_line():
+    service = ProductMatchingService(tenant_id=1)
+    service._suppliers = []
+    service._products = []
+    service._supplier_offers = []
+    data = service.enrich_document({
+        "document_type": "INVOICE",
+        "document_number": "INV-901",
+        "supplier": {"name": "מאפיית קויליטש בע״מ"},
+        "items": [
+            {
+                "description": "תעודת משלוח מספר 90190 מיום 15/10/2026",
+                "quantity": 1,
+                "page_number": 1,
+            },
+            {
+                "description": "חלה גדולה",
+                "quantity": 174,
+                "unit_price": 8,
+                "page_number": 1,
+            },
+        ],
+    })
+
+    reference, product = data["items"]
+    assert reference["line_type"] == "DOCUMENT_REFERENCE"
+    assert reference["product_matching"] == {
+        "decision": "NO_MATCH",
+        "best_match": None,
+        "suggestions": [],
+    }
+    assert product["line_type"] == "PRODUCT_LINE"
+    routing = DocumentIntelligenceService.build_workflow_routing(data)
+    assert routing["item_count"] == 1
+    assert routing["status"] == "READY_FOR_REVIEW"
