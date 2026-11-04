@@ -125,3 +125,100 @@ def test_rematch_refreshes_saved_analysis_without_calling_gemini(logged_in_clien
     assert refreshed["status"] == "ANALYZED"
     assert refreshed["extracted_data"]["matching_version"] == "deterministic-v2-multi-supplier"
     assert calls["generate"] == 1
+
+
+def test_document_analysis_does_not_mutate_procurement_or_inventory(
+    logged_in_client_a, db, make_order, monkeypatch
+):
+    from app.models.inventory_movement import InventoryMovement
+    from app.models.order import Order
+    from app.models.price_history import PriceHistory
+    from app.models.product import Product
+    from app.models.receipt import Receipt
+    from app.models.receipt_item import ReceiptItem
+    from app.models.supplier import Supplier
+    from app.models.supplier_invoice import SupplierInvoice
+    from app.models.supplier_offer import SupplierProductOffer
+
+    order_response, supplier_id, product_id = make_order(logged_in_client_a)
+    assert order_response.status_code == 201, order_response.get_json()
+    product = db.session.get(Product, product_id)
+    product.current_stock = 17
+    db.session.commit()
+
+    models = (
+        Supplier,
+        Product,
+        SupplierProductOffer,
+        PriceHistory,
+        Order,
+        Receipt,
+        ReceiptItem,
+        SupplierInvoice,
+        InventoryMovement,
+    )
+
+    def business_snapshot():
+        db.session.expire_all()
+        current_product = db.session.get(Product, product_id)
+        return {
+            "counts": {model.__name__: db.session.query(model).count() for model in models},
+            "product": {
+                "supplier_id": current_product.supplier_id,
+                "current_price": str(current_product.current_price),
+                "current_stock": current_product.current_stock,
+                "unit": current_product.unit,
+                "units_per_carton": current_product.units_per_carton,
+            },
+            "supplier_id": supplier_id,
+        }
+
+    before = business_snapshot()
+
+    class FakeAI:
+        @staticmethod
+        def is_available():
+            return True
+
+        @staticmethod
+        def generate_structured_from_file(path, schema, system_instruction=None, progress_callback=None):
+            assert path
+            return SimpleNamespace(
+                success=True,
+                data={
+                    "document_type": "DELIVERY_NOTE",
+                    "document_number": "DN-DRY-RUN-001",
+                    "supplier": {"name": "Test Supplier"},
+                    "items": [{
+                        "description": "Test Product",
+                        "quantity": 1,
+                        "unit": "יחידה",
+                        "unit_price": 10,
+                    }],
+                },
+                provider="test",
+                model="test-model",
+                error=None,
+            )
+
+    monkeypatch.setattr(
+        "app.services.document_intelligence_service.AIService.from_config",
+        lambda config: FakeAI(),
+    )
+
+    upload_response = logged_in_client_a.post(
+        "/api/document-intelligence/upload",
+        data={"file": (BytesIO(b"fake delivery note"), "delivery-note.pdf")},
+        content_type="multipart/form-data",
+    )
+    assert upload_response.status_code == 201, upload_response.get_json()
+    analysis_id = upload_response.get_json()["analysis"]["id"]
+
+    analyze_response = logged_in_client_a.post(
+        f"/api/document-intelligence/{analysis_id}/analyze"
+    )
+    assert analyze_response.status_code == 200, analyze_response.get_json()
+    assert analyze_response.get_json()["analysis"]["status"] == "ANALYZED"
+
+    after = business_snapshot()
+    assert after == before
