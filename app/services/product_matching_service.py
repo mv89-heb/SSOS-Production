@@ -93,7 +93,7 @@ class ProductMatchingService:
         text = unicodedata.normalize("NFKC", str(description or "")).casefold().strip()
         text = re.sub(r"[\u200e\u200f\u202a-\u202e]", "", text)
         return bool(re.match(
-            r"^(?:תעודת\s+משלוח|חשבונית(?:\s+מס)?|מספר\s+מסמך|מסמך\s+מספר)\b",
+            r"^(?:תעודת\s+משלוח|חשבונית(?:\s+מס)?|מספר\s+מסמך|מסמך\s+מספר)(?=$|[\s:.,#№-])",
             text,
         ))
 
