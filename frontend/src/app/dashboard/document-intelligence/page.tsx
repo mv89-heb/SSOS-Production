@@ -15,7 +15,7 @@ type UploadProgress = { id: string; name: string; analysisId?: number; stage: "u
 function formatSeconds(value: number | null | undefined) { if (value == null || !Number.isFinite(value)) return "—"; const seconds = Math.max(0, Math.round(value)); if (seconds < 60) return `${seconds} שנ׳`; const minutes = Math.floor(seconds / 60); return `${minutes}:${String(seconds % 60).padStart(2, "0")} דק׳`; }
 function supplierLabel(section: SupplierSection | undefined) { return section?.supplier?.name || "ספק לא מזוהה — נדרשת בדיקה"; }
 function isDocumentReferenceLine(description?: string) {
-  return /^(?:תעודת\\s+משלוח|חשבונית(?:\\s+מס)?|מספר\\s+מסמך|מסמך\\s+מספר)\\b/i.test((description || "").normalize("NFKC").replace(/[\\u200e\\u200f\\u202a-\\u202e]/g, "").trim());
+  return /^(?:תעודת\s+משלוח|חשבונית(?:\s+מס)?|מספר\s+מסמך|מסמך\s+מספר)\b/i.test((description || "").normalize("NFKC").replace(/[\u200e\u200f\u202a-\u202e]/g, "").trim());
 }
 
 function hasProductEvidence(item: ExtractedItem) {
