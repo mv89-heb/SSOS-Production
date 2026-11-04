@@ -102,6 +102,7 @@ class DocumentIntelligenceService:
             item for item in items
             if isinstance(item, dict)
             and any(str(item.get(key) or "").strip() for key in ("description", "supplier_sku", "barcode"))
+            and not ProductMatchingService.is_document_reference_line(item.get("description"))
         ]
         has_items = bool(valid_items)
         document_number = str(data.get("document_number") or "").strip()
@@ -277,12 +278,7 @@ class DocumentIntelligenceService:
         description = str(item.get("description") or "").casefold().strip()
         # OCR sometimes promotes document references and header text into line items
         # and even assigns a default quantity of 1. Those are never catalog products.
-        reference_markers = (
-            "תעודת משלוח מספר", "תעודת משלוח מס׳", "תעודת משלוח מס'",
-            "חשבונית מספר", "חשבונית מס׳", "חשבונית מס'",
-            "מספר מסמך", "מסמך מספר",
-        )
-        if any(marker in description for marker in reference_markers):
+        if ProductMatchingService.is_document_reference_line(description):
             return False
         if str(item.get("supplier_sku") or "").strip() or str(item.get("barcode") or "").strip():
             return True
