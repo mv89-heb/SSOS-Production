@@ -269,6 +269,35 @@ class DocumentIntelligenceService:
         db.session.commit()
         return row
 
+    @staticmethod
+    def _has_product_line_evidence(item: dict) -> bool:
+        """Require a real item identifier or a positive quantity/price before catalog mutation."""
+        if not isinstance(item, dict):
+            return False
+        description = str(item.get("description") or "").casefold().strip()
+        # OCR sometimes promotes document references and header text into line items
+        # and even assigns a default quantity of 1. Those are never catalog products.
+        reference_markers = (
+            "תעודת משלוח מספר", "תעודת משלוח מס׳", "תעודת משלוח מס'",
+            "חשבונית מספר", "חשבונית מס׳", "חשבונית מס'",
+            "מספר מסמך", "מסמך מספר",
+        )
+        if any(marker in description for marker in reference_markers):
+            return False
+        if str(item.get("supplier_sku") or "").strip() or str(item.get("barcode") or "").strip():
+            return True
+        for key in ("quantity", "unit_price"):
+            raw = item.get(key)
+            if raw in (None, ""):
+                continue
+            try:
+                value = Decimal(str(raw))
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+            if value.is_finite() and value > 0:
+                return True
+        return False
+
     def create_product_from_line(self, analysis_id: int, line_index: int, data: dict | None = None):
         """Create a catalog product from one extracted line and apply that line atomically."""
         PermissionService.require_role_at_least("manager")
@@ -291,6 +320,8 @@ class DocumentIntelligenceService:
         item = extracted_items[line_index]
         if not isinstance(item, dict):
             raise BadRequest("The selected document line is invalid")
+        if not self._has_product_line_evidence(item):
+            raise BadRequest("This extracted line has no product-row evidence and cannot create a catalog product")
         payload = data if isinstance(data, dict) else {}
         supplier_id = payload.get("supplier_id")
         if not isinstance(supplier_id, int) or isinstance(supplier_id, bool) or supplier_id <= 0:
@@ -400,6 +431,9 @@ class DocumentIntelligenceService:
                 if line_index in applied_indexes or line_index in requested_indexes:
                     raise BadRequest(f"Line {line_index + 1} was already applied or duplicated")
                 requested_indexes.append(line_index)
+                extracted_item = extracted_items[line_index]
+                if not self._has_product_line_evidence(extracted_item):
+                    raise BadRequest(f"Document line {line_index + 1} has no product-row evidence and cannot be applied")
                 product_id, supplier_id, price = item.get("product_id"), item.get("supplier_id"), item.get("price")
                 if not isinstance(product_id, int) or isinstance(product_id, bool) or product_id <= 0:
                     raise BadRequest("Each reviewed line requires a valid product_id")

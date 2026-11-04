@@ -119,7 +119,7 @@ class ProductMatchingService:
         return bool(re.fullmatch(r"990000010000\d+", cls.compact(value)))
 
     @classmethod
-    def _identity_score(cls, extracted, product) -> tuple[float, str | None]:
+    def _identity_score(cls, extracted, product, supplier_id: int | None = None) -> tuple[float, str | None]:
         barcode = cls.compact(extracted.get("barcode"))
         product_barcode = cls.compact(product.barcode)
         if barcode and product_barcode and barcode == product_barcode:
@@ -128,11 +128,16 @@ class ProductMatchingService:
                 return 1.0, "BARCODE"
         supplier_sku = cls.compact(extracted.get("supplier_sku"))
         product_supplier_sku = cls.compact(product.supplier_sku)
-        product_sku = cls.compact(product.sku)
-        if supplier_sku and product_supplier_sku and supplier_sku == product_supplier_sku:
+        # A supplier SKU is only authoritative inside that supplier's identity
+        # namespace. Never compare it with the tenant-wide internal product SKU.
+        if (
+            supplier_id is not None
+            and product.supplier_id == supplier_id
+            and supplier_sku
+            and product_supplier_sku
+            and supplier_sku == product_supplier_sku
+        ):
             return 0.99, "SUPPLIER_SKU"
-        if supplier_sku and product_sku and supplier_sku == product_sku:
-            return 0.97, "SKU"
         return 0.0, None
 
     @classmethod
@@ -239,7 +244,7 @@ class ProductMatchingService:
         if cls._variant_conflict(extracted, product):
             return 0.0, "PRODUCT_VARIANT_MISMATCH"
         unconfirmed_variant = cls._variant_unconfirmed(extracted, product)
-        identity, method = cls._identity_score(extracted, product)
+        identity, method = cls._identity_score(extracted, product, supplier_id=supplier_id)
         extracted_supplier_sku = cls.compact(extracted.get("supplier_sku"))
         offer_supplier_sku = cls.compact(getattr(supplier_offer, "supplier_sku", None)) if supplier_offer is not None else ""
         if extracted_supplier_sku and offer_supplier_sku and extracted_supplier_sku == offer_supplier_sku:
@@ -358,10 +363,11 @@ class ProductMatchingService:
             return {"decision": "NO_MATCH", "best_match": None, "suggestions": []}
 
         confidence = candidate["confidence"]
-        if confidence >= 0.93:
+        if confidence >= 0.93 and supplier_id is not None:
             decision = "AUTO_MATCH"
             best = candidate
-        elif confidence >= 0.75:
+        elif confidence >= 0.75 or confidence >= 0.93:
+            # Product confidence cannot compensate for an unverified supplier.
             decision = "REVIEW"
             best = candidate
         else:
