@@ -118,7 +118,21 @@ export default function DocumentIntelligencePage() {
       }
     });
     setSelectedLines((current) => {
-      const next = isNewAnalysis ? new Set<number>() : new Set([...current].filter((index) => !appliedIndexes.has(index)));
+      const next = isNewAnalysis ? new Set<number>() : new Set([...current].filter((index) => {
+        if (appliedIndexes.has(index) || !items[index] || !hasProductEvidence(items[index])) return false;
+        if (previouslyAutoSelected.has(index)) {
+          const item = items[index];
+          const product = item.product_matching?.best_match;
+          const supplier = item.supplier_matching;
+          const stillAutomatic = product?.decision === "AUTO_MATCH" && (product.confidence || 0) >= 0.93 &&
+            supplier?.decision === "AUTO_MATCH" && Boolean(supplier.supplier_id);
+          if (!stillAutomatic) {
+            previouslyAutoSelected.delete(index);
+            return false;
+          }
+        }
+        return true;
+      }));
       // High-confidence matches are preselected once; uncertain lines remain unchecked.
       // Later progress refreshes never override a user's explicit deselection.
       autoIndexesToAdd.forEach((index) => next.add(index));
