@@ -87,6 +87,16 @@ class ProductMatchingService:
     def tokens(cls, value) -> set[str]:
         return {token for token in cls.normalize(value).split() if len(token) > 1 and token not in cls.STOP_WORDS}
 
+    @staticmethod
+    def is_document_reference_line(description) -> bool:
+        """Identify document headers/references that OCR sometimes mislabels as product rows."""
+        text = unicodedata.normalize("NFKC", str(description or "")).casefold().strip()
+        text = re.sub(r"[\u200e\u200f\u202a-\u202e]", "", text)
+        return bool(re.match(
+            r"^(?:תעודת\s+משלוח|חשבונית(?:\s+מס)?|מספר\s+מסמך|מסמך\s+מספר)\b",
+            text,
+        ))
+
     @classmethod
     def _text_score(cls, left, right) -> float:
         a, b = cls.normalize(left), cls.normalize(right)
@@ -436,7 +446,12 @@ class ProductMatchingService:
                 item["supplier_section_index"] = section_index
                 item["supplier_context"] = dict(supplier_data)
                 item["supplier_matching"] = supplier_match
-                item["product_matching"] = self.match_line(item, supplier_id=supplier_id)
+                if self.is_document_reference_line(item.get("description")):
+                    item["line_type"] = "DOCUMENT_REFERENCE"
+                    item["product_matching"] = {"decision": "NO_MATCH", "best_match": None, "suggestions": []}
+                else:
+                    item["line_type"] = "PRODUCT_LINE"
+                    item["product_matching"] = self.match_line(item, supplier_id=supplier_id)
                 section_items.append(item)
                 flat_items.append(item)
             enriched = {"supplier": dict(supplier_data), "items": section_items, "supplier_matching": supplier_match}
