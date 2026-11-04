@@ -298,3 +298,39 @@ def test_delivery_note_without_explicit_unit_cannot_post_inventory(
     assert Receipt.query.filter_by(
         tenant_id=order.tenant_id, order_id=order.id
     ).count() == 0
+
+
+
+def test_document_reference_text_cannot_be_applied_as_product_line(
+    logged_in_client_a, db, make_order
+):
+    response, supplier_id, product_id = make_order(logged_in_client_a)
+    assert response.status_code == 201, response.get_json()
+    user = User.query.filter_by(email="admin@acme.test").one()
+    product = db.session.get(Product, product_id)
+    original_price = product.current_price
+    analysis = _analysis(db, user, "invoice-reference-text.pdf", "INVOICE", {
+        "document_type": "INVOICE",
+        "items": [{
+            "description": "תעודת משלוח מספר 90190 מיום 15/10/2026",
+            "page_number": 1,
+        }],
+    })
+
+    result = logged_in_client_a.post(
+        f"/api/document-intelligence/{analysis.id}/apply",
+        json={"lines": [{
+            "line_index": 0,
+            "product_id": product_id,
+            "supplier_id": supplier_id,
+            "price": 8,
+            "update_price": True,
+        }]},
+    )
+
+    assert result.status_code == 400, result.get_json()
+    assert "no product-row evidence" in result.get_json()["message"].lower()
+    db.session.refresh(product)
+    assert product.current_price == original_price
+    db.session.refresh(analysis)
+    assert analysis.extracted_data.get("applied_line_indexes", []) == []
