@@ -36,7 +36,7 @@ def test_barcode_is_exact_high_confidence_match():
 def test_supplier_sku_matches_before_name_similarity():
     service = ProductMatchingService(1)
     extracted = {"description": "שם שונה לגמרי", "supplier_sku": "TN-100"}
-    score, method = service._candidate_score(extracted, product())
+    score, method = service._candidate_score(extracted, product(), supplier_id=10)
     assert score == 0.99
     assert method == "SUPPLIER_SKU"
 
@@ -334,3 +334,37 @@ def test_supplier_section_identity_is_not_overwritten_by_document_level_supplier
     sections = service._build_supplier_sections(data)
 
     assert sections[0]["supplier"]["name"] == "ר. שמאי"
+
+
+def test_supplier_sku_never_matches_internal_catalog_sku():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "מוצר לא קשור", "supplier_sku": "1"},
+        product(name="חלב תנובה", description="", barcode="", supplier_sku=None, sku="1"),
+    )
+    assert method == "NAME_SIMILARITY"
+    assert score < 0.45
+
+
+def test_supplier_sku_does_not_match_product_owned_by_another_supplier():
+    service = ProductMatchingService(1)
+    score, method = service._candidate_score(
+        {"description": "מוצר לא קשור", "supplier_sku": "TN-100"},
+        product(supplier_id=20),
+        supplier_id=10,
+    )
+    assert method == "NAME_SIMILARITY"
+    assert score < 0.45
+
+
+def test_high_product_confidence_is_review_when_supplier_is_unresolved():
+    service = ProductMatchingService(1)
+    service._suppliers = []
+    service._products = [product()]
+    result = service.match_line(
+        {"description": "שם שונה לגמרי", "barcode": "7290000000012"},
+        supplier_id=None,
+    )
+    assert result["decision"] == "REVIEW"
+    assert result["best_match"]["confidence"] == 1.0
+    assert result["best_match"]["decision"] == "REVIEW"
