@@ -313,6 +313,7 @@ def test_document_reference_text_cannot_be_applied_as_product_line(
         "document_type": "INVOICE",
         "items": [{
             "description": "תעודת משלוח מספר 90190 מיום 15/10/2026",
+            "quantity": 1,
             "page_number": 1,
         }],
     })
