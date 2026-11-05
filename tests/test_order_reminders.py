@@ -96,3 +96,25 @@ def test_natural_language_reminder_returns_bounded_plan(logged_in_client_a, make
     assert 5 <= payload["ai"]["first_reminder_minutes"] <= 10080
     assert 5 <= payload["ai"]["repeat_minutes"] <= 10080
     assert payload["ai"]["interpretation"]
+
+
+def test_open_reminders_lists_only_actionable_reminders(logged_in_client_a, make_order):
+    active_response, _, _ = make_order(logged_in_client_a, supplier_name="Active Reminder Supplier")
+    inactive_response, _, _ = make_order(logged_in_client_a, supplier_name="No Reminder Supplier")
+    assert active_response.status_code == 201, active_response.get_json()
+    assert inactive_response.status_code == 201, inactive_response.get_json()
+
+    active_order_id = active_response.get_json()["order"]["id"]
+    activated = logged_in_client_a.post(f"/api/order-reminders/orders/{active_order_id}/activate")
+    assert activated.status_code == 200, activated.get_json()
+
+    listed = logged_in_client_a.get("/api/order-reminders")
+    assert listed.status_code == 200, listed.get_json()
+    reminders = listed.get_json()["reminders"]
+    assert [item["order"]["id"] for item in reminders] == [active_order_id]
+
+    completed = logged_in_client_a.post(f"/api/order-reminders/orders/{active_order_id}/complete")
+    assert completed.status_code == 200, completed.get_json()
+    listed_after_completion = logged_in_client_a.get("/api/order-reminders")
+    assert listed_after_completion.status_code == 200
+    assert listed_after_completion.get_json()["reminders"] == []
