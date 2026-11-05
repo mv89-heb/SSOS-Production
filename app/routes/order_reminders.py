@@ -6,7 +6,7 @@ from flask_login import current_user, login_required
 from werkzeug.exceptions import BadRequest, HTTPException, NotFound
 
 from app.extensions import db
-from app.models.order import REMINDER_COMPLETE, REMINDER_PENDING, Order
+from app.models.order import REMINDER_COMPLETE, REMINDER_PENDING, REMINDER_DUE, STATUS_SENT, STATUS_COMPLETED, STATUS_CANCELLED, Order
 from app.repositories.base_repository import BaseRepository
 from app.repositories.supplier_repository import SupplierRepository
 from app.services.order_reminder_service import OrderReminderService
@@ -20,7 +20,7 @@ class OrderReminderRepository(BaseRepository):
     model = Order
 
     def list_open(self, user_id: int | None = None):
-        stmt = self._tenant_select().where(Order.reminder_state != REMINDER_COMPLETE)
+        stmt = self._tenant_select().where(\n            Order.reminder_state.in_((REMINDER_PENDING, REMINDER_DUE)),\n            Order.status.notin_((STATUS_SENT, STATUS_COMPLETED, STATUS_CANCELLED)),\n        )
         if user_id is not None:
             stmt = stmt.where(Order.user_id == user_id)
         stmt = stmt.order_by(Order.next_reminder_at.asc().nullslast(), Order.id.asc())
