@@ -183,7 +183,7 @@ export default function CostCalculatorPage() {
           <span className="mt-1 block text-xs font-normal text-slate-500">{search.trim() ? `נמצאו ${filteredProducts.length} מוצרים מתאימים` : `כל ${products.length} מוצרי הקטלוג זמינים לבחירה`}</span>
         </label>
         <label className="block text-sm font-bold">מוצר מהקטלוג
-          <select value={productId} onChange={e => { setProductId(e.target.value); setUseManualPackage(false); setAmountUnit(""); setAdditionalUnit(""); }} className={inputClass + " mt-1"}>
+          <select value={productId} onChange={e => { setProductId(e.target.value); setUseManualPackage(false); setAmountToCost(""); setAmountUnit(""); setAdditionalAmount(""); setAdditionalUnit(""); }} className={inputClass + " mt-1"}>
             <option value="">בחרו מוצר</option>
             {filteredProducts.map(p => <option key={p.id} value={p.id}>{p.name} — {supplierName(p)}{p.sku ? ` — מק״ט ${p.sku}` : ""}{p.current_price != null && p.current_price > 0 ? ` — ${money(p.current_price, p.currency)}` : " — חסר מחיר"}</option>)}
             {search.trim() && filteredProducts.length === 0 && <option value="" disabled>לא נמצאו מוצרים — נסו שם חלקי, מק״ט או שם ספק</option>}
