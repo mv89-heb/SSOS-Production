@@ -65,6 +65,8 @@ export default function CostCalculatorPage() {
   const [packageUnit, setPackageUnit] = useState("");
   const [amountToCost, setAmountToCost] = useState("");
   const [amountUnit, setAmountUnit] = useState("");
+  const [additionalAmount, setAdditionalAmount] = useState("");
+  const [additionalUnit, setAdditionalUnit] = useState("");
   const [useManualPackage, setUseManualPackage] = useState(false);
   const [calculationItems, setCalculationItems] = useState<Array<{
     key: string;
@@ -76,6 +78,9 @@ export default function CostCalculatorPage() {
     priceUnit: string;
     unitCost: number;
     conversionFactor: number;
+    additionalQuantity: number;
+    additionalUnit: string;
+    additionalConversionFactor: number;
     totalCost: number;
     currency: string;
   }>>([]);
@@ -107,38 +112,57 @@ export default function CostCalculatorPage() {
   const baseQty = useManualPackage ? numeric(packageQuantity) : 1;
   const baseUnit = useManualPackage ? packageUnit : selected?.unit ?? "";
   const conversionFactor = amountUnit && baseUnit ? conversion(amountUnit, baseUnit) : null;
-  const validInputs = basePrice != null && Number.isFinite(basePrice) && basePrice > 0 && baseQty != null && Number.isFinite(baseQty) && baseQty > 0 && numeric(amountToCost) != null && Number.isFinite(Number(amountToCost)) && Number(amountToCost) >= 0 && conversionFactor != null;
-  const totalCost = validInputs ? (basePrice! / baseQty!) * Number(amountToCost) * conversionFactor! : null;
+  const additionalConversionFactor = additionalUnit && baseUnit ? conversion(additionalUnit, baseUnit) : null;
+  const mainQuantity = numeric(amountToCost) ?? 0;
+  const extraQuantity = numeric(additionalAmount) ?? 0;
+  const hasMainQuantity = mainQuantity > 0;
+  const hasAdditionalQuantity = extraQuantity > 0;
+  const validInputs = basePrice != null && Number.isFinite(basePrice) && basePrice > 0 && baseQty != null && Number.isFinite(baseQty) && baseQty > 0
+    && Number.isFinite(mainQuantity) && mainQuantity >= 0 && Number.isFinite(extraQuantity) && extraQuantity >= 0
+    && (hasMainQuantity || hasAdditionalQuantity)
+    && (!hasMainQuantity || (Boolean(amountUnit) && conversionFactor != null))
+    && (!hasAdditionalQuantity || (Boolean(additionalUnit) && additionalConversionFactor != null));
+  const totalBaseQuantity = (hasMainQuantity ? mainQuantity * (conversionFactor ?? 0) : 0)
+    + (hasAdditionalQuantity ? extraQuantity * (additionalConversionFactor ?? 0) : 0);
+  const totalCost = validInputs ? (basePrice! / baseQty!) * totalBaseQuantity : null;
   const addToCalculation = () => {
-    if (!selected || totalCost == null || basePrice == null || baseQty == null || baseQty <= 0 || !amountUnit || useManualPackage) return;
-    const quantity = Number(amountToCost);
-    if (!Number.isFinite(quantity) || quantity <= 0) return;
+    if (!selected || totalCost == null || basePrice == null || baseQty == null || baseQty <= 0 || useManualPackage) return;
+    if ((hasMainQuantity && (!amountUnit || conversionFactor == null)) || (hasAdditionalQuantity && (!additionalUnit || additionalConversionFactor == null))) return;
     setCalculationItems((items) => [...items, {
       key: `${selected.id}-${Date.now()}-${items.length}`,
       productId: selected.id,
       name: selected.name,
       supplier: supplierName(selected),
-      quantity,
+      quantity: mainQuantity,
       unit: amountUnit,
       priceUnit: baseUnit,
       unitCost: basePrice / baseQty,
-      conversionFactor: conversionFactor!,
+      conversionFactor: conversionFactor ?? 1,
+      additionalQuantity: extraQuantity,
+      additionalUnit,
+      additionalConversionFactor: additionalConversionFactor ?? 1,
       totalCost,
       currency: selected.currency || "ILS",
     }]);
   };
   const removeCalculationItem = (key: string) => setCalculationItems((items) => items.filter((item) => item.key !== key));
   const updateCalculationQuantity = (key: string, quantity: number) => {
-    if (!Number.isFinite(quantity) || quantity <= 0) return;
+    if (!Number.isFinite(quantity) || quantity < 0) return;
     setCalculationItems((items) => items.map((item) => item.key === key
-      ? { ...item, quantity, totalCost: item.unitCost * quantity * item.conversionFactor }
+      ? { ...item, quantity, totalCost: item.unitCost * (quantity * item.conversionFactor + item.additionalQuantity * item.additionalConversionFactor) }
+      : item));
+  };
+  const updateAdditionalCalculationQuantity = (key: string, quantity: number) => {
+    if (!Number.isFinite(quantity) || quantity < 0) return;
+    setCalculationItems((items) => items.map((item) => item.key === key
+      ? { ...item, additionalQuantity: quantity, totalCost: item.unitCost * (item.quantity * item.conversionFactor + quantity * item.additionalConversionFactor) }
       : item));
   };
   const calculationTotals = calculationItems.reduce<Record<string, number>>((totals, item) => {
     totals[item.currency] = (totals[item.currency] ?? 0) + item.totalCost;
     return totals;
   }, {});
-  const reset = () => { setSearch(""); setProductId(""); setManualPackagePrice(""); setPackageQuantity(""); setPackageUnit(""); setAmountToCost(""); setAmountUnit(""); setUseManualPackage(false); setCalculationItems([]); };
+  const reset = () => { setSearch(""); setProductId(""); setManualPackagePrice(""); setPackageQuantity(""); setPackageUnit(""); setAmountToCost(""); setAmountUnit(""); setAdditionalAmount(""); setAdditionalUnit(""); setUseManualPackage(false); setCalculationItems([]); };
 
   return <div dir="rtl" className="mx-auto max-w-5xl space-y-6 pb-10 text-slate-900 dark:text-slate-100">
     <header className="overflow-hidden rounded-3xl bg-gradient-to-l from-slate-950 via-indigo-950 to-blue-900 p-6 text-white shadow-xl sm:p-8">
@@ -177,17 +201,27 @@ export default function CostCalculatorPage() {
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center gap-2"><Scale className="h-5 w-5 text-indigo-600"/><h2 className="text-lg font-extrabold">חישוב עלות כמות</h2></div>
         <p className="text-sm leading-6 text-slate-500">תחילה בדקו מהי יחידת המחיר שמוגדרת בקטלוג. לאחר בחירת מוצר, רשימת היחידות תציג רק יחידות תואמות: משקל עם משקל, נפח עם נפח, או אותה יחידה בדיוק. קרטון/מארז לא יומרו ליחידות אחרות בלי נתוני תכולה ידועים.</p>
-        <Field label="כמות לחישוב" value={amountToCost} onChange={setAmountToCost} placeholder="למשל 250"/>
-        <label className="block text-sm font-bold">יחידת מידה של הכמות<select value={amountUnit} onChange={e => setAmountUnit(e.target.value)} disabled={!baseUnit} className={inputClass + " mt-1 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800"}><option value="">{baseUnit ? "בחרו יחידת מידה" : "בחרו מוצר או יחידת מחיר תחילה"}</option>{compatibleUnitOptions(baseUnit).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="כמות עיקרית" value={amountToCost} onChange={setAmountToCost} placeholder="למשל 1"/>
+          <label className="block text-sm font-bold">יחידת מידה<select value={amountUnit} onChange={e => setAmountUnit(e.target.value)} disabled={!baseUnit} className={inputClass + " mt-1 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800"}><option value="">{baseUnit ? "בחרו יחידה" : "בחרו מוצר תחילה"}</option>{compatibleUnitOptions(baseUnit).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        </div>
+        <div className="rounded-xl border border-dashed border-slate-300 p-3 dark:border-slate-700">
+          <div className="mb-2 text-sm font-bold">תוספת ביחידת מידה אחרת (אופציונלי)</div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="כמות נוספת" value={additionalAmount} onChange={setAdditionalAmount} placeholder="למשל 250"/>
+            <label className="block text-sm font-bold">יחידת מידה לתוספת<select value={additionalUnit} onChange={e => setAdditionalUnit(e.target.value)} disabled={!baseUnit} className={inputClass + " mt-1 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800"}><option value="">בחרו יחידה לתוספת</option>{compatibleUnitOptions(baseUnit).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">לדוגמה: כמות עיקרית 1 ק״ג ותוספת 250 גרם. המחשבון ימיר את שתיהן לאותה יחידת בסיס לפני חישוב העלות.</p>
+        </div>
         {selected && !useManualPackage && <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"><strong>יחידת המחיר/הרכש בקטלוג:</strong> {selected.unit || "לא הוגדרה"}. זה הנתון הקובע איך המחיר נשמר. אם הספק מוכר בקרטון אך הקטלוג מציין יחידה אחרת, יש לוודא ולעדכן את נתוני המוצר/האריזה בקטלוג לפני שמסתמכים על החישוב.</div>}
         <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 dark:border-indigo-900/60 dark:bg-indigo-950/30">
           <div className="text-sm font-bold text-indigo-800 dark:text-indigo-200">עלות הכמות המבוקשת</div>
           <div className="mt-2 text-3xl font-black tabular-nums text-indigo-950 dark:text-white">{totalCost == null ? "—" : money(totalCost, useManualPackage ? "ILS" : selected?.currency ?? "ILS")}</div>
-          {totalCost != null && baseQty != null && baseQty > 0 && <p className="mt-2 text-xs leading-5 text-indigo-800 dark:text-indigo-200">מחיר יחידת המידה: {money(basePrice! / baseQty!, useManualPackage ? "ILS" : selected?.currency ?? "ILS")} לכל {baseUnit}</p>}
+          {totalCost != null && baseQty != null && baseQty > 0 && <p className="mt-2 text-xs leading-5 text-indigo-800 dark:text-indigo-200">מחיר יחידת המידה: {money(basePrice! / baseQty!, useManualPackage ? "ILS" : selected?.currency ?? "ILS")} לכל {baseUnit}. כמות מחושבת: {hasMainQuantity ? `${mainQuantity} ${amountUnit}` : ""}{hasMainQuantity && hasAdditionalQuantity ? " + " : ""}{hasAdditionalQuantity ? `${extraQuantity} ${additionalUnit}` : ""}</p>}
           {selected && !useManualPackage && !(selected.current_price != null && selected.current_price > 0) && <p className="mt-2 text-sm font-bold text-amber-700">למוצר הזה אין מחיר תקין בקטלוג. לא מוצג חישוב המבוסס על מחיר חסר.</p>}
           {amountUnit && baseUnit && conversionFactor == null && <p className="mt-2 text-sm font-bold text-amber-700">לא ניתן להמיר בין יחידות המידה האלה. בחרו יחידות זהות או יחידות משקל/נפח תואמות.</p>}
         </div>
-        <button type="button" onClick={addToCalculation} disabled={!selected || totalCost == null || !amountUnit || Number(amountToCost) <= 0 || useManualPackage} className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500">הוספת המוצר לרשימת החישוב</button>
+        <button type="button" onClick={addToCalculation} disabled={!selected || totalCost == null || (!hasMainQuantity && !hasAdditionalQuantity) || useManualPackage} className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500">הוספת המוצר לרשימת החישוב</button>
         {useManualPackage && <p className="text-xs text-amber-700">כדי להוסיף מוצר לרשימה, בחרו מוצר מהקטלוג וכבו את מצב המחיר הידני.</p>}
       </section>
     </div>
@@ -201,7 +235,7 @@ export default function CostCalculatorPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[680px] text-right text-sm">
             <thead><tr className="border-b border-slate-200 text-slate-500 dark:border-slate-700"><th className="px-3 py-3">מוצר</th><th className="px-3 py-3">ספק</th><th className="px-3 py-3">כמות</th><th className="px-3 py-3">מחיר ליחידה</th><th className="px-3 py-3">עלות</th><th className="px-3 py-3">פעולה</th></tr></thead>
-            <tbody>{calculationItems.map((item) => <tr key={item.key} className="border-b border-slate-100 last:border-0 dark:border-slate-800"><td className="px-3 py-3 font-bold">{item.name}</td><td className="px-3 py-3 text-slate-500">{item.supplier}</td><td className="px-3 py-3"><div className="flex items-center gap-2"><input type="number" min="0.001" step="any" aria-label={`כמות עבור ${item.name}`} value={item.quantity} onChange={e => updateCalculationQuantity(item.key, Number(e.target.value))} className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"/><span>{item.unit}</span></div></td><td className="px-3 py-3">{money(item.unitCost, item.currency)} / {item.priceUnit}</td><td className="px-3 py-3 font-extrabold">{money(item.totalCost, item.currency)}</td><td className="px-3 py-3"><button type="button" onClick={() => removeCalculationItem(item.key)} className="rounded-lg px-2 py-1 font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">הסר</button></td></tr>)}</tbody>
+            <tbody>{calculationItems.map((item) => <tr key={item.key} className="border-b border-slate-100 last:border-0 dark:border-slate-800"><td className="px-3 py-3 font-bold">{item.name}</td><td className="px-3 py-3 text-slate-500">{item.supplier}</td><td className="px-3 py-3"><div className="flex items-center gap-2"><div className="flex flex-col gap-1"><div className="flex items-center gap-2"><input type="number" min="0" step="any" aria-label={`כמות עיקרית עבור ${item.name}`} value={item.quantity} onChange={e => updateCalculationQuantity(item.key, Number(e.target.value))} className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"/><span>{item.unit}</span></div>{item.additionalUnit && <div className="flex items-center gap-2"><input type="number" min="0" step="any" aria-label={`כמות נוספת עבור ${item.name}`} value={item.additionalQuantity} onChange={e => updateAdditionalCalculationQuantity(item.key, Number(e.target.value))} className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"/><span>{item.additionalUnit}</span></div>}</div></td><td className="px-3 py-3">{money(item.unitCost, item.currency)} / {item.priceUnit}</td><td className="px-3 py-3 font-extrabold">{money(item.totalCost, item.currency)}</td><td className="px-3 py-3"><button type="button" onClick={() => removeCalculationItem(item.key)} className="rounded-lg px-2 py-1 font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">הסר</button></td></tr>)}</tbody>
           </table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/30">
