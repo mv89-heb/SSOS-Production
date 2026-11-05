@@ -20,7 +20,10 @@ class OrderReminderRepository(BaseRepository):
     model = Order
 
     def list_open(self, user_id: int | None = None):
-        stmt = self._tenant_select().where(\n            Order.reminder_state.in_((REMINDER_PENDING, REMINDER_DUE)),\n            Order.status.notin_((STATUS_SENT, STATUS_COMPLETED, STATUS_CANCELLED)),\n        )
+        stmt = self._tenant_select().where(
+            Order.reminder_state.in_((REMINDER_PENDING, REMINDER_DUE)),
+            Order.status.notin_((STATUS_SENT, STATUS_COMPLETED, STATUS_CANCELLED)),
+        )
         if user_id is not None:
             stmt = stmt.where(Order.user_id == user_id)
         stmt = stmt.order_by(Order.next_reminder_at.asc().nullslast(), Order.id.asc())
