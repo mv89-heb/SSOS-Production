@@ -1,5 +1,7 @@
 from app.models.document_analysis import DocumentAnalysis
 from app.models.order import Order, STATUS_APPROVED, STATUS_DRAFT, STATUS_SENT
+from app.models.order_item import OrderItem
+from app.models.product import Product
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.user import User
 
@@ -195,3 +197,40 @@ def test_same_analysis_cannot_create_a_second_invoice_with_a_different_number(
     )
     assert retry.status_code == 409, retry.get_json()
     assert SupplierInvoice.query.filter_by(tenant_id=user.tenant_id).count() == 1
+
+def test_invoice_review_line_never_updates_catalog_price(logged_in_client_a, db, make_order):
+    response, _, product_id = make_order(logged_in_client_a, price=10.0)
+    assert response.status_code == 201, response.get_json()
+    order_id = response.get_json()["order"]["id"]
+    order = db.session.get(Order, order_id)
+    order.status = STATUS_APPROVED
+    product = db.session.get(Product, product_id)
+    product.unit = "יחידה"
+    order_item = OrderItem.query.filter_by(order_id=order.id, product_id=product.id).one()
+    db.session.commit()
+    user = User.query.filter_by(email="admin@acme.test").one()
+    analysis = _analysis(db, user, "invoice-review-line.pdf", "INVOICE", {
+        "document_type": "INVOICE",
+        "document_number": "INV-REVIEW-LINE-1",
+        "currency": "ILS",
+        "totals": {"total": 12},
+        "items": [{"description": "Test Product", "quantity": 1, "unit_price": 12, "unit": "יחידה", "currency": "ILS"}],
+        "order_reconciliation": {
+            "order_id": order.id,
+            "supplier_check": "MATCH",
+            "lines": [{
+                "line_index": 0, "matched": True, "status": "REVIEW",
+                "order_item_id": order_item.id, "confidence": 0.99,
+                "flags": ["PRICE_VARIANCE"],
+            }],
+        },
+    })
+
+    result = logged_in_client_a.post(
+        f"/api/document-intelligence/{analysis.id}/apply-invoice",
+        json={"invoice_number": "INV-REVIEW-LINE-1", "amount": 12, "allow_price_updates": True},
+    )
+    assert result.status_code == 201, result.get_json()
+    db.session.refresh(product)
+    assert float(product.current_price) == 10.0
+    assert result.get_json()["automatic_price_updates"] == []
