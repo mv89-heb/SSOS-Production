@@ -228,15 +228,36 @@ export default function DocumentIntelligencePage() {
 
   async function rematchAll() {
     if (!window.confirm("לרענן נתוני אריזה והתאמות בכל המסמכים שנותחו? הפעולה משתמשת בנתונים השמורים בלבד ואינה מפעילה Gemini או משנה מלאי ומחירים.")) return;
-    setBusy(true); setError(""); setNotice("");
+    const eligible = analyses.filter((item) =>
+      ["ANALYZED", "PARTIALLY_APPLIED", "APPLIED"].includes(item.status) &&
+      Array.isArray(item.extracted_data?.items)
+    );
+    if (!eligible.length) {
+      setNotice("אין מסמכים שנותחו עם שורות מוצר לרענון.");
+      return;
+    }
+
+    // Render runs a single synchronous Gunicorn worker. Keep each rematch in
+    // its own short request so a large batch cannot monopolize the worker,
+    // trip the 5-second health check, or lose all progress on a network reset.
+    setBusy(true);
+    setError("");
+    setNotice("");
+    let refreshed = 0;
+    const failedIds: number[] = [];
     try {
-      const result = await documentIntelligenceService.rematchAll(100);
-      const refreshed = await documentIntelligenceService.list(100);
-      setAnalyses(refreshed);
-      if (analysis && refreshed.some((item) => item.id === analysis.id)) setSelectedId(analysis.id);
-      setNotice(`הרענון הסתיים: ${result.refreshed.length} מסמכים עודכנו מתוך ${result.eligible} מתאימים. ${result.failed_ids.length ? `נכשלו ${result.failed_ids.length} מסמכים.` : "לא היו כשלים."} ללא Gemini וללא שינוי מלאי או מחירון.`);
-    } catch (err: any) {
-      setError(err?.friendlyMessage || err?.response?.data?.message || "לא ניתן לרענן את המסמכים ההיסטוריים");
+      for (let index = 0; index < eligible.length; index += 1) {
+        const candidate = eligible[index];
+        setNotice(`מרענן מסמך ${index + 1} מתוך ${eligible.length}: ${candidate.filename}`);
+        try {
+          const result = await documentIntelligenceService.rematch(candidate.id);
+          setAnalyses((current) => current.map((item) => item.id === result.id ? result : item));
+          refreshed += 1;
+        } catch {
+          failedIds.push(candidate.id);
+        }
+      }
+      setNotice(`הרענון הסתיים: ${refreshed} מסמכים עודכנו מתוך ${eligible.length}. ${failedIds.length ? `נכשלו ${failedIds.length} מסמכים (מזהים: ${failedIds.join(", ")}).` : "לא היו כשלים."} ללא Gemini וללא שינוי מלאי או מחירון.`);
     } finally {
       setBusy(false);
     }
