@@ -562,7 +562,12 @@ class DocumentIntelligenceService:
         extracted_items = data.get("items") if isinstance(data.get("items"), list) else []
         receipt_quantities = {}
         for line in lines:
-            if not isinstance(line, dict) or not line.get("matched") or not isinstance(line.get("order_item_id"), int):
+            if (
+                not isinstance(line, dict)
+                or not line.get("matched")
+                or not isinstance(line.get("order_item_id"), int)
+                or isinstance(line.get("order_item_id"), bool)
+            ):
                 raise Conflict("Every delivery note line must be matched to an order item before posting")
             # A product candidate is not an approved reconciliation. Only a clean,
             # high-confidence MATCH may post inventory; REVIEW lines must be resolved
@@ -713,7 +718,20 @@ class DocumentIntelligenceService:
                 "received_quantity": str(received_quantity) if received_quantity is not None else None,
                 "invoice_unit_price": invoice_price,
             })
-            if not allow_price_updates or not line.get("matched") or line.get("confidence", 0) < 0.93:
+            if not allow_price_updates or not line.get("matched"):
+                continue
+            # Price writes require an explicitly clean reconciliation. A high
+            # numeric confidence alone must never bypass REVIEW flags/status.
+            try:
+                match_confidence = Decimal(str(line.get("confidence") or 0))
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+            if (
+                line.get("status") != "MATCH"
+                or line.get("flags")
+                or not match_confidence.is_finite()
+                or match_confidence < Decimal("0.93")
+            ):
                 continue
             order_item = order_items.get(line.get("order_item_id"))
             if order_item is None or invoice_price in (None, ""):
