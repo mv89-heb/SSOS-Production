@@ -44,6 +44,36 @@ def test_inventory_summary_and_movements(logged_in_client_a):
     assert movements[0]["product_id"] == product_id
 
 
+
+def test_inventory_summary_does_not_treat_unknown_stock_as_zero(logged_in_client_a):
+    unknown_stock_id = _create_product(
+        logged_in_client_a,
+        name="Unknown stock",
+        sku="UNKNOWN-STOCK",
+        stock=None,
+        minimum=3,
+        target=12,
+    )
+    zero_stock_id = _create_product(
+        logged_in_client_a,
+        name="Confirmed zero stock",
+        sku="ZERO-STOCK",
+        stock=0,
+        minimum=3,
+        target=12,
+    )
+
+    response = logged_in_client_a.get("/api/inventory/summary")
+    assert response.status_code == 200, response.get_json()
+    body = response.get_json()
+
+    assert body["stats"]["low_stock"] == 1
+    assert body["stats"]["out_of_stock"] == 1
+    products = {product["id"]: product for product in body["products"]}
+    assert products[unknown_stock_id]["current_stock"] is None
+    assert products[zero_stock_id]["current_stock"] == 0
+
+
 def test_zero_stock_count_is_valid(logged_in_client_a):
     product_id = _create_product(logged_in_client_a, stock=4)
     response = logged_in_client_a.post("/api/inventory/movements", json={"product_id": product_id, "movement_type": "count", "quantity": 0})
