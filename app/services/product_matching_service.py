@@ -155,7 +155,7 @@ class ProductMatchingService:
         raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
         raw = raw.replace("\u05f4", '"').replace("\u05f3", "'")
         match = re.search(
-            r"(?<!\d)(\d+(?:[.,]\d+)?)\s*(millilit(?:er|re)s?|ml|מיליליטר|מ[\"']?ל|"
+            r"(?<![\d/-])(\d+(?:[.,]\d+)?)\s*(millilit(?:er|re)s?|ml|מיליליטר|מ[\"']?ל|"
             r"lit(?:er|re)s?|l|ליטרים?|ליטר|kg|kgs?|ק\s*ג|קילו(?:גרם)?|g|גרם|"
             r"cm|סמ|ס\s*מ|mm|ממ|מ\s*מ|מטרים?|מטר)(?!\w)",
             raw,
