@@ -30,6 +30,9 @@ function getFailureGuidance(analysis: DocumentAnalysis) {
   if (message.includes("הועבר להסגר")) {
     return { title: "המסמך בהסגר — אין לנסות לעבד או ליישם אותו מחדש", detail: "הנתונים נשמרו לבדיקה. יש להשאיר את המסמך בהסגר עד לבירור ערבוב הנתונים." };
   }
+  if ((analysis.item_count || 0) > 0) {
+    return { title: "נשמר חילוץ חלקי", detail: "השורות מוצגות לעיון בלבד. אין לבצע התאמת ספקים, אישור או עדכון מלאי ומחירים על סמך חילוץ חלקי. לניתוח מלא יש להעלות מחדש את קובץ המקור." };
+  }
   if (message.includes("prepayment credits are depleted") || message.includes("402 resource_exhausted")) {
     return { title: "הניתוח נעצר בגלל יתרת קרדיטים", detail: "לא בוצע חילוץ מלא. אין טעם לנסות שוב לפני שבודקים ומאשרים במפורש את הגדרות החיוב והיתרה." };
   }
@@ -44,9 +47,6 @@ function getFailureGuidance(analysis: DocumentAnalysis) {
   }
   if (analysis.status === "AI_UNAVAILABLE") {
     return { title: "שירות Gemini אינו זמין במערכת", detail: "לא ניתן להתחיל ניתוח עד שהשירות והגדרותיו יהיו זמינים. לא בוצע ניסיון חוזר." };
-  }
-  if ((analysis.item_count || 0) > 0) {
-    return { title: "נשמר חילוץ חלקי", detail: "השורות מוצגות לעיון בלבד. אין התאמת ספקים, אישור או עדכון מלאי ומחירים על סמך חילוץ חלקי." };
   }
   return { title: "הניתוח לא הושלם", detail: "יש לבדוק את הודעת השגיאה ואת קובץ המקור לפני העלאה או ניסיון נוסף. לא הופעל עיבוד חוזר אוטומטי." };
 }
