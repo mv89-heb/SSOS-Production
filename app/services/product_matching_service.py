@@ -154,31 +154,42 @@ class ProductMatchingService:
     def _measure_signature(cls, value) -> tuple[str, float] | None:
         raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
         raw = raw.replace("\u05f4", '"').replace("\u05f3", "'")
-        match = re.search(
+        pattern = (
             r"(?<![\d/-])(\d+(?:[.,]\d+)?)\s*(millilit(?:er|re)s?|ml|מיליליטר|מ[\"']?ל|"
             r"lit(?:er|re)s?|l|ליטרים?|ליטר|kg|kgs?|ק\s*[\"']?\s*ג|קילו(?:גרם)?|g|גרם|"
-            r"cm|סמ|ס\s*מ|mm|ממ|מ\s*מ|מטרים?|מטר)(?!\w)",
-            raw,
+            r"cm|סמ|ס\s*[\"']?\s*מ|mm|ממ|מ\s*[\"']?\s*מ|מטרים?|מטר)(?!\w)"
         )
-        if not match:
+        matches = list(re.finditer(pattern, raw))
+        if not matches:
             return None
-        amount = float(match.group(1).replace(",", "."))
-        unit = re.sub(r"\s+", "", match.group(2)).replace('"', '').replace("'", "")
-        if unit in {"l", "liter", "liters", "litre", "litres", "ליטר", "ליטרים"}:
-            return "volume_ml", amount * 1000
-        if unit in {"ml", "milliliter", "milliliters", "millilitre", "millilitres", "מיליליטר", 'מל', 'מ"ל'}:
-            return "volume_ml", amount
-        if unit in {"kg", "kgs", "קג", "קילו", "קילוגרם"}:
-            return "mass_g", amount * 1000
-        if unit in {"g", "גרם"}:
-            return "mass_g", amount
-        if unit in {"cm", "סמ"}:
-            return "length_mm", amount * 10
-        if unit in {"mm", "ממ"}:
-            return "length_mm", amount
-        if unit in {"מטר", "מטרים"}:
-            return "length_mm", amount * 1000
-        return None
+
+        def parse(match):
+            amount = float(match.group(1).replace(",", "."))
+            unit = re.sub(r"\s+", "", match.group(2)).replace('"', '').replace("'", "")
+            if unit in {"l", "liter", "liters", "litre", "litres", "ליטר", "ליטרים"}:
+                return "volume_ml", amount * 1000
+            if unit in {"ml", "milliliter", "milliliters", "millilitre", "millilitres", "מיליליטר", 'מל', 'מ\"ל'}:
+                return "volume_ml", amount
+            if unit in {"kg", "kgs", "קג", "קילו", "קילוגרם"}:
+                return "mass_g", amount * 1000
+            if unit in {"g", "גרם"}:
+                return "mass_g", amount
+            if unit in {"cm", "סמ"}:
+                return "length_mm", amount * 10
+            if unit in {"mm", "ממ"}:
+                return "length_mm", amount
+            if unit in {"מטר", "מטרים"}:
+                return "length_mm", amount * 1000
+            return None
+
+        parsed = [value for match in matches if (value := parse(match)) is not None]
+        if not parsed:
+            return None
+        # Product descriptions often state both a physical width and a net
+        # weight (for example cling film: 45 cm wide, 1.3 kg per roll).
+        # Prefer mass/volume for unit-price calculations; otherwise use the
+        # first explicit length measurement.
+        return next((value for value in parsed if value[0] in {"mass_g", "volume_ml"}), parsed[0])
 
     @classmethod
     def _percent_signature(cls, value) -> float | None:
