@@ -398,6 +398,20 @@ export default function DocumentIntelligencePage() {
         </div>}
       </div>}
     </section>}
+    {analysis.status === "FAILED" && items.length > 0 && <section className="rounded-2xl border border-amber-300 bg-amber-50/70 p-5 shadow-sm dark:border-amber-900 dark:bg-amber-950/20">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-bold text-amber-900 dark:text-amber-200">חילוץ חלקי שנשמר — {items.length} שורות לתצוגה בלבד</h2>
+        <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">לא נותח במלואו</span>
+      </div>
+      <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">הניתוח נכשל לאחר שנשמרו שורות חלקיות. הנתונים מוצגים לצורך עיון בלבד: אין כאן התאמת ספקים או מוצרים, ולא ניתן לאשר, ליישם או לעדכן באמצעותם מלאי ומחירים. כדי לבצע ניתוח מלא יש להעלות מחדש את קובץ המקור.</p>
+      <div className="mt-4 overflow-x-auto rounded-xl border border-amber-200 dark:border-amber-900">
+        <table className="w-full min-w-[620px] text-sm">
+          <thead className="bg-amber-100/70 text-right text-xs text-amber-950 dark:bg-amber-950/50 dark:text-amber-100"><tr><th className="p-3">שורה</th><th className="p-3">תיאור כפי שחולץ</th><th className="p-3">עמוד</th><th className="p-3">כמות</th><th className="p-3">יחידה</th><th className="p-3">מחיר</th></tr></thead>
+          <tbody className="divide-y divide-amber-200 dark:divide-amber-900">{items.map((item, index) => <tr key={index}><td className="p-3">{index + 1}</td><td className="p-3 font-medium">{item.description || "ללא תיאור"}</td><td className="p-3">{item.page_number ?? "—"}</td><td className="p-3">{item.quantity ?? "—"}</td><td className="p-3">{item.unit || "—"}</td><td className="p-3">{item.unit_price != null && Number(item.unit_price) > 0 ? `${item.unit_price} ${data?.currency || "ILS"}` : "לא צוין"}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </section>}
+
     {(analysis.status === "ANALYZED" || analysis.status === "PARTIALLY_APPLIED" || (analysis.status === "PROCESSING" && items.length > 0)) && <>
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold">{analysis.status === "PROCESSING" && sections.length === 0 ? "ממתין לזיהוי ספקים" : `זוהו ${data?.supplier_count ?? sections.length} ספקים`}</h2><p className="mt-1 text-xs text-slate-500">כל ספק הוא קבוצה עצמאית. שורות מסומנות לפי הקשר הספקי שנמצא במסמך.</p></div><span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">הפרדה אוטומטית</span></div><div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">{sections.map((section, index) => { const match = section.supplier_matching; return <div key={index} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><div className="font-bold">{supplierLabel(section)}</div><div className="mt-1 text-xs text-slate-500">מספר ספק: {section.supplier?.customer_number || "—"}</div><div className="mt-2 text-xs">{section.items?.filter((item) => !isDocumentReferenceLine(item.description)).length || 0} שורות מוצר · {section.items?.filter((item) => isDocumentReferenceLine(item.description)).length || 0} שורות טקסט · עמודים {(section.page_numbers || []).join(", ") || "—"}</div><div className={`mt-2 text-xs font-semibold ${match ? "text-emerald-600" : "text-amber-600"}`}>{match ? `${match.decision === "AUTO_MATCH" ? "ספק מאומת" : "התאמה לקטלוג — נדרשת בדיקה"}: ${Math.round((match.confidence || 0) * 100)}%` : "הספק לא נמצא בקטלוג — בדיקה נדרשת"}</div></div>})}</div></section>
 
