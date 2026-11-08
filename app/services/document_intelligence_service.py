@@ -257,7 +257,7 @@ class DocumentIntelligenceService:
         """Refresh deterministic catalog matches for saved extraction without calling Gemini."""
         PermissionService.require_role_at_least("manager")
         row = self._get(analysis_id)
-        if row.status not in {"ANALYZED", "PARTIALLY_APPLIED"} or not isinstance(row.extracted_data, dict):
+        if row.status not in {"ANALYZED", "PARTIALLY_APPLIED", "APPLIED"} or not isinstance(row.extracted_data, dict):
             raise BadRequest("Document must be successfully analyzed before refreshing product matches")
         if not isinstance(row.extracted_data.get("items"), list):
             raise BadRequest("Document has no extracted item lines to rematch")
@@ -269,6 +269,37 @@ class DocumentIntelligenceService:
         row.extracted_data = refreshed_data
         db.session.commit()
         return row
+
+    def rematch_all(self, limit: int = 100) -> dict:
+        """Refresh saved extraction metadata without AI or procurement writes."""
+        PermissionService.require_role_at_least("manager")
+        safe_limit = max(1, min(int(limit or 100), 100))
+        rows = DocumentAnalysis.query.filter(
+            DocumentAnalysis.tenant_id == self.tenant_id,
+            DocumentAnalysis.status.in_(("ANALYZED", "PARTIALLY_APPLIED", "APPLIED")),
+        ).order_by(DocumentAnalysis.created_at.asc(), DocumentAnalysis.id.asc()).limit(safe_limit).all()
+        eligible_ids = [
+            row.id for row in rows
+            if isinstance(row.extracted_data, dict)
+            and isinstance(row.extracted_data.get("items"), list)
+        ]
+        refreshed = []
+        failed = []
+        for analysis_id in eligible_ids:
+            try:
+                row = self.rematch(analysis_id)
+                refreshed.append({"id": row.id, "filename": row.filename, "status": row.status})
+            except Exception:
+                db.session.rollback()
+                failed.append(analysis_id)
+        return {
+            "success": True,
+            "scanned": len(rows),
+            "eligible": len(eligible_ids),
+            "refreshed": refreshed,
+            "failed_ids": failed,
+            "message": "Saved document metadata refreshed. No Gemini calls or procurement/inventory changes were made.",
+        }
 
     @staticmethod
     def _has_product_line_evidence(item: dict) -> bool:
