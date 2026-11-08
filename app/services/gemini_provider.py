@@ -228,14 +228,37 @@ class GeminiProvider:
                                         "description": item.get("description"),
                                         "supplier_sku": item.get("supplier_sku"),
                                         "barcode": item.get("barcode"),
-                                        "page_number": item.get("page_number"),
                                         "quantity": item.get("quantity"),
+                                        "unit": item.get("unit"),
+                                        "package_quantity": item.get("package_quantity"),
                                         "unit_price": item.get("unit_price"),
-                                        "supplier": (item.get("supplier_context") or {}).get("name"),
+                                        "discount": item.get("discount"),
+                                        "tax": item.get("tax"),
                                     }, ensure_ascii=False, sort_keys=True)
-                                    if identity not in seen:
-                                        seen.add(identity)
+                                    supplier_name = str((item.get("supplier_context") or {}).get("name") or "").strip()
+                                    duplicate_index = next((
+                                        position for position, existing in enumerate(found)
+                                        if json.dumps({
+                                            "description": existing.get("description"),
+                                            "supplier_sku": existing.get("supplier_sku"),
+                                            "barcode": existing.get("barcode"),
+                                            "quantity": existing.get("quantity"),
+                                            "unit": existing.get("unit"),
+                                            "package_quantity": existing.get("package_quantity"),
+                                            "unit_price": existing.get("unit_price"),
+                                            "discount": existing.get("discount"),
+                                            "tax": existing.get("tax"),
+                                        }, ensure_ascii=False, sort_keys=True) == identity
+                                        and not (
+                                            supplier_name
+                                            and str((existing.get("supplier_context") or {}).get("name") or "").strip()
+                                            and supplier_name != str((existing.get("supplier_context") or {}).get("name") or "").strip()
+                                        )
+                                    ), None)
+                                    if duplicate_index is None:
                                         found.append(item)
+                                    elif supplier_name and not str((found[duplicate_index].get("supplier_context") or {}).get("name") or "").strip():
+                                        found[duplicate_index] = item
                                 index += 1
                                 break
                     index += 1
