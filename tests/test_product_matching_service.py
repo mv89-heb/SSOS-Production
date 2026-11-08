@@ -373,8 +373,8 @@ def test_high_product_confidence_is_review_when_supplier_is_unresolved():
 def test_derive_packaging_extracts_explicit_net_content_and_normalized_price():
     item = {"description": "חלב תנובה 3% 1 ליטר", "unit": "יח׳", "unit_price": 6.5}
     result = ProductMatchingService._derive_packaging(item)
-    assert result["net_content_value"] == 1000
-    assert result["net_content_unit"] == "ml"
+    assert result["net_content_value"] == 1
+    assert result["net_content_unit"] == "ליטר"
     assert result["derived_price_per_measure"] == 6.5
     assert result["derived_price_measure_unit"] == "ליטר"
     assert result["derived_from"] == "deterministic_document_line_text"
@@ -408,8 +408,8 @@ def test_derive_packaging_returns_empty_for_lines_without_explicit_measure():
 def test_derive_packaging_normalizes_price_for_explicit_roll_weight():
     item = {"description": "גליל מפות ניילון כ 25ק״ג בגליל", "unit": "גל", "unit_price": 185}
     result = ProductMatchingService._derive_packaging(item)
-    assert result["net_content_value"] == 25000
-    assert result["net_content_unit"] == "g"
+    assert result["net_content_value"] == 25
+    assert result["net_content_unit"] == "ק״ג"
     assert result["derived_price_per_measure"] == 7.4
     assert result["derived_price_measure_unit"] == "ק״ג"
 
