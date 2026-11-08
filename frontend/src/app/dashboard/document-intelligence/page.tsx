@@ -25,6 +25,32 @@ function hasProductEvidence(item: ExtractedItem) {
     (Number.isFinite(Number(item.unit_price)) && Number(item.unit_price) > 0));
 }
 
+function getFailureGuidance(analysis: DocumentAnalysis) {
+  const message = (analysis.error_message || "").toLowerCase();
+  if (message.includes("הועבר להסגר")) {
+    return { title: "המסמך בהסגר — אין לנסות לעבד או ליישם אותו מחדש", detail: "הנתונים נשמרו לבדיקה. יש להשאיר את המסמך בהסגר עד לבירור ערבוב הנתונים." };
+  }
+  if ((analysis.item_count || 0) > 0) {
+    return { title: "נשמר חילוץ חלקי", detail: "השורות מוצגות לעיון בלבד. אין לבצע התאמת ספקים, אישור או עדכון מלאי ומחירים על סמך חילוץ חלקי. לניתוח מלא יש להעלות מחדש את קובץ המקור." };
+  }
+  if (message.includes("prepayment credits are depleted") || message.includes("402 resource_exhausted")) {
+    return { title: "הניתוח נעצר בגלל יתרת קרדיטים", detail: "לא בוצע חילוץ מלא. אין טעם לנסות שוב לפני שבודקים ומאשרים במפורש את הגדרות החיוב והיתרה." };
+  }
+  if (message.includes("models/gemini-2.5-flash is no longer available") || message.includes("404 not_found")) {
+    return { title: "המודל שהוגדר אינו זמין", detail: "נדרשת בדיקת הגדרות המודל. לאחר תיקון ההגדרה יש להעלות מחדש את קובץ המקור; הרשומה הישנה אינה מופעלת מחדש אוטומטית." };
+  }
+  if (message.includes("503 unavailable") || message.includes("timed out") || message.includes("timeout")) {
+    return { title: "תקלה זמנית בשירות הניתוח", detail: "הניתוח לא הושלם. יש לבדוק את הרשומה לפני פעולה נוספת; ניסיון חדש עלול לצרוך קרדיטים." };
+  }
+  if (message.includes("העיבוד נתקע") || message.includes("נשאר במצב העלאה")) {
+    return { title: "העיבוד נתקע ושוחרר", detail: "נתוני החילוץ שכבר נשמרו לא שונו. כדי לבצע ניתוח מלא יש להעלות מחדש את קובץ המקור." };
+  }
+  if (analysis.status === "AI_UNAVAILABLE") {
+    return { title: "שירות Gemini אינו זמין במערכת", detail: "לא ניתן להתחיל ניתוח עד שהשירות והגדרותיו יהיו זמינים. לא בוצע ניסיון חוזר." };
+  }
+  return { title: "הניתוח לא הושלם", detail: "יש לבדוק את הודעת השגיאה ואת קובץ המקור לפני העלאה או ניסיון נוסף. לא הופעל עיבוד חוזר אוטומטי." };
+}
+
 function SearchableSelect({ value, onChange, options, placeholder, disabled = false }: { value: number | string; onChange: (value: number) => void; options: Array<{ id: number; name: string; extra?: string | null }>; placeholder: string; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -348,7 +374,7 @@ export default function DocumentIntelligencePage() {
     {analyses.length > 0 && <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="border-b border-slate-100 p-5 dark:border-slate-800"><h2 className="font-bold">היסטוריית ניתוחים ({analyses.length})</h2><p className="mt-1 text-xs text-slate-500">עד 100 הניתוחים האחרונים, כולל ביקורים קודמים</p></div><div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3">{analyses.map((item) => { const routing = item.extracted_data?.workflow_routing; return <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className={`rounded-xl border p-3 text-right ${item.id === analysis?.id ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950/30" : "border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"}`}><div className="truncate font-semibold">{item.filename}</div>{routing?.label && <div className="mt-1 text-xs font-semibold text-indigo-700 dark:text-indigo-300">{routing.label}</div>}<div className="mt-1 text-xs text-slate-500">{statusLabel[item.status] || item.status} · {new Date(item.created_at).toLocaleDateString("he-IL")}</div></button>; })}</div></section>}
     {!analysis && <section className="rounded-2xl border-2 border-dashed border-slate-300 bg-white p-14 text-center dark:border-slate-700 dark:bg-slate-950"><FileSearch className="mx-auto mb-4 text-slate-400" size={44}/><h2 className="text-xl font-bold">אין מסמכים לניתוח</h2><p className="mt-2 text-sm text-slate-500">בחר מסמך אחד או כמה מסמכים כדי להתחיל.</p></section>}
 
-    {analysis && <><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex flex-wrap items-center gap-3"><div className="rounded-xl bg-indigo-50 p-3 text-indigo-600"><FileSearch size={22}/></div><div className="min-w-0 flex-1"><div className="truncate font-bold">{analysis.filename}</div><div className="text-sm text-slate-500">{analysis.document_type || "מסמך"} · {analysis.provider || "—"} {analysis.model ? `· ${analysis.model}` : ""}</div></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{statusLabel[analysis.status] || analysis.status}</span>{(["ANALYZED", "PARTIALLY_APPLIED", "APPLIED"].includes(analysis.status)) && <button type="button" onClick={rematch} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300"><RefreshCw size={15} className={busy ? "animate-spin" : ""}/> רענן נתוני אריזה</button>}</div>{analysis.error_message && <p className="mt-3 whitespace-pre-wrap text-sm text-red-600">{analysis.error_message}</p>}</section>
+    {analysis && <><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex flex-wrap items-center gap-3"><div className="rounded-xl bg-indigo-50 p-3 text-indigo-600"><FileSearch size={22}/></div><div className="min-w-0 flex-1"><div className="truncate font-bold">{analysis.filename}</div><div className="text-sm text-slate-500">{analysis.document_type || "מסמך"} · {analysis.provider || "—"} {analysis.model ? `· ${analysis.model}` : ""}</div></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{statusLabel[analysis.status] || analysis.status}</span>{(["ANALYZED", "PARTIALLY_APPLIED", "APPLIED"].includes(analysis.status)) && <button type="button" onClick={rematch} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300"><RefreshCw size={15} className={busy ? "animate-spin" : ""}/> רענן נתוני אריזה</button>}</div>{analysis.error_message && <p className="mt-3 whitespace-pre-wrap text-sm text-red-600">{analysis.error_message}</p>}{(analysis.status === "FAILED" || analysis.status === "AI_UNAVAILABLE") && (() => { const guidance = getFailureGuidance(analysis); return <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm dark:border-amber-900 dark:bg-amber-950/20"><div className="font-bold text-amber-900 dark:text-amber-200">{guidance.title}</div><p className="mt-1 text-amber-800 dark:text-amber-300">{guidance.detail}</p></div>; })()}</section>
 
     {data?.workflow_routing && <section className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/20">
       <div className="flex flex-wrap items-start justify-between gap-3">
