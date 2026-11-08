@@ -131,6 +131,23 @@ def analyze_document(analysis_id):
         return _internal_error(exc, "analysis")
 
 
+@document_intelligence_bp.route("/rematch-all", methods=["POST"])
+@login_required
+def rematch_all_documents():
+    try:
+        PermissionService.require_permission("documents.process")
+        payload = request.get_json(silent=True) or {}
+        limit = payload.get("limit", 100)
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+            raise BadRequest("limit must be a positive integer")
+        result = DocumentIntelligenceService(current_user.tenant_id, current_user.id).rematch_all(limit)
+        return jsonify(result), 200
+    except HTTPException as exc:
+        return _handle(exc)
+    except Exception as exc:
+        return _internal_error(exc, "bulk rematch")
+
+
 @document_intelligence_bp.route("/<int:analysis_id>/rematch", methods=["POST"])
 @login_required
 def rematch_document(analysis_id):
