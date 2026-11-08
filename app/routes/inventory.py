@@ -155,8 +155,10 @@ def summary():
         )
     ).all() if latest_movement_ids else []
 
-    low_stock = [p for p in products if p.min_stock is not None and (p.current_stock or 0) <= p.min_stock]
-    out_of_stock = [p for p in products if (p.current_stock or 0) <= 0]
+    # NULL means the physical balance is unknown, not that the product is out of stock.
+    known_stock_products = [p for p in products if p.current_stock is not None]
+    low_stock = [p for p in known_stock_products if p.min_stock is not None and p.current_stock <= p.min_stock]
+    out_of_stock = [p for p in known_stock_products if p.current_stock <= 0]
     no_stock_rule = [p for p in products if p.min_stock is None and p.recommended_stock is None]
     return jsonify({
         "success": True,
