@@ -73,8 +73,6 @@ class DocumentAnalysis(db.Model):
             "analyzed_at": self.analyzed_at.isoformat() if self.analyzed_at else None,
             "applied_at": self.applied_at.isoformat() if self.applied_at else None,
             "applied_by": self.applied_by,
-            "details_loaded": True,
-            "item_count": len(self.extracted_data.get("items", [])) if isinstance(self.extracted_data, dict) and isinstance(self.extracted_data.get("items"), list) else 0,
         }
 
     def to_dict(self):
@@ -93,4 +91,6 @@ class DocumentAnalysis(db.Model):
             "analyzed_at": self.analyzed_at.isoformat() if self.analyzed_at else None,
             "applied_at": self.applied_at.isoformat() if self.applied_at else None,
             "applied_by": self.applied_by,
+            "details_loaded": True,
+            "item_count": len(self.extracted_data.get("items", [])) if isinstance(self.extracted_data, dict) and isinstance(self.extracted_data.get("items"), list) else 0,
         }
