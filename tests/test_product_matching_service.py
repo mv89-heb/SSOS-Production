@@ -482,3 +482,16 @@ def test_derive_packaging_does_not_remove_price_for_explicit_single_item_or_roll
     })
     assert item["derived_price_per_measure"] == 6.5
     assert roll["derived_price_per_measure"] == 7.4
+
+
+
+def test_measure_parser_prefers_net_weight_when_line_also_has_width():
+    result = ProductMatchingService._derive_packaging({
+        "description": "ניילון נצמד 45 ס״מ 1.3 ק״ג",
+        "unit": "יח׳",
+        "unit_price": 52,
+    })
+    assert result["net_content_value"] == 1300
+    assert result["net_content_unit"] == "גרם"
+    assert result["derived_price_per_measure"] == 40
+    assert result["derived_price_measure_unit"] == "ק״ג"
