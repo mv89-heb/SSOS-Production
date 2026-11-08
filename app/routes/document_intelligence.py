@@ -131,6 +131,21 @@ def analyze_document(analysis_id):
         return _internal_error(exc, "analysis")
 
 
+@document_intelligence_bp.route("/<int:analysis_id>/refresh-packaging", methods=["POST"])
+@login_required
+def refresh_document_packaging(analysis_id):
+    try:
+        PermissionService.require_permission("documents.process")
+        row = DocumentIntelligenceService(current_user.tenant_id, current_user.id).refresh_packaging(analysis_id)
+        return jsonify({"success": True, "analysis": row.to_dict()}), 200
+    except HTTPException as exc:
+        return _handle(exc)
+    except ValueError as exc:
+        return jsonify({"success": False, "error": "validation_error", "message": str(exc)}), 400
+    except Exception as exc:
+        return _internal_error(exc, "packaging refresh")
+
+
 @document_intelligence_bp.route("/rematch-all", methods=["POST"])
 @login_required
 def rematch_all_documents():
