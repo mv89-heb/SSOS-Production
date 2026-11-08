@@ -222,3 +222,52 @@ def test_document_analysis_does_not_mutate_procurement_or_inventory(
 
     after = business_snapshot()
     assert after == before
+
+
+def test_bulk_rematch_refreshes_applied_and_unapplied_without_ai_or_procurement_changes(
+    logged_in_client_a, db, monkeypatch
+):
+    user = User.query.filter_by(email="admin@acme.test").first()
+    assert user is not None
+    rows = []
+    for status in ("ANALYZED", "APPLIED"):
+        row = DocumentAnalysis(
+            tenant_id=user.tenant_id,
+            uploaded_by=user.id,
+            filename=f"{status.lower()}.pdf",
+            mime_type="application/pdf",
+            document_type="PRICE_LIST",
+            status=status,
+            extracted_data={"document_type": "PRICE_LIST", "items": [{"description": "מארז 50 יחידות"}]},
+        )
+        db.session.add(row)
+        rows.append(row)
+    db.session.commit()
+
+    calls = {"enrich": 0}
+
+    def fake_enrich(self, data):
+        calls["enrich"] += 1
+        data["items"][0]["derived_packaging"] = {
+            "declared_pack_count": 50,
+            "declared_pack_count_unit": "יחידות",
+        }
+        return data
+
+    monkeypatch.setattr(
+        "app.services.document_intelligence_service.ProductMatchingService.enrich_document",
+        fake_enrich,
+    )
+
+    response = logged_in_client_a.post("/api/document-intelligence/rematch-all", json={"limit": 100})
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    assert payload["eligible"] == 2
+    assert len(payload["refreshed"]) == 2
+    assert payload["failed_ids"] == []
+    assert calls["enrich"] == 2
+
+    db.session.expire_all()
+    for row in rows:
+        refreshed = db.session.get(DocumentAnalysis, row.id)
+        assert refreshed.extracted_data["items"][0]["derived_packaging"]["declared_pack_count"] == 50
