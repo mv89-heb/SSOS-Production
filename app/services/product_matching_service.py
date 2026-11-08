@@ -222,13 +222,13 @@ class ProductMatchingService:
                 elif measure_type == "mass_g":
                     result["net_content_value"] = base_value
                     result["net_content_unit"] = "גרם"
-                elif measure_type == "volume_ml" and base_value >= 1000 and base_value % 1000 == 0:
+                elif measure_type == "volume_ml" and base_value >= 1000:
                     result["net_content_value"] = base_value / 1000
                     result["net_content_unit"] = "ליטר"
                 elif measure_type == "volume_ml":
                     result["net_content_value"] = base_value
                     result["net_content_unit"] = "מ״ל"
-                elif measure_type == "length_mm" and base_value >= 1000 and base_value % 1000 == 0:
+                elif measure_type == "length_mm" and base_value >= 1000:
                     result["net_content_value"] = base_value / 1000
                     result["net_content_unit"] = "מטר"
                 elif measure_type == "length_mm" and base_value >= 10 and base_value % 10 == 0:
