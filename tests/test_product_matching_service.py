@@ -495,3 +495,17 @@ def test_measure_parser_prefers_net_weight_when_line_also_has_width():
     assert result["net_content_unit"] == "גרם"
     assert result["derived_price_per_measure"] == 40
     assert result["derived_price_measure_unit"] == "ק״ג"
+
+
+
+def test_derive_packaging_converts_fractional_liters_and_meters():
+    liquid = ProductMatchingService._derive_packaging({
+        "description": "מיכל 4.5 ליטר",
+    })
+    length = ProductMatchingService._derive_packaging({
+        "description": "מקל מתכת 1.5 מטר",
+    })
+    assert liquid["net_content_value"] == 4.5
+    assert liquid["net_content_unit"] == "ליטר"
+    assert length["net_content_value"] == 1.5
+    assert length["net_content_unit"] == "מטר"
