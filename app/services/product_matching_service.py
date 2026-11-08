@@ -210,7 +210,7 @@ class ProductMatchingService:
 
             # Only calculate a price when the invoice price is per package/unit.
             invoice_unit = cls.normalize(item.get("unit"))
-            package_units = {"יח", "יחידה", "יחידות", "אריזה", "מארז", "חבילה", "pack", "package"}
+            package_units = {"יח", "יחידה", "יחידות", "אריזה", "מארז", "חבילה", "קרטון", "קרטונים", "גל", "גליל", "שק", "חב", "חבי", "pack", "package"}
             try:
                 unit_price = float(item.get("unit_price"))
             except (TypeError, ValueError):
