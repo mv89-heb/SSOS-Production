@@ -204,9 +204,21 @@ class ProductMatchingService:
         if measure is not None:
             measure_type, base_value = measure
             if result.get("net_content_value") is None:
-                result["net_content_value"] = base_value
-            if not result.get("net_content_unit"):
-                result["net_content_unit"] = "g" if measure_type == "mass_g" else "ml" if measure_type == "volume_ml" else "mm"
+                if measure_type == "mass_g" and base_value >= 1000 and base_value % 1000 == 0:
+                    result["net_content_value"] = base_value / 1000
+                    result["net_content_unit"] = "ק״ג"
+                elif measure_type == "mass_g":
+                    result["net_content_value"] = base_value
+                    result["net_content_unit"] = "גרם"
+                elif measure_type == "volume_ml" and base_value >= 1000 and base_value % 1000 == 0:
+                    result["net_content_value"] = base_value / 1000
+                    result["net_content_unit"] = "ליטר"
+                elif measure_type == "volume_ml":
+                    result["net_content_value"] = base_value
+                    result["net_content_unit"] = "מ״ל"
+                else:
+                    result["net_content_value"] = base_value
+                    result["net_content_unit"] = "מ״מ"
 
             # Only calculate a price when the invoice price is per package/unit.
             invoice_unit = cls.normalize(item.get("unit"))
