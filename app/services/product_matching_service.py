@@ -156,14 +156,14 @@ class ProductMatchingService:
         raw = raw.replace("\u05f4", '"').replace("\u05f3", "'")
         match = re.search(
             r"(?<![\d/-])(\d+(?:[.,]\d+)?)\s*(millilit(?:er|re)s?|ml|מיליליטר|מ[\"']?ל|"
-            r"lit(?:er|re)s?|l|ליטרים?|ליטר|kg|kgs?|ק\s*ג|קילו(?:גרם)?|g|גרם|"
+            r"lit(?:er|re)s?|l|ליטרים?|ליטר|kg|kgs?|ק\s*["']?\s*ג|קילו(?:גרם)?|g|גרם|"
             r"cm|סמ|ס\s*מ|mm|ממ|מ\s*מ|מטרים?|מטר)(?!\w)",
             raw,
         )
         if not match:
             return None
         amount = float(match.group(1).replace(",", "."))
-        unit = re.sub(r"\s+", "", match.group(2))
+        unit = re.sub(r"[\s"']+", "", match.group(2))
         if unit in {"l", "liter", "liters", "litre", "litres", "ליטר", "ליטרים"}:
             return "volume_ml", amount * 1000
         if unit in {"ml", "milliliter", "milliliters", "millilitre", "millilitres", "מיליליטר", 'מל', 'מ"ל'}:
