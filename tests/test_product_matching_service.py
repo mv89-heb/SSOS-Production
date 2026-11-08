@@ -368,3 +368,38 @@ def test_high_product_confidence_is_review_when_supplier_is_unresolved():
     assert result["decision"] == "REVIEW"
     assert result["best_match"]["confidence"] == 1.0
     assert result["best_match"]["decision"] == "REVIEW"
+
+
+def test_derive_packaging_extracts_explicit_net_content_and_normalized_price():
+    item = {"description": "חלב תנובה 3% 1 ליטר", "unit": "יח׳", "unit_price": 6.5}
+    result = ProductMatchingService._derive_packaging(item)
+    assert result["net_content_value"] == 1000
+    assert result["net_content_unit"] == "ml"
+    assert result["derived_price_per_measure"] == 6.5
+    assert result["derived_price_measure_unit"] == "ליטר"
+    assert result["derived_from"] == "deterministic_document_line_text"
+
+
+def test_derive_packaging_recognizes_pack_count_only_with_packaging_context():
+    explicit = ProductMatchingService._derive_packaging({"description": "כפות קרם מארז 50 יח׳"})
+    ambiguous = ProductMatchingService._derive_packaging({"description": "אשפתון שחור 400 יח׳"})
+    assert explicit["declared_pack_count"] == 50
+    assert explicit["declared_pack_count_unit"] == "יחידות"
+    assert "declared_pack_count" not in ambiguous
+
+
+def test_derive_packaging_preserves_existing_values_and_does_not_guess_price():
+    item = {
+        "description": "קמח 1 ק״ג",
+        "unit": "ק״ג",
+        "unit_price": 8.9,
+        "derived_packaging": {"net_content_value": 500, "net_content_unit": "g", "source_note": "existing"},
+    }
+    result = ProductMatchingService._derive_packaging(item)
+    assert result["net_content_value"] == 500
+    assert result["source_note"] == "existing"
+    assert "derived_price_per_measure" not in result
+
+
+def test_derive_packaging_returns_empty_for_lines_without_explicit_measure():
+    assert ProductMatchingService._derive_packaging({"description": "חלה גדולה", "quantity": 174, "unit_price": 8}) == {}
