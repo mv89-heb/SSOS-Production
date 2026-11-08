@@ -155,15 +155,15 @@ class ProductMatchingService:
         raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
         raw = raw.replace("\u05f4", '"').replace("\u05f3", "'")
         match = re.search(
-            r"(?<!\d)(\d+(?:[.,]\d+)?)\s*(millilit(?:er|re)s?|ml|מיליליטר|מ[\"']?ל|"
-            r"lit(?:er|re)s?|l|ליטרים?|ליטר|kg|kgs?|ק\s*ג|קילו(?:גרם)?|g|גרם|"
+            r"(?<![\d/-])(\d+(?:[.,]\d+)?)\s*(millilit(?:er|re)s?|ml|מיליליטר|מ[\"']?ל|"
+            r"lit(?:er|re)s?|l|ליטרים?|ליטר|kg|kgs?|ק\s*[\"']?\s*ג|קילו(?:גרם)?|g|גרם|"
             r"cm|סמ|ס\s*מ|mm|ממ|מ\s*מ|מטרים?|מטר)(?!\w)",
             raw,
         )
         if not match:
             return None
         amount = float(match.group(1).replace(",", "."))
-        unit = re.sub(r"\s+", "", match.group(2))
+        unit = re.sub(r"\s+", "", match.group(2)).replace('"', '').replace("'", "")
         if unit in {"l", "liter", "liters", "litre", "litres", "ליטר", "ליטרים"}:
             return "volume_ml", amount * 1000
         if unit in {"ml", "milliliter", "milliliters", "millilitre", "millilitres", "מיליליטר", 'מל', 'מ"ל'}:
@@ -192,6 +192,63 @@ class ProductMatchingService:
         raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
         match = re.search(r"(?<!\d)(\d+)\s*(?:יח(?:ידות|ידה|י|׳|')?|pcs?|pieces)(?!\w)", raw)
         return int(match.group(1)) if match else None
+
+    @classmethod
+    def _derive_packaging(cls, item: dict) -> dict:
+        """Derive only packaging facts stated unambiguously on the document line."""
+        description = str(item.get("description") or "")
+        existing = item.get("derived_packaging")
+        result = dict(existing) if isinstance(existing, dict) else {}
+
+        measure = cls._measure_signature(description)
+        if measure is not None:
+            measure_type, base_value = measure
+            if result.get("net_content_value") is None:
+                if measure_type == "mass_g" and base_value >= 1000 and base_value % 1000 == 0:
+                    result["net_content_value"] = base_value / 1000
+                    result["net_content_unit"] = "ק״ג"
+                elif measure_type == "mass_g":
+                    result["net_content_value"] = base_value
+                    result["net_content_unit"] = "גרם"
+                elif measure_type == "volume_ml" and base_value >= 1000 and base_value % 1000 == 0:
+                    result["net_content_value"] = base_value / 1000
+                    result["net_content_unit"] = "ליטר"
+                elif measure_type == "volume_ml":
+                    result["net_content_value"] = base_value
+                    result["net_content_unit"] = "מ״ל"
+                else:
+                    result["net_content_value"] = base_value
+                    result["net_content_unit"] = "מ״מ"
+
+            # Only calculate a price when the invoice price is per package/unit.
+            invoice_unit = cls.normalize(item.get("unit"))
+            package_units = {"יח", "יחידה", "יחידות", "אריזה", "מארז", "חבילה", "קרטון", "קרטונים", "גל", "גליל", "שק", "חב", "חבי", "pack", "package"}
+            try:
+                unit_price = float(item.get("unit_price"))
+            except (TypeError, ValueError):
+                unit_price = 0.0
+            if (result.get("derived_price_per_measure") is None and invoice_unit in package_units
+                    and unit_price > 0 and base_value > 0 and measure_type in {"mass_g", "volume_ml"}):
+                result["derived_price_per_measure"] = round(unit_price / (base_value / 1000.0), 4)
+                result["derived_price_measure_unit"] = "ק״ג" if measure_type == "mass_g" else "ליטר"
+                result["price_basis_unit"] = invoice_unit
+
+        # Plain "50 יח׳" can be a line quantity or product attribute.
+        # Treat it as pack content only when packaging wording explicitly binds it.
+        count_match = re.search(
+            r"(?:מארז|אריזה|חבילה|קרטון|ארוז(?:ה|ים|ות)?)\s*(?:של\s*)?(\d+)\s*(?:יח(?:ידות|ידה|י|׳|')?|pcs?|pieces)"
+            r"|(?<!\d)(\d+)\s*(?:יח(?:ידות|ידה|י|׳|')?|pcs?|pieces)\s*(?:באריזה|במארז|בחבילה|בקרטון)",
+            unicodedata.normalize("NFKC", description).casefold(),
+        )
+        if count_match and result.get("declared_pack_count") is None:
+            count = next((value for value in count_match.groups() if value), None)
+            if count:
+                result["declared_pack_count"] = int(count)
+                result["declared_pack_count_unit"] = "יחידות"
+
+        if result and not result.get("derived_from"):
+            result["derived_from"] = "deterministic_document_line_text"
+        return result
 
     @classmethod
     def _variant_conflict(cls, extracted, product) -> bool:
@@ -444,6 +501,7 @@ class ProductMatchingService:
             for raw_item in section.get("items") or []:
                 item = dict(raw_item)
                 item["supplier_section_index"] = section_index
+                item["derived_packaging"] = self._derive_packaging(item)
                 item["supplier_context"] = dict(supplier_data)
                 item["supplier_matching"] = supplier_match
                 if self.is_document_reference_line(item.get("description")):
