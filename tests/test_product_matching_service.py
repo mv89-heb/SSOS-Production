@@ -403,3 +403,17 @@ def test_derive_packaging_preserves_existing_values_and_does_not_guess_price():
 
 def test_derive_packaging_returns_empty_for_lines_without_explicit_measure():
     assert ProductMatchingService._derive_packaging({"description": "חלה גדולה", "quantity": 174, "unit_price": 8}) == {}
+
+
+def test_derive_packaging_normalizes_price_for_explicit_roll_weight():
+    item = {"description": "גליל מפות ניילון כ 25ק״ג בגליל", "unit": "גל", "unit_price": 185}
+    result = ProductMatchingService._derive_packaging(item)
+    assert result["net_content_value"] == 25000
+    assert result["net_content_unit"] == "g"
+    assert result["derived_price_per_measure"] == 7.4
+    assert result["derived_price_measure_unit"] == "ק״ג"
+
+
+def test_measure_parser_does_not_read_number_inside_hyphenated_product_code():
+    item = {"description": "מכסה למיכל 1-2-750 ליטר", "unit": "יח׳", "unit_price": 0.33}
+    assert ProductMatchingService._derive_packaging(item) == {}
