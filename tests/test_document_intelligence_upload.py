@@ -271,3 +271,51 @@ def test_bulk_rematch_refreshes_applied_and_unapplied_without_ai_or_procurement_
     for row in rows:
         refreshed = db.session.get(DocumentAnalysis, row.id)
         assert refreshed.extracted_data["items"][0]["derived_packaging"]["declared_pack_count"] == 50
+
+
+
+def test_document_analysis_list_returns_summary_and_detail_endpoint_returns_full_payload(
+    logged_in_client_a, db
+):
+    user = User.query.filter_by(email="admin@acme.test").first()
+    assert user is not None
+    row = DocumentAnalysis(
+        tenant_id=user.tenant_id,
+        uploaded_by=user.id,
+        filename="large-invoice.pdf",
+        mime_type="application/pdf",
+        document_type="INVOICE",
+        status="ANALYZED",
+        extracted_data={
+            "workflow_routing": {
+                "route": "INVOICE_RECONCILIATION",
+                "label": "חשבונית ספק",
+                "item_count": 2,
+            },
+            "items": [
+                {"description": "Milk", "unit_price": 10},
+                {"description": "Bread", "unit_price": 8},
+            ],
+            "supplier_sections": [{"supplier": {"name": "Supplier"}, "items": [{"description": "Milk"}]}],
+            "processing": {"percent": 100, "pages_total": 3, "pages_processed": 3},
+        },
+    )
+    db.session.add(row)
+    db.session.commit()
+
+    list_response = logged_in_client_a.get("/api/document-intelligence?limit=100")
+    assert list_response.status_code == 200, list_response.get_json()
+    listed = next(item for item in list_response.get_json()["analyses"] if item["id"] == row.id)
+    assert listed["details_loaded"] is False
+    assert listed["item_count"] == 2
+    assert listed["extracted_data"]["workflow_routing"]["label"] == "חשבונית ספק"
+    assert listed["extracted_data"]["processing"]["percent"] == 100
+    assert "items" not in listed["extracted_data"]
+    assert "supplier_sections" not in listed["extracted_data"]
+
+    detail_response = logged_in_client_a.get(f"/api/document-intelligence/{row.id}")
+    assert detail_response.status_code == 200, detail_response.get_json()
+    detail = detail_response.get_json()["analysis"]
+    assert detail["details_loaded"] is True
+    assert len(detail["extracted_data"]["items"]) == 2
+    assert detail["extracted_data"]["supplier_sections"][0]["supplier"]["name"] == "Supplier"

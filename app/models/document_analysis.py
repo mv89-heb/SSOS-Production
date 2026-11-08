@@ -43,6 +43,38 @@ class DocumentAnalysis(db.Model):
         age_seconds = (datetime.now(timezone.utc) - created).total_seconds()
         return age_seconds >= stale_minutes * 60
 
+    def to_summary_dict(self):
+        """Return list-safe metadata without the potentially large extraction payload."""
+        extracted = self.extracted_data if isinstance(self.extracted_data, dict) else {}
+        routing = extracted.get("workflow_routing")
+        processing = extracted.get("processing")
+        item_count = (
+            routing.get("item_count")
+            if isinstance(routing, dict) and isinstance(routing.get("item_count"), int)
+            else len(extracted.get("items", [])) if isinstance(extracted.get("items"), list) else 0
+        )
+        return {
+            "id": self.id,
+            "filename": self.filename,
+            "mime_type": self.mime_type,
+            "document_type": self.document_type,
+            "status": self.status,
+            "processing_stale": self.is_stale_processing(),
+            "extracted_data": {
+                "workflow_routing": routing if isinstance(routing, dict) else None,
+                "processing": processing if isinstance(processing, dict) else None,
+            },
+            "item_count": item_count,
+            "details_loaded": False,
+            "error_message": self.error_message,
+            "provider": self.provider,
+            "model": self.model,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "analyzed_at": self.analyzed_at.isoformat() if self.analyzed_at else None,
+            "applied_at": self.applied_at.isoformat() if self.applied_at else None,
+            "applied_by": self.applied_by,
+        }
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -59,4 +91,6 @@ class DocumentAnalysis(db.Model):
             "analyzed_at": self.analyzed_at.isoformat() if self.analyzed_at else None,
             "applied_at": self.applied_at.isoformat() if self.applied_at else None,
             "applied_by": self.applied_by,
+            "details_loaded": True,
+            "item_count": len(self.extracted_data.get("items", [])) if isinstance(self.extracted_data, dict) and isinstance(self.extracted_data.get("items"), list) else 0,
         }

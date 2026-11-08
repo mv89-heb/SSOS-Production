@@ -78,6 +78,21 @@ export default function DocumentIntelligencePage() {
       });
     return () => { active = false; };
   }, []);
+  useEffect(() => {
+    if (selectedId == null) return;
+    const selected = analyses.find((item) => item.id === selectedId);
+    if (!selected || selected.details_loaded) return;
+    let active = true;
+    documentIntelligenceService.get(selectedId)
+      .then((detail) => {
+        if (!active) return;
+        setAnalyses((current) => current.map((item) => item.id === detail.id ? detail : item));
+      })
+      .catch((err: any) => {
+        if (active) setError(err?.friendlyMessage || err?.response?.data?.message || "לא ניתן לטעון את פרטי המסמך.");
+      });
+    return () => { active = false; };
+  }, [selectedId, analyses]);
   const analysis = analyses.find((item) => item.id === selectedId) ?? analyses[analyses.length - 1] ?? null;
   const data = analysis?.extracted_data;
   const reconciliation = data?.order_reconciliation as OrderReconciliation | undefined;
@@ -230,7 +245,7 @@ export default function DocumentIntelligencePage() {
     if (!window.confirm("לרענן נתוני אריזה, משקל/נפח ומחיר ליחידת מידה בכל המסמכים שנותחו? הפעולה משתמשת בטקסט השמור בלבד, משמרת את התאמות המוצרים ואינה מפעילה Gemini או משנה מלאי ומחירים.")) return;
     const eligible = analyses.filter((item) =>
       ["ANALYZED", "PARTIALLY_APPLIED", "APPLIED"].includes(item.status) &&
-      Array.isArray(item.extracted_data?.items)
+      (item.item_count ?? item.extracted_data?.workflow_routing?.item_count ?? 0) > 0
     );
     if (!eligible.length) {
       setNotice("אין מסמכים שנותחו עם שורות מוצר לרענון.");

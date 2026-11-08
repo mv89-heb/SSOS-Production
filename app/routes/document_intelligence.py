@@ -55,7 +55,7 @@ def list_document_analyses():
         rows = DocumentAnalysis.query.filter_by(
             tenant_id=current_user.tenant_id
         ).order_by(DocumentAnalysis.created_at.desc(), DocumentAnalysis.id.desc()).limit(limit).all()
-        return jsonify({"success": True, "analyses": [row.to_dict() for row in rows], "limit": limit}), 200
+        return jsonify({"success": True, "analyses": [row.to_summary_dict() for row in rows], "limit": limit}), 200
     except HTTPException as exc:
         return _handle(exc)
     except Exception as exc:
