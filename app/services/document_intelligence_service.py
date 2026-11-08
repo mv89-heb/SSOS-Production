@@ -270,6 +270,50 @@ class DocumentIntelligenceService:
         db.session.commit()
         return row
 
+    def refresh_packaging(self, analysis_id: int):
+        """Refresh only deterministic package facts; preserve saved catalog matches."""
+        PermissionService.require_role_at_least("manager")
+        row = self._get(analysis_id)
+        if row.status not in {"ANALYZED", "PARTIALLY_APPLIED", "APPLIED"} or not isinstance(row.extracted_data, dict):
+            raise BadRequest("Document must be successfully analyzed before refreshing packaging")
+        data = dict(row.extracted_data)
+        if not isinstance(data.get("items"), list):
+            raise BadRequest("Document has no extracted item lines to refresh")
+
+        def refresh_items(raw_items):
+            refreshed = []
+            for raw_item in raw_items:
+                if not isinstance(raw_item, dict):
+                    continue
+                item = dict(raw_item)
+                derived = ProductMatchingService._derive_packaging(item)
+                if derived:
+                    item["derived_packaging"] = derived
+                refreshed.append(item)
+            return refreshed
+
+        sections = data.get("supplier_sections")
+        if isinstance(sections, list) and sections:
+            refreshed_sections = []
+            flat_items = []
+            for raw_section in sections:
+                if not isinstance(raw_section, dict):
+                    continue
+                section = dict(raw_section)
+                section_items = refresh_items(section.get("items") if isinstance(section.get("items"), list) else [])
+                section["items"] = section_items
+                refreshed_sections.append(section)
+                flat_items.extend(section_items)
+            data["supplier_sections"] = refreshed_sections
+            data["items"] = flat_items
+        else:
+            data["items"] = refresh_items(data["items"])
+
+        data["packaging_refresh_version"] = "deterministic-packaging-v1"
+        row.extracted_data = data
+        db.session.commit()
+        return row
+
     def rematch_all(self, limit: int = 100) -> dict:
         """Refresh saved extraction metadata without AI or procurement writes."""
         PermissionService.require_role_at_least("manager")
