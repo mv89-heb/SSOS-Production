@@ -417,3 +417,95 @@ def test_derive_packaging_normalizes_price_for_explicit_roll_weight():
 def test_measure_parser_does_not_read_number_inside_hyphenated_product_code():
     item = {"description": "מכסה למיכל 1-2-750 ליטר", "unit": "יח׳", "unit_price": 0.33}
     assert ProductMatchingService._derive_packaging(item) == {}
+
+
+
+def test_derive_packaging_normalizes_explicit_lengths_to_natural_units():
+    long_roll = ProductMatchingService._derive_packaging({
+        "description": "מפה אל-בד בגליל 25 מטר",
+        "unit": "יח׳",
+        "unit_price": 60,
+    })
+    short_length = ProductMatchingService._derive_packaging({
+        "description": "רוחב 45 ס״מ",
+    })
+    assert long_roll["net_content_value"] == 25
+    assert long_roll["net_content_unit"] == "מטר"
+    assert short_length["net_content_value"] == 45
+    assert short_length["net_content_unit"] == "ס״מ"
+
+
+def test_derive_packaging_refresh_normalizes_previous_deterministic_length():
+    result = ProductMatchingService._derive_packaging({
+        "description": "מפה אל-בד 25 מטר",
+        "derived_packaging": {
+            "net_content_value": 25000,
+            "net_content_unit": "מ״מ",
+            "derived_from": "deterministic_document_line_text",
+        },
+    })
+    assert result["net_content_value"] == 25
+    assert result["net_content_unit"] == "מטר"
+
+
+def test_derive_packaging_does_not_calculate_price_for_multi_item_bag():
+    result = ProductMatchingService._derive_packaging({
+        "description": "מיכל ישן 4.5 ליטר 1/50 בשק + 2 מכסים",
+        "unit": "שק",
+        "unit_price": 75,
+        "derived_packaging": {
+            "net_content_value": 4.5,
+            "net_content_unit": "ליטר",
+            "derived_price_per_measure": 16.6667,
+            "derived_price_measure_unit": "ליטר",
+            "price_basis_unit": "שק",
+            "derived_from": "deterministic_document_line_text",
+        },
+    })
+    assert result["net_content_value"] == 4.5
+    assert result["net_content_unit"] == "ליטר"
+    assert "derived_price_per_measure" not in result
+    assert "derived_price_measure_unit" not in result
+    assert "price_basis_unit" not in result
+
+
+def test_derive_packaging_does_not_remove_price_for_explicit_single_item_or_roll():
+    item = ProductMatchingService._derive_packaging({
+        "description": "חלב תנובה 1 ליטר",
+        "unit": "יח׳",
+        "unit_price": 6.5,
+    })
+    roll = ProductMatchingService._derive_packaging({
+        "description": "גליל מפות ניילון כ 25 ק״ג בגליל",
+        "unit": "גל",
+        "unit_price": 185,
+    })
+    assert item["derived_price_per_measure"] == 6.5
+    assert roll["derived_price_per_measure"] == 7.4
+
+
+
+def test_measure_parser_prefers_net_weight_when_line_also_has_width():
+    result = ProductMatchingService._derive_packaging({
+        "description": "ניילון נצמד 45 ס״מ 1.3 ק״ג",
+        "unit": "יח׳",
+        "unit_price": 52,
+    })
+    assert result["net_content_value"] == 1300
+    assert result["net_content_unit"] == "גרם"
+    assert result["derived_price_per_measure"] == 40
+    assert result["derived_price_measure_unit"] == "ק״ג"
+
+
+
+def test_derive_packaging_converts_fractional_liters_and_meters():
+    liquid = ProductMatchingService._derive_packaging({
+        "description": "מיכל 4.5 ליטר",
+    })
+    length = ProductMatchingService._derive_packaging({
+        "description": "מקל מתכת 1.5 מטר",
+    })
+    assert liquid["net_content_value"] == 4.5
+    assert liquid["net_content_unit"] == "ליטר"
+    assert length["net_content_value"] == 1.5
+    assert length["net_content_unit"] == "מטר"

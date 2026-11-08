@@ -289,6 +289,9 @@ class DocumentIntelligenceService:
                 derived = ProductMatchingService._derive_packaging(item)
                 if derived:
                     item["derived_packaging"] = derived
+                else:
+                    # Avoid persisting empty objects for ordinary product lines.
+                    item.pop("derived_packaging", None)
                 refreshed.append(item)
             return refreshed
 

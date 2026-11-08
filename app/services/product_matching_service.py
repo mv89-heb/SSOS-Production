@@ -154,31 +154,42 @@ class ProductMatchingService:
     def _measure_signature(cls, value) -> tuple[str, float] | None:
         raw = unicodedata.normalize("NFKC", str(value or "")).casefold()
         raw = raw.replace("\u05f4", '"').replace("\u05f3", "'")
-        match = re.search(
+        pattern = (
             r"(?<![\d/-])(\d+(?:[.,]\d+)?)\s*(millilit(?:er|re)s?|ml|מיליליטר|מ[\"']?ל|"
             r"lit(?:er|re)s?|l|ליטרים?|ליטר|kg|kgs?|ק\s*[\"']?\s*ג|קילו(?:גרם)?|g|גרם|"
-            r"cm|סמ|ס\s*מ|mm|ממ|מ\s*מ|מטרים?|מטר)(?!\w)",
-            raw,
+            r"cm|סמ|ס\s*[\"']?\s*מ|mm|ממ|מ\s*[\"']?\s*מ|מטרים?|מטר)(?!\w)"
         )
-        if not match:
+        matches = list(re.finditer(pattern, raw))
+        if not matches:
             return None
-        amount = float(match.group(1).replace(",", "."))
-        unit = re.sub(r"\s+", "", match.group(2)).replace('"', '').replace("'", "")
-        if unit in {"l", "liter", "liters", "litre", "litres", "ליטר", "ליטרים"}:
-            return "volume_ml", amount * 1000
-        if unit in {"ml", "milliliter", "milliliters", "millilitre", "millilitres", "מיליליטר", 'מל', 'מ"ל'}:
-            return "volume_ml", amount
-        if unit in {"kg", "kgs", "קג", "קילו", "קילוגרם"}:
-            return "mass_g", amount * 1000
-        if unit in {"g", "גרם"}:
-            return "mass_g", amount
-        if unit in {"cm", "סמ"}:
-            return "length_mm", amount * 10
-        if unit in {"mm", "ממ"}:
-            return "length_mm", amount
-        if unit in {"מטר", "מטרים"}:
-            return "length_mm", amount * 1000
-        return None
+
+        def parse(match):
+            amount = float(match.group(1).replace(",", "."))
+            unit = re.sub(r"\s+", "", match.group(2)).replace('"', '').replace("'", "")
+            if unit in {"l", "liter", "liters", "litre", "litres", "ליטר", "ליטרים"}:
+                return "volume_ml", amount * 1000
+            if unit in {"ml", "milliliter", "milliliters", "millilitre", "millilitres", "מיליליטר", 'מל', 'מ\"ל'}:
+                return "volume_ml", amount
+            if unit in {"kg", "kgs", "קג", "קילו", "קילוגרם"}:
+                return "mass_g", amount * 1000
+            if unit in {"g", "גרם"}:
+                return "mass_g", amount
+            if unit in {"cm", "סמ"}:
+                return "length_mm", amount * 10
+            if unit in {"mm", "ממ"}:
+                return "length_mm", amount
+            if unit in {"מטר", "מטרים"}:
+                return "length_mm", amount * 1000
+            return None
+
+        parsed = [value for match in matches if (value := parse(match)) is not None]
+        if not parsed:
+            return None
+        # Product descriptions often state both a physical width and a net
+        # weight (for example cling film: 45 cm wide, 1.3 kg per roll).
+        # Prefer mass/volume for unit-price calculations; otherwise use the
+        # first explicit length measurement.
+        return next((value for value in parsed if value[0] in {"mass_g", "volume_ml"}), parsed[0])
 
     @classmethod
     def _percent_signature(cls, value) -> float | None:
@@ -201,37 +212,53 @@ class ProductMatchingService:
         result = dict(existing) if isinstance(existing, dict) else {}
 
         measure = cls._measure_signature(description)
+        deterministic_existing = result.get("derived_from") == "deterministic_document_line_text"
         if measure is not None:
             measure_type, base_value = measure
-            if result.get("net_content_value") is None:
+            if result.get("net_content_value") is None or deterministic_existing:
                 if measure_type == "mass_g" and base_value >= 1000 and base_value % 1000 == 0:
                     result["net_content_value"] = base_value / 1000
                     result["net_content_unit"] = "ק״ג"
                 elif measure_type == "mass_g":
                     result["net_content_value"] = base_value
                     result["net_content_unit"] = "גרם"
-                elif measure_type == "volume_ml" and base_value >= 1000 and base_value % 1000 == 0:
+                elif measure_type == "volume_ml" and base_value >= 1000:
                     result["net_content_value"] = base_value / 1000
                     result["net_content_unit"] = "ליטר"
                 elif measure_type == "volume_ml":
                     result["net_content_value"] = base_value
                     result["net_content_unit"] = "מ״ל"
-                else:
+                elif measure_type == "length_mm" and base_value >= 1000:
+                    result["net_content_value"] = base_value / 1000
+                    result["net_content_unit"] = "מטר"
+                elif measure_type == "length_mm" and base_value >= 10 and base_value % 10 == 0:
+                    result["net_content_value"] = base_value / 10
+                    result["net_content_unit"] = "ס״מ"
+                elif measure_type == "length_mm":
                     result["net_content_value"] = base_value
                     result["net_content_unit"] = "מ״מ"
 
-            # Only calculate a price when the invoice price is per package/unit.
+            # A price per kg/litre is safe only when the invoice's price unit
+            # represents one measured item or one explicitly measured roll.
             invoice_unit = cls.normalize(item.get("unit"))
-            package_units = {"יח", "יחידה", "יחידות", "אריזה", "מארז", "חבילה", "קרטון", "קרטונים", "גל", "גליל", "שק", "חב", "חבי", "pack", "package"}
+            single_measure_units = {"יח", "יחידה", "יחידות", "גל", "גליל"}
             try:
                 unit_price = float(item.get("unit_price"))
             except (TypeError, ValueError):
                 unit_price = 0.0
-            if (result.get("derived_price_per_measure") is None and invoice_unit in package_units
-                    and unit_price > 0 and base_value > 0 and measure_type in {"mass_g", "volume_ml"}):
-                result["derived_price_per_measure"] = round(unit_price / (base_value / 1000.0), 4)
-                result["derived_price_measure_unit"] = "ק״ג" if measure_type == "mass_g" else "ליטר"
-                result["price_basis_unit"] = invoice_unit
+
+            if measure_type in {"mass_g", "volume_ml"}:
+                if invoice_unit in single_measure_units and unit_price > 0 and base_value > 0:
+                    if result.get("derived_price_per_measure") is None or deterministic_existing:
+                        result["derived_price_per_measure"] = round(unit_price / (base_value / 1000.0), 4)
+                        result["derived_price_measure_unit"] = "ק״ג" if measure_type == "mass_g" else "ליטר"
+                        result["price_basis_unit"] = invoice_unit
+                elif deterministic_existing:
+                    # Do not retain a previously calculated unit price when the
+                    # invoice unit may contain multiple measured items (bag/carton/pack).
+                    result.pop("derived_price_per_measure", None)
+                    result.pop("derived_price_measure_unit", None)
+                    result.pop("price_basis_unit", None)
 
         # Plain "50 יח׳" can be a line quantity or product attribute.
         # Treat it as pack content only when packaging wording explicitly binds it.
