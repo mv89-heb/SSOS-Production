@@ -145,6 +145,8 @@ class ProcurementBudgetService:
         return self._serialize_with_spend(budget)
 
     def update_budget(self, user, budget_id, payload):
+        if not isinstance(payload, dict):
+            raise BadRequest("Budget payload must be an object")
         budget = self._get_budget(budget_id, for_update=True)
         merged = {
             "scope_type": budget.scope_type,
@@ -207,7 +209,7 @@ class ProcurementBudgetService:
             scope_value = getattr(order, scope_type, None)
             matching = [
                 budget for budget in period_budgets
-                if scope_value and budget.scope_value.casefold() == str(scope_value).strip().casefold()
+                if scope_value and budget.scope_value.lower() == str(scope_value).strip().lower()
             ]
             if period_budgets and not matching:
                 missing_scopes.append(scope_type)
@@ -336,7 +338,7 @@ class ProcurementBudgetService:
         query = ProcurementBudget.query.filter(
             ProcurementBudget.tenant_id == self.tenant_id,
             ProcurementBudget.scope_type == values["scope_type"],
-            func.lower(ProcurementBudget.scope_value) == values["scope_value"].casefold(),
+            func.lower(ProcurementBudget.scope_value) == values["scope_value"].lower(),
             ProcurementBudget.period_type == values["period_type"],
             ProcurementBudget.period_start == values["period_start"],
             ProcurementBudget.currency == values["currency"],
