@@ -136,9 +136,9 @@ class OrderHistoryForecastService:
                 quantity_unit in (None, "") and ordered_unit == "קרטון"
             )
             if is_carton_quantity:
-                pack_size = self._positive_pack_size(
-                    snapshot.get("units_per_carton") or product.units_per_carton
-                )
+                # Never use today's catalog pack size to reinterpret an old order.
+                # Only the immutable per-order snapshot can safely convert cartons.
+                pack_size = self._positive_pack_size(snapshot.get("units_per_carton"))
                 if pack_size is None:
                     conversion_issues[product_id] += 1
                     continue
