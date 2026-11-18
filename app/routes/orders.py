@@ -1,15 +1,18 @@
 import os
 import uuid
+from datetime import date, datetime, timedelta, timezone
 from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required, current_user
-from werkzeug.exceptions import HTTPException, NotFound
+from werkzeug.exceptions import BadRequest, HTTPException, NotFound
 from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.services.order_service import OrderService
+from app.services.order_history_forecast_service import OrderHistoryForecastService
 from app.services.receipt_service import ReceiptService
 from app.services.ocr_service import OCRService, validate_upload, OCRProviderError
 from app.services.permission_service import PermissionService
+from app.models.supplier import Supplier
 from app.services import google_calendar_service as gcal
 
 orders_bp = Blueprint("orders", __name__, url_prefix="/api/orders")
@@ -21,6 +24,47 @@ def _handle(exc: HTTPException):
         "error": exc.name.lower().replace(" ", "_"),
         "message": exc.description
     }), exc.code
+
+@orders_bp.route("/supplier-history-forecast", methods=["GET"])
+@login_required
+def supplier_history_forecast():
+    """Forecast a supplier order from issued order history, never from stock counts."""
+    try:
+        PermissionService.require_permission("orders.create")
+        supplier_id = request.args.get("supplier_id", type=int)
+        if not supplier_id:
+            raise BadRequest("supplier_id is required")
+        supplier = db.session.scalar(
+            db.select(Supplier).where(
+                Supplier.id == supplier_id,
+                Supplier.tenant_id == current_user.tenant_id,
+                Supplier.active.is_(True),
+            )
+        )
+        if supplier is None:
+            raise NotFound("Supplier not found")
+
+        today = datetime.now(timezone.utc).date()
+        default_start = today - timedelta(days=150)
+        try:
+            start_date = date.fromisoformat(request.args.get("start_date", default_start.isoformat()))
+            end_date = date.fromisoformat(request.args.get("end_date", today.isoformat()))
+            target_date = date.fromisoformat(request.args.get("target_date", today.isoformat()))
+        except (TypeError, ValueError):
+            raise BadRequest("Dates must use YYYY-MM-DD")
+        if end_date < start_date:
+            raise BadRequest("end_date must not be earlier than start_date")
+
+        result = OrderHistoryForecastService(current_user.tenant_id).supplier_forecast(
+            supplier_id,
+            start_date=start_date,
+            end_date=end_date,
+            target_date=target_date,
+        )
+        return jsonify({"success": True, "forecast": result})
+    except HTTPException as exc:
+        return _handle(exc)
+
 
 @orders_bp.route("", methods=["GET"])
 @login_required
