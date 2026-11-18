@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from app.models.order import Order, STATUS_DRAFT, STATUS_SENT
+from app.models.order import Order, STATUS_DRAFT, STATUS_SENT, STATUS_SUBMITTED
 from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.supplier import Supplier
@@ -55,6 +55,27 @@ def test_supplier_forecast_uses_issued_orders_and_excludes_drafts(db, tenant_a_a
             currency="ILS",
             product_snapshot={"unit": "יחידה"},
         ))
+
+    submitted = Order(
+        tenant_id=tenant_id,
+        user_id=tenant_a_admin[0]["user"]["id"],
+        supplier_id=supplier.id,
+        order_number="HIST-SUBMITTED",
+        supplier_name=supplier.name,
+        status=STATUS_SUBMITTED,
+        planned_order_date=date(2020, 1, 13),
+        created_at=datetime(2020, 1, 13, tzinfo=timezone.utc),
+    )
+    db.session.add(submitted)
+    db.session.flush()
+    db.session.add(OrderItem(
+        tenant_id=tenant_id,
+        order_id=submitted.id,
+        product_id=product.id,
+        quantity=Decimal("300"),
+        unit_price=Decimal("1"),
+        currency="ILS",
+    ))
 
     draft = Order(
         tenant_id=tenant_id,
