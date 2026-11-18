@@ -154,7 +154,7 @@ def test_employee_cannot_override_a_blocked_budget(
     assert Order.query.filter_by(id=order["id"]).one().status == STATUS_DRAFT
 
 
-def test_budget_is_tenant_scoped_and_currency_is_never_converted(
+def test_budget_is_tenant_scoped(
     logged_in_client_a, logged_in_client_b, make_order
 ):
     _create_budget(logged_in_client_a, amount=1, enforcement_mode="block")
@@ -199,3 +199,25 @@ def test_duplicate_budget_scope_is_case_insensitive(logged_in_client_a):
     assert first.status_code == 201
     duplicate = _create_budget(logged_in_client_a, scope_value="kitchen")
     assert duplicate.status_code == 409
+
+
+def test_currency_budgets_are_never_converted_between_currencies(
+    logged_in_client_a, make_order, db
+):
+    _create_budget(logged_in_client_a, amount=1, currency="ILS", enforcement_mode="block")
+    response, _, _ = make_order(
+        logged_in_client_a, quantity=1, price=20.0, planned_order_date="2026-11-18"
+    )
+    order = response.get_json()["order"]
+    _assign_order(logged_in_client_a, order["id"], department="Kitchen")
+    saved_order = db.session.get(Order, order["id"])
+    saved_order.currency = "USD"
+    db.session.commit()
+
+    impact = logged_in_client_a.get(f"/api/procurement-budgets/orders/{order['id']}/impact")
+    assert impact.status_code == 200
+    assert impact.get_json()["budget_impact"]["currency"] == "USD"
+    assert impact.get_json()["budget_impact"]["impacts"] == []
+    assert impact.get_json()["budget_impact"]["assignment_required"] is False
+    submitted = logged_in_client_a.post(f"/api/orders/{order['id']}/submit", json={})
+    assert submitted.status_code == 200
