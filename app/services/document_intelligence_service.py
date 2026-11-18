@@ -1066,7 +1066,7 @@ class DocumentIntelligenceService:
                 extracted_decimal = None
             accepted_current_quantity = (
                 extracted_decimal - damaged_quantity
-                if extracted_decimal is not None and damaged_quantity.is_finite()
+                if extracted_decimal is not None and extracted_decimal.is_finite() and damaged_quantity.is_finite()
                 else None
             )
             expected_price = float(order_line.unit_price)
