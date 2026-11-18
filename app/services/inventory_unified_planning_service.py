@@ -190,7 +190,7 @@ class InventoryUnifiedPlanningService:
         posted_receipts = (
             select(
                 ReceiptItem.order_item_id.label("order_item_id"),
-                func.coalesce(func.sum(ReceiptItem.quantity), 0).label("received_quantity"),
+                func.coalesce(func.sum(ReceiptItem.quantity - ReceiptItem.damaged_quantity), 0).label("received_quantity"),
             )
             .join(Receipt, Receipt.id == ReceiptItem.receipt_id)
             .where(
