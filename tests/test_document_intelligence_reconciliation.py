@@ -350,6 +350,8 @@ def test_delivery_note_uses_corrected_document_date_for_receipt(
         tenant_id=order.tenant_id, order_id=order.id, product_id=product_id
     ).one()
     product = db.session.get(Product, product_id)
+    product.unit = product.unit or "יחידה"
+    db.session.commit()
     user = User.query.filter_by(email="admin@acme.test").one()
     analysis = _analysis(db, user, "delivery-note-dated.pdf", "DELIVERY_NOTE", {
         "document_type": "DELIVERY_NOTE",
