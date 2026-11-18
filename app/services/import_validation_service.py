@@ -39,6 +39,7 @@ from app.repositories.import_validation_repository import (
 from app.repositories.product_repository import ProductRepository
 from app.repositories.supplier_repository import SupplierRepository
 from app.services.audit_service import AuditService
+from app.services.vat_service import normalize_price_before_vat
 
 _PRIMARY_PRICE_TARGETS = (
     TARGET_PRICE,
@@ -281,6 +282,10 @@ class ImportValidationService:
             if price_error:
                 add_issue(SEVERITY_ERROR, "invalid_price", price_error, "price")
                 continue
+            if price < 0:
+                add_issue(SEVERITY_ERROR, "negative_price", f'Column "{col.column_header}" contains a negative supplier price.', "price")
+                continue
+            price = normalize_price_before_vat(price, col.final_price_type)
             offer_entries.append({"column_index": idx, "supplier_id": col.final_supplier_id, "supplier_name": supplier_name, "price": price, "price_type": col.final_price_type})
 
         best_by_supplier = {}
@@ -323,6 +328,9 @@ class ImportValidationService:
                 if price_error:
                     add_issue(SEVERITY_ERROR, "invalid_price", price_error, "price")
                     primary_price = None
+                elif primary_price is not None and primary_price >= 0:
+                    price_type = "after_vat" if target == TARGET_PRICE_AFTER_VAT else "before_vat"
+                    primary_price = normalize_price_before_vat(primary_price, price_type)
                 break
 
         if offer_entries:

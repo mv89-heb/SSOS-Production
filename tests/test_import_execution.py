@@ -243,3 +243,16 @@ def test_commit_does_not_overwrite_unit_on_existing_product_update(logged_in_cli
     logged_in_client_a.post(f"/api/imports/{session_id}/commit")
     product = logged_in_client_a.get("/api/catalog/products").get_json()["products"][0]
     assert product["current_price"] == 9.99 and product["unit"] == "יחידה מותאמת"
+
+
+def test_commit_normalizes_vat_inclusive_import_to_net_price(logged_in_client_a):
+    supplier_id = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "VAT Supplier"}).get_json()["supplier"]["id"]
+    session_id = _ready_to_commit(
+        logged_in_client_a,
+        _xlsx_bytes([["מוצר", 'מחיר אחרי מע"מ'], ["מוצר כולל", "118"]]),
+        supplier_id=supplier_id,
+    )
+    response = logged_in_client_a.post(f"/api/imports/{session_id}/commit")
+    assert response.status_code == 201, response.get_json()
+    product = logged_in_client_a.get("/api/catalog/products").get_json()["products"][0]
+    assert product["current_price"] == 100.0

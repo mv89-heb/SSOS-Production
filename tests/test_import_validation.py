@@ -247,3 +247,16 @@ def test_same_supplier_multiple_price_columns_prefers_regular_over_discount(logg
     logged_in_client_a.post(f"/api/imports/{session_id}/validate")
     row = next(r for r in logged_in_client_a.get(f"/api/imports/{session_id}/preview").get_json()["rows"] if r["product_name"] == "X")
     assert row["price"] == 20.85
+
+
+def test_after_vat_import_price_is_normalized_to_net(logged_in_client_a):
+    supplier_id = logged_in_client_a.post("/api/catalog/suppliers", json={"name": "VAT Supplier"}).get_json()["supplier"]["id"]
+    session_id = _full_pipeline(
+        logged_in_client_a,
+        _xlsx_bytes([["מוצר", 'מחיר אחרי מע"מ'], ["מוצר כולל", "118"]]),
+        supplier_id=supplier_id,
+    )
+    response = logged_in_client_a.post(f"/api/imports/{session_id}/validate")
+    assert response.status_code == 200, response.get_json()
+    preview = logged_in_client_a.get(f"/api/imports/{session_id}/preview").get_json()["rows"][0]
+    assert preview["price"] == 100.0

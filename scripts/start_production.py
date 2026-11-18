@@ -21,13 +21,27 @@ def main() -> None:
         )
     port = os.environ.get("PORT", "10000")
     workers = os.environ.get("WEB_CONCURRENCY", "1")
-    print(f"[production] Starting Gunicorn on port {port} with {workers} workers", flush=True)
+    threads = os.environ.get("WEB_THREADS", "4")
+    try:
+        thread_count = int(threads)
+    except (TypeError, ValueError):
+        raise ValueError("WEB_THREADS must be an integer between 2 and 8")
+    if not 2 <= thread_count <= 8:
+        raise ValueError("WEB_THREADS must be between 2 and 8")
+    print(
+        f"[production] Starting Gunicorn on port {port} with {workers} workers and {thread_count} threads",
+        flush=True,
+    )
     os.execvp(
         "gunicorn",
         [
             "gunicorn",
             "-w",
             workers,
+            "--worker-class",
+            "gthread",
+            "--threads",
+            str(thread_count),
             "-b",
             f"0.0.0.0:{port}",
             "wsgi:app",

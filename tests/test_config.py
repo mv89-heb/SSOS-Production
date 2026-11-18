@@ -120,6 +120,7 @@ def test_production_entrypoint_runs_migrations_once_before_gunicorn(monkeypatch)
     monkeypatch.setenv("RUN_MIGRATIONS_ON_START", "true")
     monkeypatch.setenv("PORT", "10000")
     monkeypatch.setenv("WEB_CONCURRENCY", "1")
+    monkeypatch.setenv("WEB_THREADS", "4")
     monkeypatch.setattr(start_production.subprocess, "run", fake_run)
     monkeypatch.setattr(start_production.os, "execvp", fake_execvp)
 
@@ -131,3 +132,4 @@ def test_production_entrypoint_runs_migrations_once_before_gunicorn(monkeypatch)
     assert events[0][2] is True
     assert events[1][0] == "exec"
     assert events[1][2][1:3] == ["-w", "1"]
+    assert events[1][2][3:7] == ["--worker-class", "gthread", "--threads", "4"]
