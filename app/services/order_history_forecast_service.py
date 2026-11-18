@@ -32,9 +32,12 @@ class OrderHistoryForecastService:
         if isinstance(value, bool):
             return None
         try:
-            parsed = int(value)
-        except (TypeError, ValueError, OverflowError):
+            parsed_decimal = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
             return None
+        if not parsed_decimal.is_finite() or parsed_decimal != parsed_decimal.to_integral_value():
+            return None
+        parsed = int(parsed_decimal)
         return parsed if parsed > 0 else None
 
     def supplier_forecast(
