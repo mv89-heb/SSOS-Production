@@ -48,7 +48,7 @@ class OrderService:
         department = self._normalize_order_scope(payload.get("department"), "department")
         project = self._normalize_order_scope(payload.get("project"), "project")
         currency = str(payload.get("currency") or "ILS").strip().upper()
-        if len(currency) != 3 or not currency.isalpha():
+        if len(currency) != 3 or not currency.isascii() or not currency.isalpha():
             raise BadRequest("currency must be a three-letter ISO currency code")
         input_items = payload.get("items", [])
         if not isinstance(input_items, list) or not input_items:
