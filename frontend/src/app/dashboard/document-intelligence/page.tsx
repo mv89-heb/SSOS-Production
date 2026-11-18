@@ -133,7 +133,8 @@ export default function DocumentIntelligencePage() {
   useEffect(() => {
     if (!analysis) return;
     setSelectedOrderId(reconciliation?.order_id ? String(reconciliation.order_id) : "");
-    setDocumentNumber(data?.document_number || "");\n    setDocumentDate(data?.document_date || "");
+    setDocumentNumber(data?.document_number || "");
+    setDocumentDate(data?.document_date || "");
     setInvoiceAmount(data?.totals?.total != null ? String(data.totals.total) : "");
   }, [analysis?.id, reconciliation?.order_id, data?.document_number, data?.document_date, data?.totals?.total]);
   useEffect(() => { setAllowPriceUpdates(false); }, [analysis?.id]);
@@ -263,7 +264,8 @@ export default function DocumentIntelligencePage() {
     if (!window.confirm(allowPriceUpdates ? "החשבונית תירשם, ומחירים יתעדכנו רק לשורות בהתאמה ודאית וביחידת מידה תואמת. להמשיך?" : "החשבונית תירשם ללא עדכון מחירים. להמשיך?")) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      await persistDocumentMetadata();\n      const result = await documentIntelligenceService.applyInvoice(analysis.id, { invoice_number: documentNumber.trim(), amount, invoice_date: documentDate || undefined, currency: data?.currency || "ILS", allow_price_updates: allowPriceUpdates });
+      await persistDocumentMetadata();
+      const result = await documentIntelligenceService.applyInvoice(analysis.id, { invoice_number: documentNumber.trim(), amount, invoice_date: documentDate || undefined, currency: data?.currency || "ILS", allow_price_updates: allowPriceUpdates });
       setAnalyses((all) => all.map((item) => item.id === result.analysis.id ? result.analysis : item));
       await queryClient.invalidateQueries({ queryKey: ["products"] });
       const changes = result.automatic_price_updates || [];
