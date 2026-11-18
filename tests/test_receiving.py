@@ -7,6 +7,12 @@ from app.models.receipt import Receipt, RECEIPT_POSTED
 from app.models.receipt_item import ReceiptItem
 
 
+def _set_known_zero_stock(db, product_id):
+    product = db.session.get(Product, product_id)
+    product.current_stock = 0
+    db.session.commit()
+
+
 def _send_order(client, db, order_id):
     order = db.session.get(Order, order_id)
     order.status = STATUS_SENT
@@ -17,6 +23,7 @@ def test_full_receipt_updates_stock_and_movement(logged_in_client_a, make_order,
     response, _, product_id = make_order(logged_in_client_a, quantity=5, price=10.0)
     assert response.status_code == 201
     order = response.get_json()["order"]
+    _set_known_zero_stock(db, product_id)
     order_item_id = order["order_items"][0]["id"]
     _send_order(logged_in_client_a, db, order["id"])
 
@@ -43,6 +50,7 @@ def test_full_receipt_updates_stock_and_movement(logged_in_client_a, make_order,
 def test_partial_receipts_track_remaining_quantity(logged_in_client_a, make_order, db):
     response, _, product_id = make_order(logged_in_client_a, quantity=10, price=10.0)
     order = response.get_json()["order"]
+    _set_known_zero_stock(db, product_id)
     order_item_id = order["order_items"][0]["id"]
     _send_order(logged_in_client_a, db, order["id"])
 
