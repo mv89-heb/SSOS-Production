@@ -1137,6 +1137,10 @@ class DocumentIntelligenceService:
                 "previously_accepted_quantity": float(previously_accepted_quantity),
                 "previously_damaged_quantity": float(previously_damaged_quantity),
                 "remaining_quantity": expected_quantity,
+                "remaining_after_current": (
+                    float(max(Decimal(str(expected_quantity)) - accepted_current_quantity, Decimal("0")))
+                    if document_type == "DELIVERY_NOTE" and accepted_current_quantity is not None else None
+                ),
                 "expected_quantity": expected_quantity, "extracted_quantity": extracted_quantity,
                 "damaged_quantity": float(damaged_quantity) if damaged_quantity.is_finite() and damaged_quantity >= 0 else None,
                 "accepted_current_quantity": float(accepted_current_quantity) if accepted_current_quantity is not None else None,
