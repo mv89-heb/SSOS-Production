@@ -223,7 +223,7 @@ def test_supplier_forecast_blocks_carton_rows_without_pack_snapshot(db, tenant_a
         name="Unknown Pack Product",
         sku="HISTORY-PACK-001",
         unit="יחידה",
-        units_per_carton=None,
+        units_per_carton=12,
         current_stock=0,
         active=True,
     )
