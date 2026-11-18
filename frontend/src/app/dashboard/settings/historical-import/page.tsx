@@ -172,6 +172,7 @@ export default function HistoricalImportPage() {
     <div className="flex items-center gap-3">
       <button onClick={() => router.push("/dashboard/settings")} aria-label="חזרה להגדרות" className="text-slate-400 hover:text-slate-700"><ArrowRight size={20} /></button>
       <div><h1 className="text-2xl font-bold text-slate-900">ייבוא היסטורי מרוכז</h1><p className="mt-1 text-sm text-slate-500">סריקת חשבוניות ותעודות משלוח מהעבר ויצירת הזמנות היסטוריות מבודדות.</p></div>
+      <button onClick={() => router.push("/dashboard/settings/historical-import/manual")} className="mr-auto rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">ייבוא רשימת הזמנות ידנית</button>
     </div>
 
     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
