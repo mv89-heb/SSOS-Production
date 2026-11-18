@@ -693,11 +693,32 @@ class DocumentIntelligenceService:
             if not isinstance(unit, str) or not unit.strip() or len(unit.strip()) > 50:
                 raise BadRequest("A valid unit is required for every corrected line")
             item = dict(extracted_items[index])
+            try:
+                damaged_quantity = Decimal(str(correction.get("damaged_quantity", item.get("damaged_quantity", 0)) or 0))
+            except (InvalidOperation, TypeError, ValueError):
+                raise BadRequest("Damaged quantity must be a non-negative integer")
+            if (
+                not damaged_quantity.is_finite()
+                or damaged_quantity != damaged_quantity.to_integral_value()
+                or damaged_quantity < 0
+                or damaged_quantity > quantity
+            ):
+                raise BadRequest("Damaged quantity must be a non-negative integer no greater than received quantity")
+            damage_notes = correction.get("damage_notes", item.get("damage_notes"))
+            if damage_notes is not None and (not isinstance(damage_notes, str) or len(damage_notes.strip()) > 1000):
+                raise BadRequest("Damage notes must be text up to 1000 characters")
+            damage_notes = damage_notes.strip() if isinstance(damage_notes, str) else ""
+            if damaged_quantity > 0 and not damage_notes:
+                raise BadRequest("A damage note is required when damaged quantity is recorded")
             item["quantity"] = float(quantity)
             item["unit"] = unit.strip()
+            item["damaged_quantity"] = float(damaged_quantity)
+            item["damage_notes"] = damage_notes or None
             item["manual_correction"] = {
                 "quantity": True,
                 "unit": True,
+                "damaged_quantity": True,
+                "damage_notes": True,
                 "corrected_by": self.user_id,
                 "corrected_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -822,7 +843,7 @@ class DocumentIntelligenceService:
             received_rows = db.session.execute(
                 select(
                     ReceiptItem.order_item_id,
-                    func.coalesce(func.sum(ReceiptItem.quantity), 0),
+                    func.coalesce(func.sum(ReceiptItem.quantity - ReceiptItem.damaged_quantity), 0),
                 )
                 .join(Receipt, Receipt.id == ReceiptItem.receipt_id)
                 .where(
@@ -1007,9 +1028,16 @@ class DocumentIntelligenceService:
                 continue
             ordered_quantity = Decimal(str(order_line.quantity))
             expected_quantity = float(ordered_quantity)
+            previously_received_quantity = Decimal("0")
+            previously_accepted_quantity = Decimal("0")
+            previously_damaged_quantity = Decimal("0")
             if document_type == "DELIVERY_NOTE":
-                previously_received = db.session.scalar(
-                    select(func.coalesce(func.sum(ReceiptItem.quantity), 0))
+                received_totals = db.session.execute(
+                    select(
+                        func.coalesce(func.sum(ReceiptItem.quantity), 0),
+                        func.coalesce(func.sum(ReceiptItem.quantity - ReceiptItem.damaged_quantity), 0),
+                        func.coalesce(func.sum(ReceiptItem.damaged_quantity), 0),
+                    )
                     .join(Receipt, Receipt.id == ReceiptItem.receipt_id)
                     .where(
                         ReceiptItem.tenant_id == self.tenant_id,
@@ -1017,13 +1045,30 @@ class DocumentIntelligenceService:
                         Receipt.tenant_id == self.tenant_id,
                         Receipt.status == RECEIPT_POSTED,
                     )
-                )
+                ).one()
+                previously_received_quantity = Decimal(str(received_totals[0] or 0))
+                previously_accepted_quantity = Decimal(str(received_totals[1] or 0))
+                previously_damaged_quantity = Decimal(str(received_totals[2] or 0))
                 remaining_quantity = max(
-                    ordered_quantity - Decimal(str(previously_received or 0)),
+                    ordered_quantity - previously_accepted_quantity,
                     Decimal("0"),
                 )
                 expected_quantity = float(remaining_quantity)
             extracted_quantity = item.get("quantity")
+            try:
+                damaged_quantity = Decimal(str(item.get("damaged_quantity", 0) or 0))
+            except (InvalidOperation, TypeError, ValueError):
+                damaged_quantity = Decimal("-1")
+            damage_notes = str(item.get("damage_notes") or "").strip()
+            try:
+                extracted_decimal = Decimal(str(extracted_quantity))
+            except (InvalidOperation, TypeError, ValueError):
+                extracted_decimal = None
+            accepted_current_quantity = (
+                extracted_decimal - damaged_quantity
+                if extracted_decimal is not None and extracted_decimal.is_finite() and damaged_quantity.is_finite()
+                else None
+            )
             expected_price = float(order_line.unit_price)
             extracted_price = item.get("unit_price")
             catalog_price = None
@@ -1039,7 +1084,7 @@ class DocumentIntelligenceService:
                     if current_offer is not None:
                         catalog_price = float(current_offer.price)
             try:
-                quantity_delta = round(float(extracted_quantity) - expected_quantity, 3) if extracted_quantity is not None else None
+                quantity_delta = round(float(accepted_current_quantity) - expected_quantity, 3) if accepted_current_quantity is not None else None
             except (TypeError, ValueError):
                 quantity_delta = None
             try:
@@ -1056,13 +1101,19 @@ class DocumentIntelligenceService:
             if quantity_delta is None:
                 flags.append("QUANTITY_MISSING")
             elif document_type == "DELIVERY_NOTE":
-                if _money_value(extracted_quantity) <= 0:
+                if extracted_decimal is None or not extracted_decimal.is_finite() or extracted_decimal <= 0:
                     flags.append("QUANTITY_INVALID")
-                elif quantity_delta > 0.001:
+                if not damaged_quantity.is_finite() or damaged_quantity < 0 or damaged_quantity > extracted_decimal:
+                    flags.append("DAMAGED_QUANTITY_INVALID")
+                elif damaged_quantity > 0:
+                    flags.append("DAMAGE_RECORDED")
+                    if not damage_notes:
+                        flags.append("DAMAGE_NOTE_REQUIRED")
+                if quantity_delta > 0.001:
                     flags.append("OVER_RECEIPT")
                 elif quantity_delta < -0.001:
-                    # A short delivery is valid: the remaining quantity stays
-                    # open for a later receipt and is not treated as a match error.
+                    # A short accepted quantity remains open for a later receipt
+                    # or replacement of damaged goods.
                     flags.append("PARTIAL_DELIVERY")
             elif abs(quantity_delta) > 0.001:
                 flags.append("QUANTITY_VARIANCE")
@@ -1078,10 +1129,22 @@ class DocumentIntelligenceService:
                     flags.append("UNIT_VARIANCE")
             lines.append({
                 "line_index": index, "description": item.get("description"),
-                "matched": True, "status": "MATCH" if not (set(flags) - {"PARTIAL_DELIVERY"}) else "REVIEW",
+                "matched": True, "status": "MATCH" if not (set(flags) - {"PARTIAL_DELIVERY", "DAMAGE_RECORDED"}) else "REVIEW",
                 "order_item_id": order_line.id, "product_id": order_line.product_id,
                 "product_name": (order_line.product_snapshot or {}).get("name") if isinstance(order_line.product_snapshot, dict) else (order_line.product.name if order_line.product else None),
+                "ordered_quantity": float(ordered_quantity),
+                "previously_received_quantity": float(previously_received_quantity),
+                "previously_accepted_quantity": float(previously_accepted_quantity),
+                "previously_damaged_quantity": float(previously_damaged_quantity),
+                "remaining_quantity": expected_quantity,
+                "remaining_after_current": (
+                    float(max(Decimal(str(expected_quantity)) - accepted_current_quantity, Decimal("0")))
+                    if document_type == "DELIVERY_NOTE" and accepted_current_quantity is not None else None
+                ),
                 "expected_quantity": expected_quantity, "extracted_quantity": extracted_quantity,
+                "damaged_quantity": float(damaged_quantity) if damaged_quantity.is_finite() and damaged_quantity >= 0 else None,
+                "accepted_current_quantity": float(accepted_current_quantity) if accepted_current_quantity is not None else None,
+                "damage_notes": damage_notes or None,
                 "quantity_delta": quantity_delta, "expected_unit_price": expected_price,
                 "extracted_unit_price": extracted_price, "price_delta": price_delta,
                 "catalog_unit_price": catalog_price, "catalog_price_delta": catalog_price_delta,
@@ -1125,6 +1188,8 @@ class DocumentIntelligenceService:
             raise BadRequest("The delivery note has no reconciled lines")
         extracted_items = data.get("items") if isinstance(data.get("items"), list) else []
         receipt_quantities = {}
+        receipt_damaged_quantities = {}
+        receipt_damage_notes = {}
         seen_line_indexes = set()
         for line in lines:
             order_item_id_value = line.get("order_item_id") if isinstance(line, dict) else None
@@ -1141,7 +1206,7 @@ class DocumentIntelligenceService:
                 confidence = Decimal(str(line.get("confidence") or 0))
             except (InvalidOperation, TypeError, ValueError):
                 confidence = Decimal("0")
-            blocking_flags = set(line.get("flags") or []) - {"PARTIAL_DELIVERY"}
+            blocking_flags = set(line.get("flags") or []) - {"PARTIAL_DELIVERY", "DAMAGE_RECORDED"}
             if line.get("status") != "MATCH" or blocking_flags or not confidence.is_finite() or confidence < Decimal("0.93"):
                 raise Conflict("Delivery note contains lines requiring manual reconciliation; resolve them before posting")
             index = line.get("line_index")
@@ -1171,8 +1236,30 @@ class DocumentIntelligenceService:
             expected_unit = ProductMatchingService.normalize(order_item.product.unit if order_item.product else None)
             if not extracted_unit or not expected_unit or extracted_unit != expected_unit:
                 raise Conflict(f"Delivery note line {index + 1} has a missing or mismatched unit; resolve it manually before posting")
+            try:
+                damaged_amount = Decimal(str(item.get("damaged_quantity", 0) or 0))
+            except (InvalidOperation, TypeError, ValueError):
+                raise Conflict(f"Invalid damaged quantity on delivery note line {index + 1}")
+            damage_notes = str(item.get("damage_notes") or "").strip()
+            if (
+                not damaged_amount.is_finite()
+                or damaged_amount < 0
+                or damaged_amount != damaged_amount.to_integral_value()
+                or damaged_amount > amount
+            ):
+                raise Conflict(f"Invalid damaged quantity on delivery note line {index + 1}")
+            if damaged_amount > 0 and not damage_notes:
+                raise Conflict(f"A damage note is required on delivery note line {index + 1}")
             receipt_quantities[order_item_id] = receipt_quantities.get(order_item_id, Decimal("0")) + amount
-        receipt_items = [{"order_item_id": item_id, "quantity": str(quantity)} for item_id, quantity in sorted(receipt_quantities.items())]
+            receipt_damaged_quantities[order_item_id] = receipt_damaged_quantities.get(order_item_id, Decimal("0")) + damaged_amount
+            if damage_notes:
+                receipt_damage_notes.setdefault(order_item_id, []).append(damage_notes)
+        receipt_items = [{
+            "order_item_id": item_id,
+            "quantity": str(quantity),
+            "damaged_quantity": str(receipt_damaged_quantities.get(item_id, Decimal("0"))),
+            "damage_notes": "; ".join(dict.fromkeys(receipt_damage_notes.get(item_id, [])))[:1000] or None,
+        } for item_id, quantity in sorted(receipt_quantities.items())]
         receipt_number = str(data.get("document_number") or "").strip() or f"SCAN-DN-{analysis_id}"
         document_date = data.get("document_date")
         receipt_payload = {

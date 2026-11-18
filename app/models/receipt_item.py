@@ -18,6 +18,8 @@ class ReceiptItem(db.Model):
     receipt_id = db.Column(db.Integer, db.ForeignKey("receipts.id", ondelete="CASCADE"), nullable=False, index=True)
     order_item_id = db.Column(db.Integer, db.ForeignKey("order_items.id"), nullable=False, index=True)
     quantity = db.Column(db.Numeric(12, 3), nullable=False)
+    damaged_quantity = db.Column(db.Numeric(12, 3), nullable=False, default=0, server_default="0")
+    damage_notes = db.Column(db.String(1000), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = db.Column(
         db.DateTime,
@@ -30,12 +32,19 @@ class ReceiptItem(db.Model):
     receipt = db.relationship("Receipt", back_populates="items")
     order_item = db.relationship("OrderItem", back_populates="receipt_items")
 
+    @property
+    def accepted_quantity(self):
+        return (self.quantity or 0) - (self.damaged_quantity or 0)
+
     def to_dict(self):
         return {
             "id": self.id,
             "receipt_id": self.receipt_id,
             "order_item_id": self.order_item_id,
             "quantity": float(self.quantity),
+            "damaged_quantity": float(self.damaged_quantity or 0),
+            "accepted_quantity": float(self.accepted_quantity),
+            "damage_notes": self.damage_notes,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

@@ -112,13 +112,14 @@ class ReceiptService:
         # reserved in transaction configurations that release nested savepoints.
         receipt_number = self._receipt_number(payload.get("receipt_number"))
         notes = self._notes(payload.get("notes"))
-        for order_item_id, quantity in parsed.items():
+        for order_item_id, (quantity, damaged_quantity, damage_notes) in parsed.items():
             order_item = by_id[order_item_id]
+            accepted_quantity = quantity - damaged_quantity
             received_before = self._received_quantity(order_item_id)
             remaining = Decimal(order_item.quantity) - received_before
-            if quantity > remaining:
+            if accepted_quantity > remaining:
                 raise Conflict(
-                    f"Receipt quantity for order item {order_item.id} exceeds remaining quantity "
+                    f"Accepted quantity for order item {order_item.id} exceeds remaining quantity "
                     f"({remaining})"
                 )
 
@@ -165,10 +166,11 @@ class ReceiptService:
                 raise Conflict("Receipt number already exists for this tenant") from exc
             raise
 
-        for order_item_id, quantity in parsed.items():
+        for order_item_id, (quantity, damaged_quantity, damage_notes) in parsed.items():
             order_item = by_id[order_item_id]
             product = products_by_id[order_item.product_id]
-            stock_quantity = quantity
+            accepted_quantity = quantity - damaged_quantity
+            stock_quantity = accepted_quantity
             snapshot = order_item.product_snapshot or {}
             if snapshot.get("quantity_unit") == "carton" and str(snapshot.get("stock_unit") or "").strip() == "יחידה":
                 try:
@@ -177,16 +179,7 @@ class ReceiptService:
                     pack_size = 0
                 if pack_size <= 0:
                     raise Conflict("Carton receipt cannot update piece-based stock without a valid units-per-carton snapshot")
-                stock_quantity = quantity * Decimal(pack_size)
-
-            # A missing physical count is unknown, not zero. Record the
-            # receipt movement without manufacturing a total stock balance.
-            if product.current_stock is None:
-                new_balance = None
-            else:
-                current_stock = Decimal(product.current_stock)
-                new_balance = current_stock + stock_quantity
-                product.current_stock = int(new_balance)
+                stock_quantity = accepted_quantity * Decimal(pack_size)
 
             db.session.add(
                 ReceiptItem(
@@ -194,8 +187,22 @@ class ReceiptService:
                     receipt_id=receipt.id,
                     order_item_id=order_item.id,
                     quantity=quantity,
+                    damaged_quantity=damaged_quantity,
+                    damage_notes=damage_notes,
                 )
             )
+            # Damaged units are recorded on the receipt but never increase
+            # usable stock. An all-damaged line therefore creates no stock movement.
+            if stock_quantity <= 0:
+                continue
+            if product.current_stock is None:
+                new_balance = None
+            else:
+                current_stock = Decimal(product.current_stock)
+                new_balance = current_stock + stock_quantity
+                product.current_stock = int(new_balance)
+
+            damage_note = f"; {damaged_quantity} damaged not stocked: {damage_notes}" if damaged_quantity > 0 else ""
             db.session.add(
                 InventoryMovement(
                     tenant_id=self.tenant_id,
@@ -207,7 +214,7 @@ class ReceiptService:
                     balance_after=new_balance,
                     reference_type="receipt",
                     reference_id=str(receipt.id),
-                    note=f"Receipt {receipt.receipt_number}",
+                    note=f"Receipt {receipt.receipt_number}{damage_note}",
                     occurred_at=receipt.received_at or datetime.now(timezone.utc),
                 )
             )
@@ -225,6 +232,9 @@ class ReceiptService:
                 "order_id": order.id,
                 "order_number": order.order_number,
                 "item_count": len(parsed),
+                "physical_quantity_total": float(sum((line[0] for line in parsed.values()), Decimal("0"))),
+                "damaged_quantity_total": float(sum((line[1] for line in parsed.values()), Decimal("0"))),
+                "accepted_quantity_total": float(sum((line[0] - line[1] for line in parsed.values()), Decimal("0"))),
             },
         )
         return receipt, False
@@ -284,7 +294,7 @@ class ReceiptService:
 
     def _received_quantity(self, order_item_id: int) -> Decimal:
         value = db.session.scalar(
-            select(func.coalesce(func.sum(ReceiptItem.quantity), 0))
+            select(func.coalesce(func.sum(ReceiptItem.quantity - ReceiptItem.damaged_quantity), 0))
             .join(Receipt, Receipt.id == ReceiptItem.receipt_id)
             .where(
                 ReceiptItem.tenant_id == self.tenant_id,
@@ -316,8 +326,8 @@ class ReceiptService:
             raise BadRequest("received_at must be a valid date no later than today")
         return datetime.combine(parsed, time.min, tzinfo=timezone.utc)
 
-    def _parse_items(self, raw_items: list) -> dict[int, Decimal]:
-        parsed: dict[int, Decimal] = {}
+    def _parse_items(self, raw_items: list) -> dict[int, tuple[Decimal, Decimal, str | None]]:
+        parsed: dict[int, tuple[Decimal, Decimal, str | None]] = {}
         for item in raw_items:
             if not isinstance(item, dict):
                 raise BadRequest("Each receipt item must be an object")
@@ -332,9 +342,26 @@ class ReceiptService:
                 quantity = Decimal(str(raw_quantity))
             except (InvalidOperation, TypeError, ValueError):
                 raise BadRequest("Receipt quantity must be a positive integer")
-            if quantity != quantity.to_integral_value() or quantity <= 0 or quantity > self.MAX_LINE_QUANTITY:
+            if not quantity.is_finite() or quantity != quantity.to_integral_value() or quantity <= 0 or quantity > self.MAX_LINE_QUANTITY:
                 raise BadRequest("Receipt quantity must be a positive integer")
-            parsed[order_item_id] = quantity
+
+            try:
+                damaged_quantity = Decimal(str(item.get("damaged_quantity", 0) or 0))
+            except (InvalidOperation, TypeError, ValueError):
+                raise BadRequest("Damaged quantity must be a non-negative integer")
+            if (
+                not damaged_quantity.is_finite()
+                or damaged_quantity != damaged_quantity.to_integral_value()
+                or damaged_quantity < 0
+                or damaged_quantity > quantity
+            ):
+                raise BadRequest("Damaged quantity must be a non-negative integer no greater than received quantity")
+            damage_notes = self._notes(item.get("damage_notes"))
+            if damage_notes and len(damage_notes) > 1000:
+                raise BadRequest("damage_notes is too long")
+            if damaged_quantity > 0 and not damage_notes:
+                raise BadRequest("A damage note is required when damaged quantity is recorded")
+            parsed[order_item_id] = (quantity, damaged_quantity, damage_notes)
         return parsed
 
     @staticmethod

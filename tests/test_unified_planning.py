@@ -170,6 +170,8 @@ def test_open_inbound_subtracts_receipts_only_from_their_active_order_line(db, t
             receipt_id=partial_receipt.id,
             order_item_id=partially_received_line.id,
             quantity=4,
+            damaged_quantity=2,
+            damage_notes="נזק בהובלה",
         ),
         ReceiptItem(
             tenant_id=tenant_id,
@@ -182,6 +184,6 @@ def test_open_inbound_subtracts_receipts_only_from_their_active_order_line(db, t
 
     inbound = InventoryUnifiedPlanningService(tenant_id)._open_inbound([product.id])
 
-    # 10 ordered - 4 received on line A, plus 5 still due on line B.
+    # 10 ordered - (4 physical - 2 damaged) accepted on line A, plus 5 due on line B.
     # The cancelled order's 100-unit receipt must not offset either active line.
-    assert inbound[product.id] == 11
+    assert inbound[product.id] == 13

@@ -33,7 +33,9 @@ def test_supplier_reliability_reports_late_delivery_shortage_and_sample_size_wit
         tenant_id=order.tenant_id,
         receipt_id=receipt.id,
         order_item_id=order_item.id,
-        quantity=4,
+        quantity=5,
+        damaged_quantity=1,
+        damage_notes="מוצר סדוק",
     ))
 
     other_response, _, _ = make_order(
