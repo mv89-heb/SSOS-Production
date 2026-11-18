@@ -561,6 +561,18 @@ def test_manual_delivery_note_line_correction_recalculates_and_posts_with_operat
     assert compared.status_code == 200, compared.get_json()
     assert compared.get_json()["reconciliation"]["review_count"] == 1
 
+    cross_tenant = logged_in_client_b.patch(
+        f"/api/document-intelligence/{analysis.id}/delivery-note-lines",
+        json={"lines": [{"line_index": 0, "quantity": 2, "unit": "יחידה"}]},
+    )
+    assert cross_tenant.status_code == 404
+
+    invalid_quantity = logged_in_client_a.patch(
+        f"/api/document-intelligence/{analysis.id}/delivery-note-lines",
+        json={"lines": [{"line_index": 0, "quantity": 0, "unit": "יחידה"}]},
+    )
+    assert invalid_quantity.status_code == 400
+
     corrected = logged_in_client_a.patch(
         f"/api/document-intelligence/{analysis.id}/delivery-note-lines",
         json={
