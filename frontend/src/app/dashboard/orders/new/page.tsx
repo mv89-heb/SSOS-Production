@@ -36,7 +36,7 @@ export default function NewOrderPage() {
     queryFn: () => catalogService.listSuppliers(true),
   });
 
-  const { data: products, isLoading: productsLoading } = useQuery({
+  const { data: products, isLoading: productsLoading, isError: productsError } = useQuery({
     queryKey: ["products", supplierId],
     queryFn: () => catalogService.listProducts(supplierId === "" ? undefined : supplierId),
     enabled: supplierId !== "",
@@ -82,6 +82,14 @@ export default function NewOrderPage() {
     .join(" · ");
   const hasSelectedLines = lines.some((line) => line.product_id !== "");
   const selectedCount = lines.filter((line) => line.product_id !== "").length;
+  const historySuggestions = useMemo(() => {
+    if (!products || !supplierHistoryForecast) return [];
+    return supplierHistoryForecast.products.filter((item) =>
+      item.data_ready
+      && products.some((product) => product.id === item.product_id)
+      && !lines.some((line) => line.product_id === item.product_id)
+    );
+  }, [products, supplierHistoryForecast, lines]);
 
   const updateLine = (index: number, patch: Partial<DraftLine>) => {
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)));
@@ -254,15 +262,15 @@ export default function NewOrderPage() {
                 מבוסס על הזמנות שנשלחו לספק או הושלמו במערכת בלבד. טיוטות, אישורים פנימיים, ביטולים וספירות מלאי אינם נכללים.
                 המחזור הוא 3 שבועות רגילים ושבוע רביעי בתוספת 40%.
               </p>
-              {historyForecastLoading ? (
+              {historyForecastLoading || productsLoading ? (
                 <p className="mt-3 text-sm text-slate-500">טוען היסטוריית הזמנות...</p>
-              ) : historyForecastError ? (
+              ) : historyForecastError || productsError ? (
                 <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200">
                   לא ניתן לטעון את היסטוריית ההזמנות כרגע. נסה לרענן את המסך.
                 </p>
-              ) : (supplierHistoryForecast?.products ?? []).filter((item) => item.data_ready && !lines.some((line) => line.product_id === item.product_id)).length > 0 ? (
+              ) : historySuggestions.length > 0 ? (
                 <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {(supplierHistoryForecast?.products ?? []).filter((item) => item.data_ready && !lines.some((line) => line.product_id === item.product_id)).slice(0, 6).map((item) => (
+                  {historySuggestions.slice(0, 6).map((item) => (
                     <div key={item.product_id} className="rounded-2xl border border-indigo-100 bg-white p-3 dark:border-indigo-900/50 dark:bg-slate-900">
                       <div className="font-bold text-slate-900 dark:text-white">{item.product_name}</div>
                       <div className="mt-1 text-xs text-slate-500">
