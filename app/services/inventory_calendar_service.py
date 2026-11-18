@@ -342,7 +342,7 @@ class InventoryCalendarService:
             horizon_end = min(today + timedelta(days=horizon), today + timedelta(days=180))
             seasonal_metrics = self._seasonality_metrics(rate, seasonality)
             demand = self._forecast_demand(rate, today, horizon_end, periods, seasonality)
-            safety_end = today + timedelta(days=horizon + max(1, safety_days))
+            safety_end = horizon_end + timedelta(days=max(1, safety_days))
             safety = self._forecast_demand(rate, horizon_end + timedelta(days=1), safety_end, periods, seasonality)
             stock = Decimal(str(product.current_stock or 0))
             inbound_qty = inbound.get(product.id, Decimal("0"))
