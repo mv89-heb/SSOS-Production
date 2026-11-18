@@ -1,5 +1,6 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
+import re
 
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
@@ -64,6 +65,13 @@ def _decimal(value):
 
 def _norm(value):
     return " ".join(str(value or "").casefold().split())
+
+
+def _supplier_key(value):
+    normalized = _norm(value)
+    normalized = re.sub(r"^[א-ת]\.\s*", "", normalized)
+    normalized = re.sub(r"\s+בע[״\"]?מ$", "", normalized)
+    return normalized.strip()
 
 
 def _supplier_from_extraction(data):
@@ -397,7 +405,11 @@ def import_manual_orders():
         suppliers = db.session.scalars(select(Supplier).where(
             Supplier.tenant_id == current_user.tenant_id
         )).all()
-        supplier_by_name = {_norm(row.name): row for row in suppliers}
+        suppliers_by_name = {}
+        suppliers_by_key = {}
+        for row in suppliers:
+            suppliers_by_name.setdefault(_norm(row.name), []).append(row)
+            suppliers_by_key.setdefault(_supplier_key(row.name), []).append(row)
         products = db.session.scalars(select(Product).where(
             Product.tenant_id == current_user.tenant_id,
             Product.active.is_(True),
@@ -421,9 +433,13 @@ def import_manual_orders():
             if not isinstance(raw_order, dict):
                 raise BadRequest(f"Order {index} must be an object")
             supplier_name = str(raw_order.get("supplier_name") or "").strip()
-            supplier = supplier_by_name.get(_norm(supplier_name))
+            exact_matches = suppliers_by_name.get(_norm(supplier_name), [])
+            canonical_matches = suppliers_by_key.get(_supplier_key(supplier_name), [])
+            candidates = exact_matches if exact_matches else canonical_matches
+            supplier = candidates[0] if len(candidates) == 1 else None
             if supplier is None:
-                raise BadRequest(f"Order {index}: supplier '{supplier_name}' does not exactly match a supplier in this organization")
+                reason = "is ambiguous" if candidates else "does not match a supplier"
+                raise BadRequest(f"Order {index}: supplier '{supplier_name}' {reason} in this organization")
             order_date = _date(raw_order.get("order_date"))
             if order_date is None:
                 raise BadRequest(f"Order {index}: a valid order_date is required")
