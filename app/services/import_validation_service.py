@@ -282,6 +282,9 @@ class ImportValidationService:
             if price_error:
                 add_issue(SEVERITY_ERROR, "invalid_price", price_error, "price")
                 continue
+            if price < 0:
+                add_issue(SEVERITY_ERROR, "negative_price", f'Column "{col.column_header}" contains a negative supplier price.', "price")
+                continue
             price = normalize_price_before_vat(price, col.final_price_type)
             offer_entries.append({"column_index": idx, "supplier_id": col.final_supplier_id, "supplier_name": supplier_name, "price": price, "price_type": col.final_price_type})
 
