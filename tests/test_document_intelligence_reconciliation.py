@@ -577,14 +577,19 @@ def test_manual_delivery_note_line_correction_recalculates_and_posts_with_operat
     corrected = logged_in_client_a.patch(
         f"/api/document-intelligence/{analysis.id}/delivery-note-lines",
         json={
-            "lines": [{"line_index": 0, "quantity": 2, "unit": "יחידה"}],
+            "lines": [{
+                "line_index": 0, "quantity": 2, "unit": "יחידה",
+                "damaged_quantity": 1, "damage_notes": "בקבוק סדוק",
+            }],
             "notes": "אריזה פגומה בחלק מהאספקה; לבדוק מול הספק",
         },
     )
     assert corrected.status_code == 200, corrected.get_json()
     line = corrected.get_json()["reconciliation"]["lines"][0]
     assert line["status"] == "MATCH"
-    assert line["flags"] == ["PARTIAL_DELIVERY"]
+    assert line["flags"] == ["DAMAGE_RECORDED", "PARTIAL_DELIVERY"]
+    assert line["accepted_current_quantity"] == 1.0
+    assert line["damaged_quantity"] == 1.0
 
     posted = logged_in_client_a.post(
         f"/api/document-intelligence/{analysis.id}/apply-delivery-note",
@@ -593,10 +598,15 @@ def test_manual_delivery_note_line_correction_recalculates_and_posts_with_operat
     assert posted.status_code == 201, posted.get_json()
     receipt = Receipt.query.filter_by(order_id=order.id).one()
     assert receipt.items[0].quantity == 2
+    assert receipt.items[0].damaged_quantity == 1
+    assert receipt.items[0].accepted_quantity == 1
+    assert receipt.items[0].damage_notes == "בקבוק סדוק"
+    assert db.session.get(Product, product_id).current_stock == 1
     assert "אריזה פגומה" in receipt.notes
     saved = db.session.get(DocumentAnalysis, analysis.id)
     assert saved.extracted_data["items"][0]["manual_correction"]["quantity"] is True
     assert saved.extracted_data["items"][0]["manual_correction"]["unit"] is True
+    assert saved.extracted_data["items"][0]["manual_correction"]["damaged_quantity"] is True
 
 
 def test_delivery_note_order_suggestions_rank_supplier_date_and_explicit_po_reference_without_cross_tenant_data(
