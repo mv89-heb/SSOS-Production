@@ -250,7 +250,7 @@ export default function NewOrderPage() {
             <div className="min-w-0 flex-1">
               <h2 className="font-extrabold text-slate-950 dark:text-white">הצעות לפי היסטוריית הזמנות</h2>
               <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                מבוסס על הזמנות שהוגשו/אושרו/נשלחו/הושלמו במערכת בלבד. טיוטות, ביטולים וספירות מלאי אינם נכללים.
+                מבוסס על הזמנות שנשלחו לספק או הושלמו במערכת בלבד. טיוטות, אישורים פנימיים, ביטולים וספירות מלאי אינם נכללים.
                 המחזור הוא 3 שבועות רגילים ושבוע רביעי בתוספת 40%.
               </p>
               {historyForecastLoading ? (
