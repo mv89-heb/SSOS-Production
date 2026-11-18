@@ -159,11 +159,11 @@ def test_supplier_forecast_normalizes_cartons_to_stock_units(db, tenant_a_admin,
     db.session.flush()
 
     order_rows = [
-        (date(2020, 1, 6), Decimal("2"), {
+        (date(2020, 1, 6), Decimal("1"), {
             "unit": "קרטון", "quantity_unit": "carton",
             "stock_unit": "יחידה", "units_per_carton": 12,
         }),
-        (date(2020, 1, 13), Decimal("36"), {
+        (date(2020, 1, 13), Decimal("30"), {
             "unit": "יחידה", "quantity_unit": None,
             "stock_unit": "יחידה", "units_per_carton": 12,
         }),
@@ -204,10 +204,12 @@ def test_supplier_forecast_normalizes_cartons_to_stock_units(db, tenant_a_admin,
     )
 
     forecast = result["products"][0]
-    # Two cartons × 12 pieces plus 36 pieces, averaged across three normal weeks.
+    # One carton × 12 pieces plus 30 pieces, averaged across three normal weeks.
+    # The 19.6-piece boosted forecast is rounded up because order quantities are integers.
     assert forecast["unit"] == "יחידה"
-    assert forecast["normal_weekly_average"] == 20
-    assert forecast["recommended_quantity"] == 28
+    assert forecast["normal_weekly_average"] == 14
+    assert forecast["recommended_quantity_exact"] == 19.6
+    assert forecast["recommended_quantity"] == 20
     assert forecast["data_ready"] is True
     assert forecast["unit_conversion_issues"] == 0
 
