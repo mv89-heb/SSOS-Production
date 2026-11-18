@@ -140,17 +140,15 @@ def test_historical_import_batch_is_tenant_scoped(logged_in_client_a, logged_in_
     assert hidden.status_code == 404
 
 
-def test_manual_historical_orders_are_isolated_and_preserve_unknown_units(logged_in_client_a, db):
+def test_manual_historical_orders_are_isolated_and_preserve_unknown_units(logged_in_client_a, tenant_a_admin, db):
     from sqlalchemy import select, func
     from app.models.historical_document_import import HistoricalImportBatch, HistoricalPurchaseOrder
     from app.models.order import Order
     from app.models.product import Product
     from app.models.supplier import Supplier
 
-    from app.models.user import User
-    user = db.session.scalar(select(User).order_by(User.id.asc()))
-    assert user is not None
-    supplier = Supplier(tenant_id=user.tenant_id, name="פעמית")
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="פעמית")
     db.session.add(supplier)
     db.session.flush()
     product = Product(
