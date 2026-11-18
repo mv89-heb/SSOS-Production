@@ -37,6 +37,8 @@ services:
         value: "3.11.9"
       - key: WEB_CONCURRENCY
         value: "1"
+      - key: WEB_THREADS
+        value: "4"
       - key: RUN_MIGRATIONS_ON_START
         value: "true"
       - key: AI_ENABLED
