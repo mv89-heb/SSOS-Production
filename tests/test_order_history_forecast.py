@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from app.models.order import Order, STATUS_DRAFT, STATUS_SUBMITTED
+from app.models.order import Order, STATUS_DRAFT, STATUS_SENT
 from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.supplier import Supplier
@@ -40,7 +40,7 @@ def test_supplier_forecast_uses_issued_orders_and_excludes_drafts(db, tenant_a_a
             supplier_id=supplier.id,
             order_number=f"HIST-{index}",
             supplier_name=supplier.name,
-            status=STATUS_SUBMITTED,
+            status=STATUS_SENT,
             planned_order_date=None if index == 3 else order_date,
             created_at=datetime.combine(order_date, datetime.min.time(), tzinfo=timezone.utc),
         )
