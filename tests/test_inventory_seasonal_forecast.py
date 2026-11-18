@@ -38,6 +38,24 @@ def test_seasonal_cycle_is_configurable_and_bounded(monkeypatch):
     assert InventoryCalendarService._seasonal_multiplier_for_date(date(2020, 1, 20), config) == Decimal("1.5")
 
 
+def test_forecast_applies_boost_only_to_the_configured_cycle_week(monkeypatch):
+    monkeypatch.delenv("SSOS_BOOSTED_CYCLE_WEEKS", raising=False)
+    monkeypatch.delenv("SSOS_BOOSTED_WEEKS", raising=False)
+    monkeypatch.delenv("SSOS_BOOSTED_WEEK_MULTIPLIER", raising=False)
+    service = InventoryCalendarService(tenant_id=1)
+    config = service._seasonality_config()
+
+    normal_week = service._forecast_demand(
+        Decimal("1"), date(2020, 1, 6), date(2020, 1, 12), [], config
+    )
+    boosted_week = service._forecast_demand(
+        Decimal("1"), date(2020, 1, 27), date(2020, 2, 2), [], config
+    )
+
+    assert normal_week == Decimal("7")
+    assert boosted_week == Decimal("9.8")
+
+
 def test_invalid_configuration_falls_back_to_safe_defaults(monkeypatch):
     monkeypatch.setenv("SSOS_BOOSTED_CYCLE_WEEKS", "invalid")
     monkeypatch.setenv("SSOS_BOOSTED_WEEKS", "99")
