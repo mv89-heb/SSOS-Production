@@ -117,7 +117,7 @@ export function OrderReceivingPanel({ order }: { order: Order }) {
         {receiptsQuery.isError ? <div className="flex items-center justify-between gap-2 text-sm text-red-600"><span>לא ניתן לטעון קבלות קודמות.</span><Button variant="secondary" onClick={() => receiptsQuery.refetch()}><RefreshCw size={14} /> נסה שוב</Button></div> : null}
         {lines.length === 0 ? <p className="text-sm text-amber-700">לא נמצאו שורות רכש תפעוליות להזמנה זו, ולכן לא ניתן לרשום קבלה דרך המסך.</p> : (
           <div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-right text-sm"><thead><tr className="border-b text-slate-500">
-            <th className="py-2">פריט</th><th className="py-2">הוזמן</th><th className="py-2">הגיע פיזית</th><th className="py-2">פגום עד כה</th><th className="py-2">תקין שהתקבל</th><th className="py-2">יתרה תקינה</th><th className="py-2">הגיע כעת</th><th className="py-2">פגום כעת</th><th className="py-2">תקין כעת</th><th className="py-2">סיבת פגם</th>
+            <th className="py-2">פריט</th><th className="py-2">הוזמן</th><th className="py-2">הגיע פיזית</th><th className="py-2">פגום עד כה</th><th className="py-2">תקין שהתקבל</th><th className="py-2">יתרה תקינה</th><th className="py-2">הגיע כעת</th><th className="py-2">פגום כעת</th><th className="py-2">תקין כעת</th><th className="py-2">חוסר אחרי הקבלה</th><th className="py-2">סיבת פגם</th>
           </tr></thead><tbody>{lines.map((line, index) => {
             const ordered = Number(line.quantity);
             const totals = receiptTotalsByLine.get(line.id) ?? { physical: 0, damaged: 0, accepted: 0 };
@@ -130,7 +130,7 @@ export function OrderReceivingPanel({ order }: { order: Order }) {
               <td className="py-3 font-semibold">{label}</td><td className="py-3">{ordered}</td><td className="py-3">{totals.physical}</td><td className="py-3">{totals.damaged}</td><td className="py-3 font-semibold text-emerald-700">{totals.accepted}</td><td className="py-3 font-bold">{remaining}</td>
               <td className="py-2"><input aria-label={`כמות פיזית שהגיעה עבור ${label}`} type="number" min="0" step="1" value={quantities[line.id] ?? ""} onChange={(event) => setQuantities((current) => ({ ...current, [line.id]: event.target.value }))} className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-900" /></td>
               <td className="py-2"><input aria-label={`כמות פגומה עבור ${label}`} type="number" min="0" step="1" value={damagedQuantities[line.id] ?? ""} onChange={(event) => setDamagedQuantities((current) => ({ ...current, [line.id]: event.target.value }))} className="w-20 rounded-lg border border-amber-300 bg-white px-2 py-2 dark:border-amber-800 dark:bg-slate-900" /></td>
-              <td className="py-3 font-bold text-emerald-700">{acceptedNow}</td>
+              <td className="py-3 font-bold text-emerald-700">{acceptedNow}</td><td className="py-3 font-bold">{Math.max(0, remaining - acceptedNow)}</td>
               <td className="py-2"><input aria-label={`סיבת הפגם עבור ${label}`} value={damageNotes[line.id] ?? ""} onChange={(event) => setDamageNotes((current) => ({ ...current, [line.id]: event.target.value }))} maxLength={1000} placeholder="נדרש אם יש פגם" className="w-36 rounded-lg border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-900" /></td>
             </tr>;
           })}</tbody></table></div>
