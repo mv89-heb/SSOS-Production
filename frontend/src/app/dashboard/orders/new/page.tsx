@@ -36,6 +36,28 @@ export default function NewOrderPage() {
     queryFn: () => catalogService.listSuppliers(true),
   });
 
+  const selectedSupplier = useMemo(
+    () => suppliers?.find((supplier) => supplier.id === supplierId),
+    [suppliers, supplierId],
+  );
+  const forecastTargetDate = useMemo(() => {
+    const today = new Date();
+    const baseDate = plannedOrderDate || [
+      today.getFullYear(),
+      String(today.getMonth() + 1).padStart(2, "0"),
+      String(today.getDate()).padStart(2, "0"),
+    ].join("-");
+    const target = new Date(`${baseDate}T12:00:00`);
+    if (Number.isNaN(target.getTime())) return baseDate;
+    const leadDays = Number(selectedSupplier?.lead_time_days ?? 0);
+    target.setDate(target.getDate() + (Number.isFinite(leadDays) ? Math.max(0, leadDays) : 0));
+    return [
+      target.getFullYear(),
+      String(target.getMonth() + 1).padStart(2, "0"),
+      String(target.getDate()).padStart(2, "0"),
+    ].join("-");
+  }, [plannedOrderDate, selectedSupplier?.lead_time_days]);
+
   const { data: products, isLoading: productsLoading, isError: productsError } = useQuery({
     queryKey: ["products", supplierId],
     queryFn: () => catalogService.listProducts(supplierId === "" ? undefined : supplierId),
@@ -49,8 +71,8 @@ export default function NewOrderPage() {
   }, [suppliers, supplierId]);
 
   const { data: supplierHistoryForecast, isLoading: historyForecastLoading, isError: historyForecastError } = useQuery({
-    queryKey: ["orders", "supplier-history-forecast", supplierId, plannedOrderDate],
-    queryFn: () => orderService.getSupplierHistoryForecast(supplierId as number, plannedOrderDate || undefined),
+    queryKey: ["orders", "supplier-history-forecast", supplierId, forecastTargetDate],
+    queryFn: () => orderService.getSupplierHistoryForecast(supplierId as number, forecastTargetDate),
     enabled: supplierId !== "",
     staleTime: 30_000,
   });
@@ -261,6 +283,9 @@ export default function NewOrderPage() {
               <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
                 מבוסס על הזמנות שנשלחו לספק או הושלמו במערכת בלבד. טיוטות, אישורים פנימיים, ביטולים וספירות מלאי אינם נכללים.
                 המחזור הוא 3 שבועות רגילים ושבוע רביעי בתוספת 40%.
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                שבוע היעד מחושב לפי מועד ההזמנה בתוספת זמן האספקה של הספק: {forecastTargetDate}.
               </p>
               {historyForecastLoading || productsLoading ? (
                 <p className="mt-3 text-sm text-slate-500">טוען היסטוריית הזמנות...</p>
