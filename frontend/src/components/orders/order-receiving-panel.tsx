@@ -148,6 +148,15 @@ export function OrderReceivingPanel({ order }: { order: Order }) {
         <p className="text-sm text-slate-500">רשום רק את הכמויות שהגיעו בפועל. אפשר לקלוט אספקה חלקית בכמה קבלות.</p>
       </CardHeader>
       <CardContent className="space-y-4 pt-4">
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50/70 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/20">
+          <div className="min-w-0">
+            <h3 className="flex items-center gap-2 text-sm font-bold text-indigo-950 dark:text-indigo-100"><FileSearch size={16} /> סריקת תעודת משלוח והשוואה להזמנה</h3>
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">העלה כמה מסמכים במסך Gemini, זהה ספק ופריטים, השווה להזמנה זו ואשר קבלה רק לאחר בדיקה.</p>
+          </div>
+          <a href={`/dashboard/document-intelligence?orderId=${order.id}`} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700">
+            <FileSearch size={15} /> פתיחת ניתוח מסמכים להזמנה
+          </a>
+        </section>
         <section className="space-y-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-900/40">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
