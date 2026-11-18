@@ -972,7 +972,7 @@ class DocumentIntelligenceService:
         receipt_payload = {
             "receipt_number": receipt_number,
             "received_at": document_date if document_date else None,
-            "notes": f"נוצר מסריקת תעודת משלוח: {row.filename}",
+            "notes": f"נוצר מסריקת תעודת משלוח: {row.filename}" + (f" | הערות מפעיל: {data.get('operator_notes').strip()}" if isinstance(data.get("operator_notes"), str) and data.get("operator_notes").strip() else ""),
             "items": receipt_items,
         }
         receipt, replayed = ReceiptService(self.tenant_id).create_receipt(
