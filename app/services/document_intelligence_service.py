@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 
 from flask import current_app
 from werkzeug.exceptions import BadRequest, Conflict, NotFound, HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, select
 
 from app.extensions import db
 from app.models.document_analysis import DocumentAnalysis
@@ -60,6 +60,14 @@ DOCUMENT_SCHEMA = {
 SYSTEM_INSTRUCTION = """You extract structured procurement data from supplier documents. Return only facts visible in the document. Never invent SKU, barcode, price, supplier or totals. If a value is absent, omit it or use the schema's natural empty value. Never use 0 as a placeholder for a missing price. If a price is visible, extract the actual numeric value exactly as shown; if no price is visible, omit unit_price. Preserve decimal numbers exactly as shown. Identify whether the document is an invoice, delivery note, price list, or other document.
 
 SUPPLIER IDENTIFICATION RULES: Supplier identity is a required extraction goal, not an optional guess. Inspect the entire document, especially the issuer/header/logo area, company name, tax/VAT registration number, phone/address, invoice/payment details, and repeated page headers/footers. Extract the company that ISSUED the invoice, delivery note, or price list as supplier; do not confuse it with the recipient/customer (for this organization, often ישיבת אוהבי ירושלים / ראשית), a delivery destination, a bank, a payment processor, or a brand/manufacturer mentioned only in a product description. Prefer the clearest visible legal/trading name and include the visible supplier/customer account number in customer_number when present. Preserve Hebrew spelling and meaningful company suffixes; do not replace a visible supplier name with a guessed catalog name. If the document-level supplier is visible, populate supplier.name even when supplier_sections is also returned. For a single-supplier document, repeat the same identified supplier in the single supplier_sections entry. If the issuer cannot be established from visible evidence, leave supplier.name empty rather than inventing one, and still extract all other fields.\n\nRECIPIENT RULES: Identify the document recipient/customer exactly when visible. Keep supplier and recipient as separate entities. For this organization, preserve the visible name and address rather than inferring or normalizing it away.\n\nMULTI-SUPPLIER RULES: A single uploaded document can contain multiple suppliers, including multiple suppliers on one page. You MUST identify every distinct supplier context visible in the document and return one supplier_sections entry for each. Assign every extracted line item to exactly one supplier section. Use explicit supplier names, supplier/customer numbers, table headers, section headers, and unambiguous layout/context. Never assume the whole document belongs to the first supplier you see. Never merge two suppliers just because they sell similar products. If a line's supplier cannot be established from visible evidence, keep that line in a supplier section with an empty supplier object rather than guessing. For a supplier that continues across pages, keep it as the same supplier when the identity is clear.\n\nLINE-ITEM EXTRACTION RULES: Return only actual product rows from the item table. Never turn delivery-note numbers, invoice numbers, dates, headers/footers, recipient details, payment instructions, subtotals, tax totals, or grand totals into product items. Text such as "תעודת משלוח מספר 90190 מיום 15/10/2026" is document-reference metadata, not a product. Never invent a default quantity such as 1; if no quantity is visibly printed, omit quantity. If a line cannot be distinguished from header/reference text, do not include it as a product item."""
+
+
+def _money_value(value):
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("0")
+    return parsed if parsed.is_finite() else Decimal("0")
 
 
 class DocumentIntelligenceService:
@@ -700,7 +708,24 @@ class DocumentIntelligenceService:
                     "confidence": confidence,
                 })
                 continue
-            expected_quantity = float(order_line.quantity)
+            ordered_quantity = Decimal(str(order_line.quantity))
+            expected_quantity = float(ordered_quantity)
+            if document_type == "DELIVERY_NOTE":
+                previously_received = db.session.scalar(
+                    select(func.coalesce(func.sum(ReceiptItem.quantity), 0))
+                    .join(Receipt, Receipt.id == ReceiptItem.receipt_id)
+                    .where(
+                        ReceiptItem.tenant_id == self.tenant_id,
+                        ReceiptItem.order_item_id == order_line.id,
+                        Receipt.tenant_id == self.tenant_id,
+                        Receipt.status == RECEIPT_POSTED,
+                    )
+                )
+                remaining_quantity = max(
+                    ordered_quantity - Decimal(str(previously_received or 0)),
+                    Decimal("0"),
+                )
+                expected_quantity = float(remaining_quantity)
             extracted_quantity = item.get("quantity")
             expected_price = float(order_line.unit_price)
             extracted_price = item.get("unit_price")
@@ -733,20 +758,30 @@ class DocumentIntelligenceService:
                 flags.append("MATCH_REVIEW")
             if quantity_delta is None:
                 flags.append("QUANTITY_MISSING")
+            elif document_type == "DELIVERY_NOTE":
+                if _money_value(extracted_quantity) <= 0:
+                    flags.append("QUANTITY_INVALID")
+                elif quantity_delta > 0.001:
+                    flags.append("OVER_RECEIPT")
+                elif quantity_delta < -0.001:
+                    # A short delivery is valid: the remaining quantity stays
+                    # open for a later receipt and is not treated as a match error.
+                    flags.append("PARTIAL_DELIVERY")
             elif abs(quantity_delta) > 0.001:
                 flags.append("QUANTITY_VARIANCE")
-            if price_delta is None:
-                flags.append("PRICE_MISSING")
-            elif abs(price_delta) > 0.01:
-                flags.append("PRICE_VARIANCE")
-            if catalog_price_delta is not None and abs(catalog_price_delta) > 0.01:
-                flags.append("CATALOG_PRICE_VARIANCE")
+            if document_type != "DELIVERY_NOTE":
+                if price_delta is None:
+                    flags.append("PRICE_MISSING")
+                elif abs(price_delta) > 0.01:
+                    flags.append("PRICE_VARIANCE")
+                if catalog_price_delta is not None and abs(catalog_price_delta) > 0.01:
+                    flags.append("CATALOG_PRICE_VARIANCE")
             if item.get("unit") and order_line.product and order_line.product.unit:
                 if ProductMatchingService.normalize(item.get("unit")) != ProductMatchingService.normalize(order_line.product.unit):
                     flags.append("UNIT_VARIANCE")
             lines.append({
                 "line_index": index, "description": item.get("description"),
-                "matched": True, "status": "MATCH" if not flags else "REVIEW",
+                "matched": True, "status": "MATCH" if not (set(flags) - {"PARTIAL_DELIVERY"}) else "REVIEW",
                 "order_item_id": order_line.id, "product_id": order_line.product_id,
                 "product_name": (order_line.product_snapshot or {}).get("name") if isinstance(order_line.product_snapshot, dict) else (order_line.product.name if order_line.product else None),
                 "expected_quantity": expected_quantity, "extracted_quantity": extracted_quantity,
@@ -809,7 +844,8 @@ class DocumentIntelligenceService:
                 confidence = Decimal(str(line.get("confidence") or 0))
             except (InvalidOperation, TypeError, ValueError):
                 confidence = Decimal("0")
-            if line.get("status") != "MATCH" or line.get("flags") or not confidence.is_finite() or confidence < Decimal("0.93"):
+            blocking_flags = set(line.get("flags") or []) - {"PARTIAL_DELIVERY"}
+            if line.get("status") != "MATCH" or blocking_flags or not confidence.is_finite() or confidence < Decimal("0.93"):
                 raise Conflict("Delivery note contains lines requiring manual reconciliation; resolve them before posting")
             index = line.get("line_index")
             if not isinstance(index, int) or index < 0 or index >= len(extracted_items):
