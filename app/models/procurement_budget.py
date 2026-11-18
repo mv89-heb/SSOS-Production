@@ -5,6 +5,17 @@ from app.extensions import db
 
 class ProcurementBudget(db.Model):
     __tablename__ = "procurement_budgets"
+    __table_args__ = (
+        db.Index(
+            "ix_procurement_budgets_scope_period",
+            "tenant_id", "scope_type", "scope_value", "period_type", "period_start", "currency",
+            unique=True,
+        ),
+        db.CheckConstraint("scope_type IN ('department', 'project')", name="ck_procurement_budgets_scope_type"),
+        db.CheckConstraint("period_type IN ('weekly', 'monthly')", name="ck_procurement_budgets_period_type"),
+        db.CheckConstraint("enforcement_mode IN ('warn', 'block')", name="ck_procurement_budgets_enforcement_mode"),
+        db.CheckConstraint("amount > 0", name="ck_procurement_budgets_amount_positive"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
