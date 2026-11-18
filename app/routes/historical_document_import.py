@@ -11,6 +11,7 @@ from app.extensions import db
 from app.models.document_analysis import DocumentAnalysis
 from app.models.historical_document_import import HistoricalDocumentRecord, HistoricalImportBatch, HistoricalPurchaseOrder
 from app.models.order import Order
+from app.models.product import Product
 from app.models.receipt import Receipt
 from app.models.supplier import Supplier
 from app.models.supplier_invoice import SupplierInvoice
@@ -369,6 +370,135 @@ def review_document(batch_id, document_id):
     except HTTPException as exc:
         db.session.rollback()
         return _error(exc)
+
+
+
+
+@historical_document_import_bp.route("/manual-orders", methods=["POST"])
+@login_required
+def import_manual_orders():
+    """Import explicitly supplied order history without creating operational orders or stock movements."""
+    try:
+        PermissionService.require_role_at_least("manager")
+        payload = request.get_json(silent=True) or {}
+        name = str(payload.get("name") or "").strip()
+        orders_payload = payload.get("orders")
+        if not name or len(name) > 200:
+            raise BadRequest("A batch name of up to 200 characters is required")
+        if not isinstance(orders_payload, list) or not orders_payload or len(orders_payload) > 500:
+            raise BadRequest("orders must be a non-empty list of at most 500 orders")
+        existing = db.session.scalar(select(HistoricalImportBatch).where(
+            HistoricalImportBatch.tenant_id == current_user.tenant_id,
+            HistoricalImportBatch.name == name,
+        ))
+        if existing:
+            raise Conflict("A historical import batch with this name already exists; use a new name to avoid duplicate imports")
+
+        suppliers = db.session.scalars(select(Supplier).where(
+            Supplier.tenant_id == current_user.tenant_id
+        )).all()
+        supplier_by_name = {_norm(row.name): row for row in suppliers}
+        products = db.session.scalars(select(Product).where(
+            Product.tenant_id == current_user.tenant_id,
+            Product.active.is_(True),
+        )).all()
+        products_by_supplier_and_name = {}
+        for product in products:
+            products_by_supplier_and_name.setdefault(
+                (product.supplier_id, _norm(product.name)), []
+            ).append(product)
+
+        batch = HistoricalImportBatch(
+            tenant_id=current_user.tenant_id,
+            name=name,
+            status="review",
+            created_by=current_user.id,
+        )
+        db.session.add(batch)
+        db.session.flush()
+        created_orders = []
+        for index, raw_order in enumerate(orders_payload, start=1):
+            if not isinstance(raw_order, dict):
+                raise BadRequest(f"Order {index} must be an object")
+            supplier_name = str(raw_order.get("supplier_name") or "").strip()
+            supplier = supplier_by_name.get(_norm(supplier_name))
+            if supplier is None:
+                raise BadRequest(f"Order {index}: supplier '{supplier_name}' does not exactly match a supplier in this organization")
+            order_date = _date(raw_order.get("order_date"))
+            if order_date is None:
+                raise BadRequest(f"Order {index}: a valid order_date is required")
+            lines = raw_order.get("items")
+            if not isinstance(lines, list) or not lines:
+                raise BadRequest(f"Order {index}: at least one item is required")
+            normalized_lines = []
+            for line_index, raw_line in enumerate(lines, start=1):
+                if not isinstance(raw_line, dict):
+                    raise BadRequest(f"Order {index}, item {line_index}: item must be an object")
+                description = str(raw_line.get("description") or "").strip()
+                if not description or len(description) > 255:
+                    raise BadRequest(f"Order {index}, item {line_index}: description is required and must be at most 255 characters")
+                quantity = None
+                if raw_line.get("quantity") not in (None, ""):
+                    try:
+                        quantity = Decimal(str(raw_line["quantity"]))
+                    except (InvalidOperation, TypeError, ValueError):
+                        raise BadRequest(f"Order {index}, item {line_index}: quantity must be numeric")
+                    if not quantity.is_finite() or quantity <= 0 or quantity > Decimal("100000"):
+                        raise BadRequest(f"Order {index}, item {line_index}: quantity must be greater than 0 and at most 100000")
+                candidates = products_by_supplier_and_name.get((supplier.id, _norm(description)), [])
+                matched = candidates[0] if len(candidates) == 1 else None
+                declared_unit = str(raw_line.get("unit") or "").strip() or None
+                explicit_unit = str(raw_line.get("quantity_unit") or "").strip().lower() or None
+                if explicit_unit not in (None, "carton", "piece", "unit"):
+                    raise BadRequest(f"Order {index}, item {line_index}: quantity_unit must be carton, piece, or unit")
+                normalized_lines.append({
+                    "description": description,
+                    "quantity": float(quantity) if quantity is not None else None,
+                    "unit": declared_unit,
+                    "quantity_unit": explicit_unit or "unverified",
+                    "product_id": matched.id if matched else None,
+                    "stock_unit": ("יחידה" if str(matched.unit or "").strip() == "יחידה" else "ארגז") if matched else None,
+                    "units_per_carton": matched.units_per_carton if matched else None,
+                    "product_match": "exact" if matched else ("ambiguous" if len(candidates) > 1 else "unmatched"),
+                })
+            created = HistoricalPurchaseOrder(
+                tenant_id=current_user.tenant_id,
+                batch_id=batch.id,
+                supplier_id=supplier.id,
+                supplier_name=supplier.name,
+                order_reference=str(raw_order.get("order_reference") or "").strip()[:160] or f"manual-{order_date.isoformat()}-{index:03d}",
+                order_date=order_date,
+                currency="ILS",
+                total_amount=None,
+                items=normalized_lines,
+                source_document_ids=[],
+                created_by=current_user.id,
+            )
+            db.session.add(created)
+            created_orders.append(created)
+        batch.status = "finalized"
+        batch.finalized_by = current_user.id
+        batch.finalized_at = datetime.now(timezone.utc)
+        AuditService.log_event(
+            current_user.tenant_id, current_user.id, "historical_import.manual_orders_imported",
+            f"Imported {len(created_orders)} manually supplied historical purchase orders",
+            {"batch_id": batch.id, "order_count": len(created_orders),
+             "unmatched_items": sum(1 for order in created_orders for item in order.items if not item.get("product_id")),
+             "unverified_quantities": sum(1 for order in created_orders for item in order.items if item.get("quantity") is not None and item.get("quantity_unit") == "unverified")},
+        )
+        db.session.commit()
+        return jsonify({
+            "success": True,
+            "batch": batch.to_dict(),
+            "orders": [order.to_dict() for order in created_orders],
+            "message": "Historical orders were saved separately. Operational orders, stock, receipts and prices were not changed.",
+        }), 201
+    except HTTPException as exc:
+        db.session.rollback()
+        return _error(exc)
+    except IntegrityError:
+        db.session.rollback()
+        return _error(Conflict("The historical import could not be saved because of a duplicate or integrity constraint"))
 
 
 @historical_document_import_bp.route("/batches/<int:batch_id>/finalize", methods=["POST"])
