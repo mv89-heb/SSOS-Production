@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.extensions import db
@@ -87,13 +87,14 @@ def _supplier_reliability(tenant_id: int, start_at: datetime, end_at: datetime):
         return []
 
     orders = [row[0] for row in rows]
-    supplier_by_order = {order.id: row[1] for order, *rest in rows}
+    supplier_by_order = {order.id: supplier for order, supplier in rows}
     order_ids = [order.id for order in orders]
     receipts = db.session.scalars(
         select(Receipt).where(
             Receipt.tenant_id == tenant_id,
             Receipt.order_id.in_(order_ids),
             Receipt.status == RECEIPT_POSTED,
+            or_(Receipt.received_at.is_(None), Receipt.received_at < end_at),
         ).order_by(Receipt.received_at.asc(), Receipt.id.asc())
     ).all()
     receipt_by_order = defaultdict(list)
