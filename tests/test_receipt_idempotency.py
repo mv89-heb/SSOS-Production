@@ -3,6 +3,12 @@ from app.models.product import Product
 from app.models.receipt import Receipt
 
 
+def _set_known_zero_stock(db, product_id):
+    product = db.session.get(Product, product_id)
+    product.current_stock = 0
+    db.session.commit()
+
+
 def _send_order(db, order_id):
     from app.models.order import Order, STATUS_SENT
     order = db.session.get(Order, order_id)
@@ -13,6 +19,7 @@ def _send_order(db, order_id):
 def test_receipt_idempotency_replays_without_duplicate_stock(logged_in_client_a, make_order, db):
     response, _, product_id = make_order(logged_in_client_a, quantity=5, price=10.0)
     order = response.get_json()["order"]
+    _set_known_zero_stock(db, product_id)
     order_item_id = order["order_items"][0]["id"]
     _send_order(db, order["id"])
 
@@ -64,6 +71,7 @@ def test_partial_receipts_accumulate_stock_without_exceeding_order_quantity(
 ):
     response, _, product_id = make_order(logged_in_client_a, quantity=5, price=10.0)
     order = response.get_json()["order"]
+    _set_known_zero_stock(db, product_id)
     order_item_id = order["order_items"][0]["id"]
     _send_order(db, order["id"])
 
@@ -90,6 +98,7 @@ def test_failed_over_receipt_rolls_back_idempotency_key_and_stock(
 ):
     response, _, product_id = make_order(logged_in_client_a, quantity=5, price=10.0)
     order = response.get_json()["order"]
+    _set_known_zero_stock(db, product_id)
     order_item_id = order["order_items"][0]["id"]
     _send_order(db, order["id"])
 
@@ -120,6 +129,7 @@ def test_duplicate_receipt_number_returns_conflict_without_changing_stock(
         logged_in_client_a, quantity=1, price=10.0, sku="SKU-RECEIPT-A"
     )
     first_order = first_response.get_json()["order"]
+    _set_known_zero_stock(db, first_product_id)
     first_item_id = first_order["order_items"][0]["id"]
     _send_order(db, first_order["id"])
 
@@ -138,6 +148,7 @@ def test_duplicate_receipt_number_returns_conflict_without_changing_stock(
         logged_in_client_a, quantity=1, price=12.0, sku="SKU-RECEIPT-B"
     )
     second_order = second_response.get_json()["order"]
+    _set_known_zero_stock(db, second_product_id)
     second_item_id = second_order["order_items"][0]["id"]
     _send_order(db, second_order["id"])
 
@@ -153,7 +164,7 @@ def test_duplicate_receipt_number_returns_conflict_without_changing_stock(
     assert duplicate.status_code == 409, duplicate.get_json()
     assert "receipt number already exists" in duplicate.get_json()["message"].lower()
     assert db.session.query(Receipt).filter_by(order_id=second_order["id"]).count() == 0
-    assert db.session.get(Product, second_product_id).current_stock in (None, 0)
+    assert db.session.get(Product, second_product_id).current_stock == 0
 
     # The rejected request must not reserve its idempotency key. A corrected
     # receipt number can be retried with the same key without duplicating stock.
@@ -169,3 +180,34 @@ def test_duplicate_receipt_number_returns_conflict_without_changing_stock(
     assert retry.get_json()["replayed"] is False
     assert db.session.query(Receipt).filter_by(order_id=second_order["id"]).count() == 1
     assert db.session.get(Product, second_product_id).current_stock == 1
+
+
+
+def test_receipt_does_not_turn_unknown_stock_into_zero_based_balance(
+    logged_in_client_a, make_order, db
+):
+    response, _, product_id = make_order(
+        logged_in_client_a, quantity=2, price=10.0, sku="SKU-UNKNOWN-STOCK-RECEIPT"
+    )
+    order = response.get_json()["order"]
+    order_item_id = order["order_items"][0]["id"]
+    _send_order(db, order["id"])
+
+    product = db.session.get(Product, product_id)
+    product.current_stock = None
+    db.session.commit()
+
+    receipt = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={"items": [{"order_item_id": order_item_id, "quantity": 2}]},
+        headers={"Idempotency-Key": "unknown-stock-receipt"},
+    )
+
+    assert receipt.status_code == 201, receipt.get_json()
+    assert db.session.get(Product, product_id).current_stock is None
+    movement = db.session.query(InventoryMovement).filter_by(
+        receipt_id=receipt.get_json()["receipt"]["id"],
+        product_id=product_id,
+    ).one()
+    assert movement.quantity == 2
+    assert movement.balance_after is None

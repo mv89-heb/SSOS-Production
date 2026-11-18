@@ -179,9 +179,14 @@ class ReceiptService:
                     raise Conflict("Carton receipt cannot update piece-based stock without a valid units-per-carton snapshot")
                 stock_quantity = quantity * Decimal(pack_size)
 
-            current_stock = Decimal(product.current_stock or 0)
-            new_balance = current_stock + stock_quantity
-            product.current_stock = int(new_balance)
+            # A missing physical count is unknown, not zero. Record the
+            # receipt movement without manufacturing a total stock balance.
+            if product.current_stock is None:
+                new_balance = None
+            else:
+                current_stock = Decimal(product.current_stock)
+                new_balance = current_stock + stock_quantity
+                product.current_stock = int(new_balance)
 
             db.session.add(
                 ReceiptItem(
