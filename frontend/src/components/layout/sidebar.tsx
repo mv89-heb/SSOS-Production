@@ -5,7 +5,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3, FileSearch, CalendarDays, BrainCircuit, Warehouse, Bell, ClipboardCheck, Calculator, Egg } from "lucide-react";
+import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3, FileSearch, CalendarDays, BrainCircuit, Warehouse, Bell, ClipboardCheck, Calculator, Egg, Wallet } from "lucide-react";
 
 const ORGANIZATION_NAME = "ישיבת אוהבי ירושלים - ראשית";
 const groups = [
@@ -23,6 +23,7 @@ const groups = [
     { name: "פיקוח מחירי ביצים", href: "/dashboard/regulatory-prices", icon: Egg },
     { name: "תמונת מצב רכש", href: "/dashboard/procurement-intelligence", icon: BrainCircuit },
     { name: "הוצאות רכש", href: "/dashboard/procurement-analytics", icon: BarChart3 },
+    { name: "תקציבי רכש", href: "/dashboard/settings/procurement-budgets", icon: Wallet },
     { name: "מסמכים וקליטה", href: "/dashboard/document-intelligence", icon: FileSearch },
   ]},
   { label: "מעקב וניהול", items: [
@@ -48,7 +49,7 @@ export default function Sidebar() {
       <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-5" aria-label="ניווט ראשי">
         {groups.map((group) => <section key={group.label}>
           <h2 className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{group.label}</h2>
-          <div className="space-y-1">{group.items.filter((item) => item.href !== "/dashboard/audit" || permissions.canViewAudit(user)).map((item) => {
+          <div className="space-y-1">{group.items.filter((item) => (item.href !== "/dashboard/audit" || permissions.canViewAudit(user)) && (item.href !== "/dashboard/settings/procurement-budgets" || permissions.canApproveOrders(user))).map((item) => {
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
             const Icon = item.icon;
             return <Link key={item.href} href={item.href} aria-current={isActive ? "page" : undefined} className={cn("group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200", isActive ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30" : "text-slate-300 hover:bg-white/8 hover:text-white")}>
