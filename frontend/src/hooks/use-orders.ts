@@ -65,6 +65,7 @@ export function useSubmitOrder(id: number) {
       queryClient.setQueryData(orderKey(id), order);
       queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
       queryClient.invalidateQueries({ queryKey: ["order-budget-impact", id] });
+      queryClient.invalidateQueries({ queryKey: ["procurement-budgets"] });
     },
   });
 }
