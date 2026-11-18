@@ -700,7 +700,24 @@ class DocumentIntelligenceService:
                     "confidence": confidence,
                 })
                 continue
-            expected_quantity = float(order_line.quantity)
+            ordered_quantity = Decimal(str(order_line.quantity))
+            expected_quantity = float(ordered_quantity)
+            if document_type == "DELIVERY_NOTE":
+                previously_received = db.session.scalar(
+                    select(func.coalesce(func.sum(ReceiptItem.quantity), 0))
+                    .join(Receipt, Receipt.id == ReceiptItem.receipt_id)
+                    .where(
+                        ReceiptItem.tenant_id == self.tenant_id,
+                        ReceiptItem.order_item_id == order_line.id,
+                        Receipt.tenant_id == self.tenant_id,
+                        Receipt.status == RECEIPT_POSTED,
+                    )
+                )
+                remaining_quantity = max(
+                    ordered_quantity - Decimal(str(previously_received or 0)),
+                    Decimal("0"),
+                )
+                expected_quantity = float(remaining_quantity)
             extracted_quantity = item.get("quantity")
             expected_price = float(order_line.unit_price)
             extracted_price = item.get("unit_price")
@@ -733,6 +750,13 @@ class DocumentIntelligenceService:
                 flags.append("MATCH_REVIEW")
             if quantity_delta is None:
                 flags.append("QUANTITY_MISSING")
+            elif document_type == "DELIVERY_NOTE":
+                if quantity_delta > 0.001:
+                    flags.append("OVER_RECEIPT")
+                elif quantity_delta < -0.001:
+                    # A short delivery is valid: the remaining quantity stays
+                    # open for a later receipt and is not treated as a match error.
+                    flags.append("PARTIAL_DELIVERY")
             elif abs(quantity_delta) > 0.001:
                 flags.append("QUANTITY_VARIANCE")
             if price_delta is None:
@@ -746,7 +770,7 @@ class DocumentIntelligenceService:
                     flags.append("UNIT_VARIANCE")
             lines.append({
                 "line_index": index, "description": item.get("description"),
-                "matched": True, "status": "MATCH" if not flags else "REVIEW",
+                "matched": True, "status": "MATCH" if not (set(flags) - {"PARTIAL_DELIVERY"}) else "REVIEW",
                 "order_item_id": order_line.id, "product_id": order_line.product_id,
                 "product_name": (order_line.product_snapshot or {}).get("name") if isinstance(order_line.product_snapshot, dict) else (order_line.product.name if order_line.product else None),
                 "expected_quantity": expected_quantity, "extracted_quantity": extracted_quantity,
@@ -809,7 +833,8 @@ class DocumentIntelligenceService:
                 confidence = Decimal(str(line.get("confidence") or 0))
             except (InvalidOperation, TypeError, ValueError):
                 confidence = Decimal("0")
-            if line.get("status") != "MATCH" or line.get("flags") or not confidence.is_finite() or confidence < Decimal("0.93"):
+            blocking_flags = set(line.get("flags") or []) - {"PARTIAL_DELIVERY"}
+            if line.get("status") != "MATCH" or blocking_flags or not confidence.is_finite() or confidence < Decimal("0.93"):
                 raise Conflict("Delivery note contains lines requiring manual reconciliation; resolve them before posting")
             index = line.get("line_index")
             if not isinstance(index, int) or index < 0 or index >= len(extracted_items):
