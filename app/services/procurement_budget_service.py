@@ -319,7 +319,7 @@ class ProcurementBudgetService:
         query = select(func.coalesce(func.sum(Order.final_total), 0)).where(
             Order.tenant_id == self.tenant_id,
             Order.status.in_(COMMITTED_ORDER_STATUSES),
-            Order.currency == budget.currency,
+            func.upper(Order.currency) == budget.currency,
             func.lower(scope_column) == budget.scope_value.casefold(),
             date_filter,
         )
