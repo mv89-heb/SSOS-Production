@@ -172,3 +172,27 @@ def test_carton_receipt_converts_to_piece_stock(logged_in_client_a, db):
     assert float(movement.balance_after) == 24
     receipt_item = db.session.query(ReceiptItem).filter_by(order_item_id=order_item_id).one()
     assert float(receipt_item.quantity) == 2
+
+
+
+def test_receipt_can_preserve_unknown_delivery_date(logged_in_client_a, make_order, db):
+    response, _, product_id = make_order(logged_in_client_a, quantity=1, price=10.0)
+    order = response.get_json()["order"]
+    order_item_id = order["order_items"][0]["id"]
+    _set_known_zero_stock(db, product_id)
+    _send_order(logged_in_client_a, db, order["id"])
+
+    received = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={
+            "receipt_number": "RECEIPT-UNKNOWN-DATE-001",
+            "received_at": None,
+            "items": [{"order_item_id": order_item_id, "quantity": 1}],
+        },
+    )
+    assert received.status_code == 201, received.get_json()
+    assert received.get_json()["receipt"]["received_at"] is None
+    movement = InventoryMovement.query.filter_by(
+        receipt_id=received.get_json()["receipt"]["id"]
+    ).one()
+    assert movement.occurred_at is not None
