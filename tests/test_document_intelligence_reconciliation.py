@@ -3,6 +3,7 @@ from app.models.order import Order, STATUS_APPROVED, STATUS_DRAFT, STATUS_SENT
 from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.receipt import Receipt
+from app.models.receipt_item import ReceiptItem
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.user import User
 
@@ -596,3 +597,144 @@ def test_manual_delivery_note_line_correction_recalculates_and_posts_with_operat
     saved = db.session.get(DocumentAnalysis, analysis.id)
     assert saved.extracted_data["items"][0]["manual_correction"]["quantity"] is True
     assert saved.extracted_data["items"][0]["manual_correction"]["unit"] is True
+
+
+def test_delivery_note_order_suggestions_rank_supplier_date_and_explicit_po_reference_without_cross_tenant_data(
+    logged_in_client_a, logged_in_client_b, db, make_order
+):
+    first_response, supplier_id, _ = make_order(
+        logged_in_client_a, quantity=4, sku="SUGGEST-OLD", planned_order_date="2026-10-01"
+    )
+    second_product_response = logged_in_client_a.post("/api/catalog/products", json={
+        "supplier_id": supplier_id, "name": "Near-date product",
+        "sku": "SUGGEST-NEAR", "current_price": 10,
+    })
+    assert second_product_response.status_code == 201, second_product_response.get_json()
+    second_response = logged_in_client_a.post("/api/orders", json={
+        "supplier_id": supplier_id,
+        "planned_order_date": "2026-11-16",
+        "items": [{"product_id": second_product_response.get_json()["product"]["id"], "quantity": 2}],
+    })
+    other_tenant_response, _, _ = make_order(
+        logged_in_client_b, quantity=4, sku="SUGGEST-OTHER-TENANT"
+    )
+    assert first_response.status_code == second_response.status_code == other_tenant_response.status_code == 201
+    first_order = db.session.get(Order, first_response.get_json()["order"]["id"])
+    second_order = db.session.get(Order, second_response.get_json()["order"]["id"])
+    other_tenant_order = db.session.get(Order, other_tenant_response.get_json()["order"]["id"])
+    first_order.status = STATUS_SENT
+    second_order.status = STATUS_SENT
+    other_tenant_order.status = STATUS_SENT
+    db.session.commit()
+
+    user = User.query.filter_by(email="admin@acme.test").one()
+    analysis = _analysis(db, user, "delivery-note-suggestions.pdf", "DELIVERY_NOTE", {
+        "document_type": "DELIVERY_NOTE",
+        "document_number": "DN-554",
+        "purchase_order_number": first_order.order_number,
+        "document_date": "2026-11-17",
+        "supplier": {"name": "Test Supplier"},
+        "supplier_matching": {"supplier_id": supplier_id, "decision": "AUTO_MATCH"},
+        "items": [],
+    })
+
+    result = logged_in_client_a.get(
+        f"/api/document-intelligence/{analysis.id}/suggest-orders"
+    )
+    assert result.status_code == 200, result.get_json()
+    payload = result.get_json()
+    assert payload["context"]["purchase_order_number"] == first_order.order_number
+    assert len(payload["suggestions"]) == 2
+    assert payload["suggestions"][0]["order_id"] == first_order.id
+    assert payload["suggestions"][0]["purchase_order_number_match"] is True
+    assert payload["suggestions"][0]["recommended"] is True
+    assert payload["suggestions"][1]["order_id"] == second_order.id
+    assert other_tenant_order.id not in {item["order_id"] for item in payload["suggestions"]}
+
+
+def test_delivery_note_suggestions_exclude_fully_received_orders_and_multi_supplier_documents(
+    logged_in_client_a, db, make_order
+):
+    response, supplier_id, product_id = make_order(logged_in_client_a, quantity=2, sku="SUGGEST-FULL")
+    assert response.status_code == 201
+    order = db.session.get(Order, response.get_json()["order"]["id"])
+    order.status = STATUS_SENT
+    order_item = OrderItem.query.filter_by(tenant_id=order.tenant_id, order_id=order.id).one()
+    receipt = Receipt(
+        tenant_id=order.tenant_id,
+        order_id=order.id,
+        receipt_number="SUGGEST-FULL-RECEIPT",
+        status="posted",
+    )
+    db.session.add(receipt)
+    db.session.flush()
+    db.session.add(ReceiptItem(
+        tenant_id=order.tenant_id,
+        receipt_id=receipt.id,
+        order_item_id=order_item.id,
+        quantity=2,
+    ))
+    user = User.query.filter_by(email="admin@acme.test").one()
+    full_analysis = _analysis(db, user, "fully-received.pdf", "DELIVERY_NOTE", {
+        "document_type": "DELIVERY_NOTE",
+        "supplier_matching": {"supplier_id": supplier_id, "decision": "AUTO_MATCH"},
+        "items": [],
+    })
+    multi_analysis = _analysis(db, user, "multi-supplier-suggestions.pdf", "DELIVERY_NOTE", {
+        "document_type": "DELIVERY_NOTE",
+        "supplier_matching": {"supplier_id": supplier_id, "decision": "AUTO_MATCH"},
+        "supplier_sections": [
+            {"supplier_matching": {"supplier_id": supplier_id, "decision": "AUTO_MATCH"}},
+            {"supplier_matching": {"supplier_id": supplier_id + 99999, "decision": "AUTO_MATCH"}},
+        ],
+        "items": [],
+    })
+    db.session.commit()
+
+    full_result = logged_in_client_a.get(
+        f"/api/document-intelligence/{full_analysis.id}/suggest-orders"
+    )
+    assert full_result.status_code == 200, full_result.get_json()
+    assert full_result.get_json()["suggestions"] == []
+
+    multi_result = logged_in_client_a.get(
+        f"/api/document-intelligence/{multi_analysis.id}/suggest-orders"
+    )
+    assert multi_result.status_code == 200, multi_result.get_json()
+    assert multi_result.get_json()["suggestions"] == []
+    assert multi_result.get_json()["context"]["multi_supplier_document"] is True
+
+
+def test_purchase_order_suggestions_are_tenant_scoped_and_require_analyzed_document(
+    logged_in_client_a, logged_in_client_b, db, make_order
+):
+    response, _, _ = make_order(logged_in_client_a, sku="SUGGEST-TENANT")
+    order = db.session.get(Order, response.get_json()["order"]["id"])
+    order.status = STATUS_SENT
+    user_b = User.query.filter_by(email="admin@beta.test").one()
+    analysis_b = _analysis(db, user_b, "tenant-b.pdf", "DELIVERY_NOTE", {
+        "document_type": "DELIVERY_NOTE", "items": [],
+    })
+    db.session.commit()
+
+    inaccessible = logged_in_client_a.get(
+        f"/api/document-intelligence/{analysis_b.id}/suggest-orders"
+    )
+    assert inaccessible.status_code == 404
+
+    user_a = User.query.filter_by(email="admin@acme.test").one()
+    uploaded = DocumentAnalysis(
+        tenant_id=user_a.tenant_id,
+        uploaded_by=user_a.id,
+        filename="not-analyzed.pdf",
+        mime_type="application/pdf",
+        document_type="DELIVERY_NOTE",
+        status="UPLOADED",
+        extracted_data={"document_type": "DELIVERY_NOTE", "items": []},
+    )
+    db.session.add(uploaded)
+    db.session.commit()
+    not_analyzed = logged_in_client_a.get(
+        f"/api/document-intelligence/{uploaded.id}/suggest-orders"
+    )
+    assert not_analyzed.status_code == 400

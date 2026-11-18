@@ -196,6 +196,28 @@ def update_document_metadata(analysis_id):
         return _internal_error(exc, "metadata correction")
 
 
+@document_intelligence_bp.route("/<int:analysis_id>/suggest-orders", methods=["GET"])
+@login_required
+def suggest_orders_for_document(analysis_id):
+    try:
+        PermissionService.require_permission("documents.process")
+        raw_limit = request.args.get("limit", "30")
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            raise BadRequest("limit must be an integer")
+        if limit < 1 or limit > 50:
+            raise BadRequest("limit must be between 1 and 50")
+        result = DocumentIntelligenceService(
+            current_user.tenant_id, current_user.id
+        ).suggest_open_orders(analysis_id, limit=limit)
+        return jsonify(result), 200
+    except HTTPException as exc:
+        return _handle(exc)
+    except Exception as exc:
+        return _internal_error(exc, "purchase-order suggestions")
+
+
 @document_intelligence_bp.route("/<int:analysis_id>/compare-order", methods=["POST"])
 @login_required
 def compare_document_with_order(analysis_id):

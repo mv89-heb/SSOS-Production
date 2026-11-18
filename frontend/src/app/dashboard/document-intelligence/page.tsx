@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock3, FileSearch, Loader2, RefreshCw, Sparkles, Upload } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useProducts, useSuppliers } from "@/hooks/use-catalog";
-import { documentIntelligenceService, type DocumentAnalysis, type ExtractedItem, type SupplierSection, type OrderReconciliation } from "@/services/document-intelligence-service";
+import { documentIntelligenceService, type DocumentAnalysis, type ExtractedItem, type SupplierSection, type OrderReconciliation, type OrderSuggestion } from "@/services/document-intelligence-service";
 import { apiClient } from "@/services/api-client";
 
 const statusLabel: Record<string, string> = { UPLOADED: "הועלה", PROCESSING: "מנתח...", ANALYZED: "נותח — מוכן לבדיקה", PARTIALLY_APPLIED: "יושם חלקית — נותרו שורות לבדיקה", AI_UNAVAILABLE: "Gemini אינו מוגדר", FAILED: "הניתוח נכשל", APPLIED: "יושם בהצלחה" };
@@ -80,7 +80,7 @@ function SearchableSelect({ value, onChange, options, placeholder, disabled = fa
 export default function DocumentIntelligencePage() {
   const inputRef = useRef<HTMLInputElement>(null); const queryClient = useQueryClient();
   const { data: products = [] } = useProducts(undefined, true); const { data: suppliers = [] } = useSuppliers(true);
-  const [analyses, setAnalyses] = useState<DocumentAnalysis[]>([]); const [orders, setOrders] = useState<Array<{ id: number; order_number: string; supplier_name?: string; status?: string }>>([]); const [selectedOrderId, setSelectedOrderId] = useState(""); const [confirmSupplier, setConfirmSupplier] = useState(false); const [allowPriceUpdates, setAllowPriceUpdates] = useState(false); const [documentNumber, setDocumentNumber] = useState(""); const [documentDate, setDocumentDate] = useState(""); const [invoiceAmount, setInvoiceAmount] = useState(""); const [deliveryLineEdits, setDeliveryLineEdits] = useState<Record<number, { quantity: string; unit: string }>>({}); const [deliveryNoteNotes, setDeliveryNoteNotes] = useState(""); const [selectedId, setSelectedId] = useState<number | null>(null); const [mappings, setMappings] = useState<Record<number, Mapping>>({}); const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set()); const [newProductDrafts, setNewProductDrafts] = useState<Record<number, { open: boolean; name: string; supplier_id: number | string; supplier_sku: string; barcode: string; unit: string; units_per_carton: number | string; current_price: number | string }>>({}); const [progress, setProgress] = useState<UploadProgress[]>([]); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [now, setNow] = useState(() => Date.now());
+  const [analyses, setAnalyses] = useState<DocumentAnalysis[]>([]); const [orders, setOrders] = useState<Array<{ id: number; order_number: string; supplier_name?: string; status?: string }>>([]); const [selectedOrderId, setSelectedOrderId] = useState(""); const [orderSuggestions, setOrderSuggestions] = useState<OrderSuggestion[]>([]); const [orderSuggestionsLoading, setOrderSuggestionsLoading] = useState(false); const [orderSuggestionMessage, setOrderSuggestionMessage] = useState(""); const [confirmSupplier, setConfirmSupplier] = useState(false); const [allowPriceUpdates, setAllowPriceUpdates] = useState(false); const [documentNumber, setDocumentNumber] = useState(""); const [purchaseOrderNumber, setPurchaseOrderNumber] = useState(""); const [documentDate, setDocumentDate] = useState(""); const [invoiceAmount, setInvoiceAmount] = useState(""); const [deliveryLineEdits, setDeliveryLineEdits] = useState<Record<number, { quantity: string; unit: string }>>({}); const [deliveryNoteNotes, setDeliveryNoteNotes] = useState(""); const [selectedId, setSelectedId] = useState<number | null>(null); const [mappings, setMappings] = useState<Record<number, Mapping>>({}); const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set()); const [newProductDrafts, setNewProductDrafts] = useState<Record<number, { open: boolean; name: string; supplier_id: number | string; supplier_sku: string; barcode: string; unit: string; units_per_carton: number | string; current_price: number | string }>>({}); const [progress, setProgress] = useState<UploadProgress[]>([]); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [now, setNow] = useState(() => Date.now());
   useEffect(() => { if (!busy) return; const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, [busy]);
   useEffect(() => {
     const requestedOrderId = new URLSearchParams(window.location.search).get("orderId");
@@ -134,9 +134,35 @@ export default function DocumentIntelligencePage() {
     if (!analysis) return;
     setSelectedOrderId(reconciliation?.order_id ? String(reconciliation.order_id) : "");
     setDocumentNumber(data?.document_number || "");
+    setPurchaseOrderNumber(data?.purchase_order_number || "");
     setDocumentDate(data?.document_date || "");
     setInvoiceAmount(data?.totals?.total != null ? String(data.totals.total) : "");
-  }, [analysis?.id, reconciliation?.order_id, data?.document_number, data?.document_date, data?.totals?.total]);
+  }, [analysis?.id, reconciliation?.order_id, data?.document_number, data?.purchase_order_number, data?.document_date, data?.totals?.total]);
+  useEffect(() => {
+    if (!analysis || !analysis.details_loaded || !["ANALYZED", "PARTIALLY_APPLIED"].includes(analysis.status) ||
+      !["DELIVERY_NOTE", "INVOICE"].includes(analysis.document_type || "")) {
+      setOrderSuggestions([]);
+      setOrderSuggestionMessage("");
+      return;
+    }
+    let active = true;
+    setOrderSuggestionsLoading(true);
+    documentIntelligenceService.suggestOrders(analysis.id)
+      .then((result) => {
+        if (!active) return;
+        setOrderSuggestions(result.suggestions || []);
+        setOrderSuggestionMessage(result.message || (result.context.multi_supplier_document
+          ? "המסמך כולל יותר מספק אחד או שספק לא זוהה בכל חלקיו; יש לבחור ולבדוק ידנית."
+          : ""));
+      })
+      .catch((err: any) => {
+        if (!active) return;
+        setOrderSuggestions([]);
+        setOrderSuggestionMessage(err?.friendlyMessage || err?.response?.data?.message || "לא ניתן להציע הזמנות מתאימות כרגע.");
+      })
+      .finally(() => { if (active) setOrderSuggestionsLoading(false); });
+    return () => { active = false; };
+  }, [analysis?.id, analysis?.status, analysis?.details_loaded, analysis?.document_type]);
   useEffect(() => {
     if (!analysis) return;
     const lines = reconciliation?.lines || [];
@@ -247,9 +273,17 @@ export default function DocumentIntelligencePage() {
     if (!analysis) return false;
     const response = await apiClient.patch<{ success: boolean; analysis: DocumentAnalysis }>(
       `/api/document-intelligence/${analysis.id}/metadata`,
-      { document_number: documentNumber.trim(), document_date: documentDate || null },
+      { document_number: documentNumber.trim(), purchase_order_number: purchaseOrderNumber.trim(), document_date: documentDate || null },
     );
     setAnalyses((all) => all.map((item) => item.id === response.data.analysis.id ? response.data.analysis : item));
+    try {
+      const suggestions = await documentIntelligenceService.suggestOrders(analysis.id);
+      setOrderSuggestions(suggestions.suggestions || []);
+      setOrderSuggestionMessage(suggestions.message || (suggestions.context.multi_supplier_document ? "המסמך כולל יותר מספק אחד או שספק לא זוהה בכל חלקיו; יש לבחור ולבדוק ידנית." : ""));
+    } catch {
+      setOrderSuggestions([]);
+      setOrderSuggestionMessage("פרטי המסמך נשמרו, אך לא ניתן לרענן את הצעות ההזמנה.");
+    }
     return true;
   }
 
@@ -446,8 +480,9 @@ export default function DocumentIntelligencePage() {
         <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-950/50"><div className="text-xs text-slate-500">מספר מסמך</div><div className="mt-1 font-semibold">{data.workflow_routing.document_number_identified ? "זוהה" : "לא זוהה"}</div></div>
       </div>
       {data.workflow_routing.missing_fields.length > 0 && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"><strong>להשלמת הניתוב:</strong> {data.workflow_routing.missing_fields.join(" · ")}</div>}
-      <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-slate-700 dark:bg-slate-950/50 sm:grid-cols-[1fr_220px_auto]">
+      <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-slate-700 dark:bg-slate-950/50 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_auto]">
         <label className="text-sm">מספר מסמך (ניתן לתיקון)<input value={documentNumber} onChange={(e) => setDocumentNumber(e.target.value)} maxLength={120} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
+        <label className="text-sm">מספר הזמנת רכש שמופיע במסמך (אם קיים)<input value={purchaseOrderNumber} onChange={(e) => setPurchaseOrderNumber(e.target.value)} maxLength={120} placeholder="לא מספר תעודת המשלוח" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
         <label className="text-sm">תאריך מסמך (ניתן לתיקון)<input type="date" value={documentDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setDocumentDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
         <button type="button" onClick={async () => { setBusy(true); setError(""); try { await persistDocumentMetadata(); setNotice("פרטי המסמך המתוקנים נשמרו."); } catch (err: any) { setError(err?.friendlyMessage || err?.response?.data?.message || "לא ניתן לשמור את פרטי המסמך"); } finally { setBusy(false); } }} disabled={busy || Boolean(analysis.applied_at)} className="self-end rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 disabled:opacity-50 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300">שמור תיקונים</button>
         <p className="text-xs leading-5 text-slate-500 sm:col-span-3">תאריך תעודת המשלוח ישמש כתאריך הקבלה לצורך מדידת זמני אספקה. אם התאריך אינו ידוע, השאר ריק — לא נניח תאריך על סמך מועד הסריקה.</p>
@@ -457,6 +492,35 @@ export default function DocumentIntelligencePage() {
 
     {(analysis.status === "ANALYZED" || analysis.status === "PARTIALLY_APPLIED" || analysis.status === "APPLIED") && <section className="rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm dark:border-indigo-900 dark:bg-slate-950">
       <div className="mb-3"><h2 className="font-bold">סריקה, הצלבה ובקרה מול הזמנת רכש</h2><p className="mt-1 text-sm text-slate-500">{analysis.document_type === "DELIVERY_NOTE" ? "לתעודת משלוח ניתן לבחור הזמנה שנשלחה בלבד." : "לחשבונית ניתן לבחור הזמנה מאושרת, שנשלחה או הושלמה."} השווה כמויות ומחירים, ולאחר בדיקה רשום קבלה או חשבונית.</p></div>
+      <div className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 dark:border-indigo-900/60 dark:bg-indigo-950/20">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-indigo-950 dark:text-indigo-100">הצעות להזמנות רכש מתאימות</h3>
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">הדירוג מבוסס על ספק, תאריך ומספר הזמנת רכש מפורש. ההצעה אינה בחירה או אישור אוטומטי.</p>
+          </div>
+          {orderSuggestionsLoading && <span className="text-xs text-slate-500">מאתר הזמנות...</span>}
+        </div>
+        {!orderSuggestionsLoading && orderSuggestions.length > 0 && <div className="mt-3 grid gap-2 md:grid-cols-2">
+          {orderSuggestions.slice(0, 6).map((candidate) => (
+            <button key={candidate.order_id} type="button" onClick={() => setSelectedOrderId(String(candidate.order_id))}
+              className={`rounded-lg border p-3 text-right transition ${selectedOrderId === String(candidate.order_id) ? "border-indigo-500 bg-white ring-1 ring-indigo-300 dark:bg-slate-900" : "border-slate-200 bg-white hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-950"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold">הזמנה {candidate.order_number}</span>
+                {candidate.purchase_order_number_match && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">מספר תואם</span>}
+                {candidate.recommended && !candidate.purchase_order_number_match && <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300">התאמה מובילה</span>}
+              </div>
+              <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">{candidate.supplier_name || "ספק לא ידוע"} · {candidate.status === "sent" ? "נשלחה" : candidate.status === "approved" ? "אושרה" : "הושלמה"}</div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                {candidate.context_order_date && <span>תאריך הזמנה: {candidate.context_order_date}</span>}
+                {candidate.date_delta_days != null && <span>פער תאריכים: {candidate.date_delta_days} ימים</span>}
+                {candidate.remaining_lines > 0 && <span>{candidate.remaining_lines} שורות פתוחות</span>}
+              </div>
+              {candidate.match_reasons.length > 0 && <div className="mt-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300">{candidate.match_reasons.join(" · ")}</div>}
+            </button>
+          ))}
+        </div>}
+        {!orderSuggestionsLoading && orderSuggestions.length === 0 && orderSuggestionMessage && <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">{orderSuggestionMessage}</p>}
+      </div>
       <div className="flex flex-col gap-3 sm:flex-row">
         <select value={selectedOrderId} onChange={(e) => setSelectedOrderId(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm dark:border-slate-700 dark:bg-slate-900">
           <option value="">בחר הזמנת רכש...</option>

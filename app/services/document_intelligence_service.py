@@ -46,7 +46,7 @@ DOCUMENT_SCHEMA = {
         "recipient": {"type": "object", "properties": {"name": {"type": "string"}, "address": {"type": "string"}, "tax_id": {"type": "string"}, "customer_number": {"type": "string"}}},
         "supplier": {"type": "object", "properties": {"name": {"type": "string"}, "customer_number": {"type": "string"}}},
         "supplier_sections": {"type": "array", "items": _SUPPLIER_SECTION_SCHEMA},
-        "document_number": {"type": "string"}, "document_date": {"type": "string"}, "currency": {"type": "string"},
+        "document_number": {"type": "string"}, "purchase_order_number": {"type": "string"}, "document_date": {"type": "string"}, "currency": {"type": "string"},
         "totals": {"type": "object", "properties": {"subtotal": {"type": "number"}, "tax": {"type": "number"}, "total": {"type": "number"}}},
         "items": {"type": "array", "items": {"type": "object", "properties": {
             "supplier_sku": {"type": "string"}, "barcode": {"type": "string"}, "description": {"type": "string"},
@@ -59,7 +59,7 @@ DOCUMENT_SCHEMA = {
 
 SYSTEM_INSTRUCTION = """You extract structured procurement data from supplier documents. Return only facts visible in the document. Never invent SKU, barcode, price, supplier or totals. If a value is absent, omit it or use the schema's natural empty value. Never use 0 as a placeholder for a missing price. If a price is visible, extract the actual numeric value exactly as shown; if no price is visible, omit unit_price. Preserve decimal numbers exactly as shown. Identify whether the document is an invoice, delivery note, price list, or other document.
 
-SUPPLIER IDENTIFICATION RULES: Supplier identity is a required extraction goal, not an optional guess. Inspect the entire document, especially the issuer/header/logo area, company name, tax/VAT registration number, phone/address, invoice/payment details, and repeated page headers/footers. Extract the company that ISSUED the invoice, delivery note, or price list as supplier; do not confuse it with the recipient/customer (for this organization, often ישיבת אוהבי ירושלים / ראשית), a delivery destination, a bank, a payment processor, or a brand/manufacturer mentioned only in a product description. Prefer the clearest visible legal/trading name and include the visible supplier/customer account number in customer_number when present. Preserve Hebrew spelling and meaningful company suffixes; do not replace a visible supplier name with a guessed catalog name. If the document-level supplier is visible, populate supplier.name even when supplier_sections is also returned. For a single-supplier document, repeat the same identified supplier in the single supplier_sections entry. If the issuer cannot be established from visible evidence, leave supplier.name empty rather than inventing one, and still extract all other fields.\n\nRECIPIENT RULES: Identify the document recipient/customer exactly when visible. Keep supplier and recipient as separate entities. For this organization, preserve the visible name and address rather than inferring or normalizing it away.\n\nMULTI-SUPPLIER RULES: A single uploaded document can contain multiple suppliers, including multiple suppliers on one page. You MUST identify every distinct supplier context visible in the document and return one supplier_sections entry for each. Assign every extracted line item to exactly one supplier section. Use explicit supplier names, supplier/customer numbers, table headers, section headers, and unambiguous layout/context. Never assume the whole document belongs to the first supplier you see. Never merge two suppliers just because they sell similar products. If a line's supplier cannot be established from visible evidence, keep that line in a supplier section with an empty supplier object rather than guessing. For a supplier that continues across pages, keep it as the same supplier when the identity is clear.\n\nLINE-ITEM EXTRACTION RULES: Return only actual product rows from the item table. Never turn delivery-note numbers, invoice numbers, dates, headers/footers, recipient details, payment instructions, subtotals, tax totals, or grand totals into product items. Text such as "תעודת משלוח מספר 90190 מיום 15/10/2026" is document-reference metadata, not a product. Never invent a default quantity such as 1; if no quantity is visibly printed, omit quantity. If a line cannot be distinguished from header/reference text, do not include it as a product item."""
+SUPPLIER IDENTIFICATION RULES: Supplier identity is a required extraction goal, not an optional guess. Inspect the entire document, especially the issuer/header/logo area, company name, tax/VAT registration number, phone/address, invoice/payment details, and repeated page headers/footers. Extract the company that ISSUED the invoice, delivery note, or price list as supplier; do not confuse it with the recipient/customer (for this organization, often ישיבת אוהבי ירושלים / ראשית), a delivery destination, a bank, a payment processor, or a brand/manufacturer mentioned only in a product description. Prefer the clearest visible legal/trading name and include the visible supplier/customer account number in customer_number when present. Preserve Hebrew spelling and meaningful company suffixes; do not replace a visible supplier name with a guessed catalog name. If the document-level supplier is visible, populate supplier.name even when supplier_sections is also returned. For a single-supplier document, repeat the same identified supplier in the single supplier_sections entry. If the issuer cannot be established from visible evidence, leave supplier.name empty rather than inventing one, and still extract all other fields.\n\nRECIPIENT RULES: Identify the document recipient/customer exactly when visible. Keep supplier and recipient as separate entities. For this organization, preserve the visible name and address rather than inferring or normalizing it away.\n\nMULTI-SUPPLIER RULES: A single uploaded document can contain multiple suppliers, including multiple suppliers on one page. You MUST identify every distinct supplier context visible in the document and return one supplier_sections entry for each. Assign every extracted line item to exactly one supplier section. Use explicit supplier names, supplier/customer numbers, table headers, section headers, and unambiguous layout/context. Never assume the whole document belongs to the first supplier you see. Never merge two suppliers just because they sell similar products. If a line's supplier cannot be established from visible evidence, keep that line in a supplier section with an empty supplier object rather than guessing. For a supplier that continues across pages, keep it as the same supplier when the identity is clear.\n\nPURCHASE-ORDER REFERENCE RULES: Separately extract purchase_order_number only when the document visibly contains a supplier/customer order reference such as "מספר הזמנה", "הזמנת רכש", "מספר הזמנת לקוח", "PO Number" or an equivalent clearly labeled field. This is NOT the delivery-note number or invoice number. Never copy document_number into purchase_order_number. If no explicit order reference is visible, omit purchase_order_number.\n\nLINE-ITEM EXTRACTION RULES: Return only actual product rows from the item table. Never turn delivery-note numbers, invoice numbers, dates, headers/footers, recipient details, payment instructions, subtotals, tax totals, or grand totals into product items. Text such as "תעודת משלוח מספר 90190 מיום 15/10/2026" is document-reference metadata, not a product. Never invent a default quantity such as 1; if no quantity is visibly printed, omit quantity. If a line cannot be distinguished from header/reference text, do not include it as a product item."""
 
 
 def _money_value(value):
@@ -207,6 +207,15 @@ class DocumentIntelligenceService:
                 raise BadRequest("document_number is too long")
             data["document_number"] = value or None
             changed.append("document_number")
+        if "purchase_order_number" in payload:
+            value = payload.get("purchase_order_number")
+            if value is not None and not isinstance(value, str):
+                raise BadRequest("purchase_order_number must be a string")
+            value = (value or "").strip()
+            if len(value) > 120:
+                raise BadRequest("purchase_order_number is too long")
+            data["purchase_order_number"] = value or None
+            changed.append("purchase_order_number")
         if "document_date" in payload:
             value = payload.get("document_date")
             if value in (None, ""):
@@ -715,6 +724,201 @@ class DocumentIntelligenceService:
         )
         db.session.commit()
         return updated_row, updated_reconciliation
+
+    @staticmethod
+    def _normalize_order_reference(value):
+        return "".join(character.casefold() for character in str(value or "").strip() if character.isalnum())
+
+    def suggest_open_orders(self, analysis_id: int, limit: int = 30):
+        """Return tenant-scoped, ranked purchase-order suggestions without selecting or mutating an order."""
+        PermissionService.require_role_at_least("manager")
+        row = self._get(analysis_id)
+        if row.status not in {"ANALYZED", "PARTIALLY_APPLIED"} or row.applied_at:
+            raise BadRequest("Only analyzed, unposted documents can be matched to purchase orders")
+        extracted = row.extracted_data if isinstance(row.extracted_data, dict) else {}
+        document_type = str(extracted.get("document_type") or row.document_type or "").upper()
+        if document_type not in {"DELIVERY_NOTE", "INVOICE"}:
+            raise BadRequest("Only delivery notes and supplier invoices can be matched to purchase orders")
+
+        sections = extracted.get("supplier_sections") if isinstance(extracted.get("supplier_sections"), list) else []
+        section_ids = set()
+        section_identity_missing = False
+        for section in sections:
+            section = section if isinstance(section, dict) else {}
+            match = section.get("supplier_matching") if isinstance(section.get("supplier_matching"), dict) else {}
+            supplier_id = match.get("supplier_id")
+            if isinstance(supplier_id, int) and not isinstance(supplier_id, bool) and supplier_id > 0:
+                section_ids.add(supplier_id)
+            else:
+                section_identity_missing = True
+        multi_supplier = len(section_ids) > 1 or (len(sections) > 1 and section_identity_missing)
+        if multi_supplier:
+            return {
+                "success": True, "analysis_id": row.id, "suggestions": [],
+                "context": {"multi_supplier_document": True, "supplier_id": None,
+                            "purchase_order_number": extracted.get("purchase_order_number"),
+                            "document_date": extracted.get("document_date")},
+                "message": "A document containing multiple or unresolved suppliers cannot be matched to one purchase order.",
+            }
+
+        supplier_match = extracted.get("supplier_matching") if isinstance(extracted.get("supplier_matching"), dict) else {}
+        supplier_id = supplier_match.get("supplier_id")
+        if not (isinstance(supplier_id, int) and not isinstance(supplier_id, bool) and supplier_id > 0):
+            supplier_id = next(iter(section_ids)) if len(section_ids) == 1 and not section_identity_missing else None
+        supplier_name = ""
+        supplier_data = extracted.get("supplier") if isinstance(extracted.get("supplier"), dict) else {}
+        supplier_name = str(supplier_data.get("name") or "").strip()
+        if supplier_id is None and supplier_name:
+            normalized_name = self._normalize_order_reference(supplier_name)
+            exact_suppliers = [
+                item for item in Supplier.query.filter_by(tenant_id=self.tenant_id, active=True).all()
+                if self._normalize_order_reference(item.name) == normalized_name
+            ]
+            if len(exact_suppliers) == 1:
+                supplier_id = exact_suppliers[0].id
+
+        if supplier_id is not None:
+            supplier = Supplier.query.filter_by(
+                id=supplier_id, tenant_id=self.tenant_id, active=True
+            ).first()
+            if supplier is None:
+                return {
+                    "success": True, "analysis_id": row.id, "suggestions": [],
+                    "context": {"multi_supplier_document": False, "supplier_id": None,
+                                "invalid_supplier_match": True,
+                                "purchase_order_number": extracted.get("purchase_order_number"),
+                                "document_date": extracted.get("document_date")},
+                    "message": "The detected supplier is not available in this tenant. Verify supplier matching before selecting an order.",
+                }
+
+        eligible_statuses = (
+            [STATUS_SENT] if document_type == "DELIVERY_NOTE"
+            else [STATUS_APPROVED, STATUS_SENT, STATUS_COMPLETED]
+        )
+        query = Order.query.filter(
+            Order.tenant_id == self.tenant_id,
+            Order.status.in_(eligible_statuses),
+        )
+        if supplier_id is not None:
+            query = query.filter(Order.supplier_id == supplier_id)
+        orders = query.order_by(Order.created_at.desc(), Order.id.desc()).limit(200).all()
+        if not orders:
+            return {
+                "success": True, "analysis_id": row.id, "suggestions": [],
+                "context": {"multi_supplier_document": False, "supplier_id": supplier_id,
+                            "purchase_order_number": extracted.get("purchase_order_number"),
+                            "document_date": extracted.get("document_date")},
+                "message": "No eligible purchase orders were found for this document.",
+            }
+
+        order_ids = [order.id for order in orders]
+        order_items = OrderItem.query.filter(
+            OrderItem.tenant_id == self.tenant_id,
+            OrderItem.order_id.in_(order_ids),
+        ).all()
+        item_ids = [item.id for item in order_items]
+        received_by_item = {}
+        if item_ids:
+            received_rows = db.session.execute(
+                select(
+                    ReceiptItem.order_item_id,
+                    func.coalesce(func.sum(ReceiptItem.quantity), 0),
+                )
+                .join(Receipt, Receipt.id == ReceiptItem.receipt_id)
+                .where(
+                    ReceiptItem.tenant_id == self.tenant_id,
+                    ReceiptItem.order_item_id.in_(item_ids),
+                    Receipt.tenant_id == self.tenant_id,
+                    Receipt.status == RECEIPT_POSTED,
+                )
+                .group_by(ReceiptItem.order_item_id)
+            ).all()
+            received_by_item = {item_id: Decimal(str(quantity or 0)) for item_id, quantity in received_rows}
+
+        remaining_lines_by_order = {}
+        for item in order_items:
+            remaining = max(Decimal(str(item.quantity)) - received_by_item.get(item.id, Decimal("0")), Decimal("0"))
+            if remaining > 0:
+                remaining_lines_by_order[item.order_id] = remaining_lines_by_order.get(item.order_id, 0) + 1
+
+        reference = self._normalize_order_reference(extracted.get("purchase_order_number"))
+        document_date = None
+        raw_date = extracted.get("document_date")
+        if isinstance(raw_date, str) and raw_date.strip():
+            try:
+                document_date = date.fromisoformat(raw_date.strip())
+            except ValueError:
+                document_date = None
+
+        suggestions = []
+        for order in orders:
+            remaining_lines = remaining_lines_by_order.get(order.id, 0)
+            if document_type == "DELIVERY_NOTE" and remaining_lines == 0:
+                continue
+            order_reference = self._normalize_order_reference(order.order_number)
+            reference_match = bool(reference and order_reference and reference == order_reference)
+            order_date = order.planned_order_date or (order.created_at.date() if order.created_at else None)
+            date_delta = abs((document_date - order_date).days) if document_date and order_date else None
+            score = 0
+            reasons = []
+            if supplier_id is not None and order.supplier_id == supplier_id:
+                score += 50
+                reasons.append("ספק תואם")
+            if reference_match:
+                score += 100
+                reasons.append("מספר הזמנת רכש תואם")
+            if date_delta is not None:
+                if date_delta <= 3:
+                    score += 25
+                    reasons.append("תאריך קרוב")
+                elif date_delta <= 7:
+                    score += 18
+                    reasons.append("תאריך בטווח שבוע")
+                elif date_delta <= 14:
+                    score += 10
+                    reasons.append("תאריך בטווח שבועיים")
+                elif date_delta <= 30:
+                    score += 4
+                    reasons.append("תאריך בטווח חודש")
+            suggestions.append({
+                "order_id": order.id,
+                "order_number": order.order_number,
+                "supplier_id": order.supplier_id,
+                "supplier_name": order.supplier_name,
+                "status": order.status,
+                "planned_order_date": order.planned_order_date.isoformat() if order.planned_order_date else None,
+                "context_order_date": order_date.isoformat() if order_date else None,
+                "created_at": order.created_at.isoformat() if order.created_at else None,
+                "date_delta_days": date_delta,
+                "remaining_lines": remaining_lines,
+                "match_score": score,
+                "match_reasons": reasons,
+                "purchase_order_number_match": reference_match,
+            })
+        suggestions.sort(
+            key=lambda item: (
+                -item["match_score"],
+                item["date_delta_days"] if item["date_delta_days"] is not None else 9999,
+                item["order_id"] * -1,
+            )
+        )
+        suggestions = suggestions[:max(1, min(int(limit or 30), 50))]
+        if suggestions:
+            suggestions[0]["recommended"] = suggestions[0]["match_score"] > 0
+            for candidate in suggestions[1:]:
+                candidate["recommended"] = False
+        return {
+            "success": True,
+            "analysis_id": row.id,
+            "suggestions": suggestions,
+            "context": {
+                "multi_supplier_document": False,
+                "supplier_id": supplier_id,
+                "purchase_order_number": extracted.get("purchase_order_number"),
+                "document_date": extracted.get("document_date"),
+            },
+            "message": None if suggestions else "No open purchase orders with remaining quantities were found.",
+        }
 
     def compare_with_order(self, analysis_id: int, order_id: int, confirm_supplier: bool = False):
         """Compare an analyzed delivery note/invoice with one tenant-scoped purchase order."""
