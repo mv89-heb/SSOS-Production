@@ -112,7 +112,7 @@ def _supplier_reliability(tenant_id: int, start_at: datetime, end_at: datetime):
             )
         ).all()
         for line in receipt_lines:
-            received_by_item[line.order_item_id] += Decimal(str(line.quantity))
+            received_by_item[line.order_item_id] += Decimal(str(line.quantity)) - Decimal(str(line.damaged_quantity or 0))
 
     order_items = db.session.scalars(
         select(OrderItem).where(
@@ -294,7 +294,7 @@ def procurement_spend():
                 "invoiced": "Recorded supplier invoices by invoice date. This is not added to ordered spend.",
                 "paid": "Recorded invoice payments by payment date. Partial payments are counted only when paid.",
                 "currency": "Totals are separated by currency; currencies are never converted or summed together.",
-                "reliability": "Supplier reliability uses completed orders created in the selected period. Lateness is measured from planned date to the last posted receipt; shortage means at least one line has a recorded received quantity below the ordered quantity. Missing dates and sample sizes are shown; credit/adjustment frequency is not available without structured linkage.",
+                "reliability": "Supplier reliability uses completed orders created in the selected period. Lateness is measured from planned date to the last posted receipt; shortage means at least one line has an accepted (undamaged) quantity below the ordered quantity. Missing dates and sample sizes are shown; credit/adjustment frequency is not available without structured linkage.",
             },
             "ordered": {"totals_by_currency": totals(ordered_groups), "by_supplier": _serialize_groups(ordered_groups)},
             "invoiced": {"totals_by_currency": totals(invoiced_groups), "by_supplier": _serialize_groups(invoiced_groups)},
