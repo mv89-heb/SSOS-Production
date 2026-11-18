@@ -1,28 +1,23 @@
 from datetime import date, datetime, time, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import and_, or_, select
 
 from app.extensions import db
-from app.models.order import (
-    Order,
-    STATUS_COMPLETED,
-    STATUS_SENT,
-)
+from app.models.order import Order, STATUS_COMPLETED, STATUS_SENT
 from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.services.inventory_calendar_service import InventoryCalendarService
 
 
 class OrderHistoryForecastService:
-    """Forecast supplier order quantities from issued operational orders only.
+    """Forecast from supplier-issued orders, normalized to the product stock unit.
 
-    Draft/cancelled orders and physical stock counts are deliberately excluded.
-    Quantities remain in the product's recorded order unit; this service never
-    guesses carton conversions.
+    Draft/cancelled/internal orders and physical stock counts are excluded.
+    Carton quantities are converted using the pack-size snapshot captured on
+    each order line; missing or inconsistent conversion data blocks a suggestion.
     """
 
-    # Only orders actually sent to the supplier (or completed) represent placed demand.
     INCLUDED_STATUSES = (STATUS_SENT, STATUS_COMPLETED)
 
     def __init__(self, tenant_id: int):
@@ -31,6 +26,16 @@ class OrderHistoryForecastService:
     @staticmethod
     def _week_start(value: date) -> date:
         return value - timedelta(days=value.weekday())
+
+    @staticmethod
+    def _positive_pack_size(value):
+        if isinstance(value, bool):
+            return None
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        return parsed if parsed > 0 else None
 
     def supplier_forecast(
         self,
@@ -92,6 +97,7 @@ class OrderHistoryForecastService:
         product_meta: dict[int, dict] = {}
         order_ids: dict[int, set[int]] = {}
         order_weeks: dict[int, set[date]] = {}
+        conversion_issues: dict[int, int] = {}
 
         for order, item, product in rows:
             effective_date = order.planned_order_date or (
@@ -101,22 +107,50 @@ class OrderHistoryForecastService:
                 continue
 
             product_id = int(item.product_id)
-            quantity = Decimal(str(item.quantity or 0))
+            snapshot = item.product_snapshot if isinstance(item.product_snapshot, dict) else {}
+            stock_unit = str(snapshot.get("stock_unit") or product.unit or "יחידה לא הוגדרה").strip()
+            if product_id not in product_meta:
+                product_meta[product_id] = {
+                    "product_id": product_id,
+                    "product_name": product.name,
+                    "unit": stock_unit,
+                    "units_per_carton": product.units_per_carton,
+                }
+                weekly_quantities[product_id] = {}
+                conversion_issues[product_id] = 0
+            elif product_meta[product_id]["unit"] != stock_unit:
+                conversion_issues[product_id] += 1
+                continue
+
+            try:
+                quantity = Decimal(str(item.quantity or 0))
+            except (InvalidOperation, TypeError, ValueError):
+                conversion_issues[product_id] += 1
+                continue
             if not quantity.is_finite() or quantity <= 0:
                 continue
 
+            quantity_unit = snapshot.get("quantity_unit")
+            ordered_unit = str(snapshot.get("unit") or "").strip()
+            is_carton_quantity = quantity_unit == "carton" or (
+                quantity_unit in (None, "") and ordered_unit == "קרטון"
+            )
+            if is_carton_quantity:
+                pack_size = self._positive_pack_size(
+                    snapshot.get("units_per_carton") or product.units_per_carton
+                )
+                if pack_size is None:
+                    conversion_issues[product_id] += 1
+                    continue
+                quantity *= Decimal(pack_size)
+            elif quantity_unit not in (None, ""):
+                conversion_issues[product_id] += 1
+                continue
+
             week = self._week_start(effective_date)
-            weekly_quantities.setdefault(product_id, {})
             weekly_quantities[product_id][week] = (
                 weekly_quantities[product_id].get(week, Decimal("0")) + quantity
             )
-            snapshot = item.product_snapshot if isinstance(item.product_snapshot, dict) else {}
-            product_meta[product_id] = {
-                "product_id": product_id,
-                "product_name": product.name,
-                "unit": snapshot.get("unit") or product.unit or "יחידה לא הוגדרה",
-                "units_per_carton": product.units_per_carton,
-            }
             order_ids.setdefault(product_id, set()).add(order.id)
             order_weeks.setdefault(product_id, set()).add(week)
 
@@ -139,12 +173,21 @@ class OrderHistoryForecastService:
                 1 for week in normal_week_starts
                 if weekly.get(week, Decimal("0")) > 0
             )
+            has_unit_issues = conversion_issues.get(product_id, 0) > 0
             enough_history = (
-                observed_orders >= 2
+                not has_unit_issues
+                and observed_orders >= 2
                 and observed_weeks >= 2
                 and observed_normal_weeks >= 1
             )
             recommended = normal_average * target_multiplier if enough_history else Decimal("0")
+            if has_unit_issues:
+                readiness_reason = "unit_conversion_requires_review"
+            elif not enough_history:
+                readiness_reason = "insufficient_order_history"
+            else:
+                readiness_reason = None
+
             result.append({
                 **product_meta[product_id],
                 "order_count": observed_orders,
@@ -152,6 +195,7 @@ class OrderHistoryForecastService:
                 "normal_weeks_with_orders": observed_normal_weeks,
                 "normal_weeks_in_period": len(normal_week_starts),
                 "boosted_weeks_in_period": len(boosted_week_starts),
+                "unit_conversion_issues": conversion_issues.get(product_id, 0),
                 "normal_weekly_average": round(float(normal_average), 3),
                 "boosted_weekly_forecast": round(float(normal_average * uplift), 3),
                 "average_weekly_forecast": round(float(
@@ -165,7 +209,7 @@ class OrderHistoryForecastService:
                 "recommended_quantity": round(float(recommended), 3),
                 "target_week_multiplier": float(target_multiplier),
                 "data_ready": enough_history,
-                "readiness_reason": None if enough_history else "insufficient_order_history",
+                "readiness_reason": readiness_reason,
             })
 
         result.sort(
@@ -180,7 +224,8 @@ class OrderHistoryForecastService:
             "period": {"start_date": start_date.isoformat(), "end_date": end_date.isoformat()},
             "target_date": target_date.isoformat(),
             "source": "issued_operational_orders",
-            "excluded_statuses": ["draft", "cancelled"],
+            "quantity_basis": "product_stock_unit",
+            "excluded_statuses": ["draft", "cancelled", "submitted", "approved"],
             "seasonality": {
                 "cycle_weeks": cycle_weeks,
                 "normal_weeks": normal_weeks_per_cycle,
