@@ -515,3 +515,84 @@ def test_delivery_note_supports_sequential_partial_receipts_and_blocks_over_rece
     )
     assert blocked.status_code == 409
     assert db.session.get(Product, product_id).current_stock == 5
+
+
+
+def test_manual_delivery_note_line_correction_recalculates_and_posts_with_operator_notes(
+    logged_in_client_a, logged_in_client_b, db, make_order
+):
+    response, supplier_id, product_id = make_order(
+        logged_in_client_a, quantity=5, price=10.0
+    )
+    assert response.status_code == 201, response.get_json()
+    order = db.session.get(Order, response.get_json()["order"]["id"])
+    order.status = STATUS_SENT
+    product = db.session.get(Product, product_id)
+    product.unit = "יחידה"
+    product.current_stock = 0
+    db.session.commit()
+    order_item = OrderItem.query.filter_by(
+        tenant_id=order.tenant_id, order_id=order.id, product_id=product_id
+    ).one()
+    user = User.query.filter_by(email="admin@acme.test").one()
+    analysis = _analysis(db, user, "delivery-note-manual-fix.pdf", "DELIVERY_NOTE", {
+        "document_type": "DELIVERY_NOTE",
+        "document_number": "DN-MANUAL-FIX-001",
+        "document_date": "2026-11-08",
+        "supplier_matching": {"supplier_id": supplier_id, "decision": "AUTO_MATCH"},
+        "items": [{
+            "description": "Test Product",
+            "quantity": None,
+            "unit": "קרטון",
+            "product_matching": {
+                "best_match": {
+                    "product_id": product_id,
+                    "confidence": 0.99,
+                    "decision": "AUTO_MATCH",
+                },
+            },
+        }],
+    })
+
+    compared = logged_in_client_a.post(
+        f"/api/document-intelligence/{analysis.id}/compare-order",
+        json={"order_id": order.id},
+    )
+    assert compared.status_code == 200, compared.get_json()
+    assert compared.get_json()["reconciliation"]["review_count"] == 1
+
+    cross_tenant = logged_in_client_b.patch(
+        f"/api/document-intelligence/{analysis.id}/delivery-note-lines",
+        json={"lines": [{"line_index": 0, "quantity": 2, "unit": "יחידה"}]},
+    )
+    assert cross_tenant.status_code == 404
+
+    invalid_quantity = logged_in_client_a.patch(
+        f"/api/document-intelligence/{analysis.id}/delivery-note-lines",
+        json={"lines": [{"line_index": 0, "quantity": 0, "unit": "יחידה"}]},
+    )
+    assert invalid_quantity.status_code == 400
+
+    corrected = logged_in_client_a.patch(
+        f"/api/document-intelligence/{analysis.id}/delivery-note-lines",
+        json={
+            "lines": [{"line_index": 0, "quantity": 2, "unit": "יחידה"}],
+            "notes": "אריזה פגומה בחלק מהאספקה; לבדוק מול הספק",
+        },
+    )
+    assert corrected.status_code == 200, corrected.get_json()
+    line = corrected.get_json()["reconciliation"]["lines"][0]
+    assert line["status"] == "MATCH"
+    assert line["flags"] == ["PARTIAL_DELIVERY"]
+
+    posted = logged_in_client_a.post(
+        f"/api/document-intelligence/{analysis.id}/apply-delivery-note",
+        json={},
+    )
+    assert posted.status_code == 201, posted.get_json()
+    receipt = Receipt.query.filter_by(order_id=order.id).one()
+    assert receipt.items[0].quantity == 2
+    assert "אריזה פגומה" in receipt.notes
+    saved = db.session.get(DocumentAnalysis, analysis.id)
+    assert saved.extracted_data["items"][0]["manual_correction"]["quantity"] is True
+    assert saved.extracted_data["items"][0]["manual_correction"]["unit"] is True

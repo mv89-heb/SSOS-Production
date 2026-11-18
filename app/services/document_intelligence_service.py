@@ -623,6 +623,99 @@ class DocumentIntelligenceService:
             db.session.rollback()
             raise
 
+
+    def correct_delivery_note_lines(self, analysis_id: int, payload: dict):
+        """Apply operator-confirmed quantity/unit corrections and rerun PO reconciliation."""
+        PermissionService.require_role_at_least("manager")
+        if not isinstance(payload, dict):
+            raise BadRequest("Correction payload must be an object")
+        row = DocumentAnalysis.query.filter_by(
+            tenant_id=self.tenant_id, id=analysis_id
+        ).with_for_update().first()
+        if row is None:
+            raise NotFound("Document analysis not found")
+        if row.status != "ANALYZED" or row.applied_at:
+            raise Conflict("Delivery-note lines can only be corrected before posting")
+        data = dict(row.extracted_data) if isinstance(row.extracted_data, dict) else {}
+        if str(data.get("document_type") or row.document_type or "").upper() != "DELIVERY_NOTE":
+            raise BadRequest("Only delivery notes support line corrections")
+        reconciliation = data.get("order_reconciliation")
+        if not isinstance(reconciliation, dict) or not reconciliation.get("order_id"):
+            raise Conflict("Compare the delivery note with a purchase order before correcting lines")
+        raw_corrections = payload.get("lines", [])
+        if not isinstance(raw_corrections, list) or len(raw_corrections) > 200:
+            raise BadRequest("Provide up to 200 line corrections")
+        if not raw_corrections and "notes" not in payload:
+            raise BadRequest("Provide line corrections or operator notes")
+        extracted_items = data.get("items") if isinstance(data.get("items"), list) else []
+        compared_lines = reconciliation.get("lines") if isinstance(reconciliation.get("lines"), list) else []
+        by_index = {
+            line.get("line_index"): line
+            for line in compared_lines if isinstance(line, dict)
+        }
+        seen = set()
+        changed_indexes = []
+        for correction in raw_corrections:
+            if not isinstance(correction, dict):
+                raise BadRequest("Each line correction must be an object")
+            index = correction.get("line_index")
+            if isinstance(index, bool) or not isinstance(index, int) or index < 0 or index >= len(extracted_items):
+                raise BadRequest("Invalid delivery-note line index")
+            if index in seen:
+                raise BadRequest("Duplicate delivery-note line correction")
+            seen.add(index)
+            compared = by_index.get(index)
+            if not isinstance(compared, dict) or not compared.get("matched") or not compared.get("order_item_id"):
+                raise Conflict("Only lines already matched to a purchase-order item can be corrected")
+            order_item = OrderItem.query.filter_by(
+                tenant_id=self.tenant_id,
+                order_id=reconciliation["order_id"],
+                id=compared["order_item_id"],
+            ).first()
+            if order_item is None:
+                raise NotFound("Matched purchase-order line not found")
+            try:
+                quantity = Decimal(str(correction.get("quantity")))
+            except (InvalidOperation, TypeError, ValueError):
+                raise BadRequest("Corrected quantity must be a valid positive number")
+            if not quantity.is_finite() or quantity <= 0 or quantity > Decimal("100000"):
+                raise BadRequest("Corrected quantity must be between 0 and 100000")
+            unit = correction.get("unit")
+            if not isinstance(unit, str) or not unit.strip() or len(unit.strip()) > 50:
+                raise BadRequest("A valid unit is required for every corrected line")
+            item = dict(extracted_items[index])
+            item["quantity"] = float(quantity)
+            item["unit"] = unit.strip()
+            item["manual_correction"] = {
+                "quantity": True,
+                "unit": True,
+                "corrected_by": self.user_id,
+                "corrected_at": datetime.now(timezone.utc).isoformat(),
+            }
+            extracted_items[index] = item
+            changed_indexes.append(index)
+
+        notes = payload.get("notes")
+        if notes is not None:
+            if not isinstance(notes, str) or len(notes) > 1000:
+                raise BadRequest("Delivery-note notes must be text up to 1000 characters")
+            data["operator_notes"] = notes.strip() or None
+        data["items"] = extracted_items
+        row.extracted_data = data
+        db.session.flush()
+        updated_row, updated_reconciliation = self.compare_with_order(
+            analysis_id,
+            int(reconciliation["order_id"]),
+            confirm_supplier=reconciliation.get("supplier_check") == "MATCH_MANUAL",
+        )
+        AuditService.log_event(
+            self.tenant_id, self.user_id, "document.delivery_note_lines_corrected",
+            f"Delivery-note lines corrected for {row.filename}",
+            {"analysis_id": row.id, "line_indexes": changed_indexes},
+        )
+        db.session.commit()
+        return updated_row, updated_reconciliation
+
     def compare_with_order(self, analysis_id: int, order_id: int, confirm_supplier: bool = False):
         """Compare an analyzed delivery note/invoice with one tenant-scoped purchase order."""
         PermissionService.require_role_at_least("manager")
@@ -881,7 +974,7 @@ class DocumentIntelligenceService:
         receipt_payload = {
             "receipt_number": receipt_number,
             "received_at": document_date if document_date else None,
-            "notes": f"נוצר מסריקת תעודת משלוח: {row.filename}",
+            "notes": f"נוצר מסריקת תעודת משלוח: {row.filename}" + (f" | הערות מפעיל: {data.get('operator_notes').strip()}" if isinstance(data.get("operator_notes"), str) and data.get("operator_notes").strip() else ""),
             "items": receipt_items,
         }
         receipt, replayed = ReceiptService(self.tenant_id).create_receipt(

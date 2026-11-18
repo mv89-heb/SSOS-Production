@@ -80,7 +80,7 @@ function SearchableSelect({ value, onChange, options, placeholder, disabled = fa
 export default function DocumentIntelligencePage() {
   const inputRef = useRef<HTMLInputElement>(null); const queryClient = useQueryClient();
   const { data: products = [] } = useProducts(undefined, true); const { data: suppliers = [] } = useSuppliers(true);
-  const [analyses, setAnalyses] = useState<DocumentAnalysis[]>([]); const [orders, setOrders] = useState<Array<{ id: number; order_number: string; supplier_name?: string; status?: string }>>([]); const [selectedOrderId, setSelectedOrderId] = useState(""); const [confirmSupplier, setConfirmSupplier] = useState(false); const [allowPriceUpdates, setAllowPriceUpdates] = useState(false); const [documentNumber, setDocumentNumber] = useState(""); const [documentDate, setDocumentDate] = useState(""); const [invoiceAmount, setInvoiceAmount] = useState(""); const [selectedId, setSelectedId] = useState<number | null>(null); const [mappings, setMappings] = useState<Record<number, Mapping>>({}); const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set()); const [newProductDrafts, setNewProductDrafts] = useState<Record<number, { open: boolean; name: string; supplier_id: number | string; supplier_sku: string; barcode: string; unit: string; units_per_carton: number | string; current_price: number | string }>>({}); const [progress, setProgress] = useState<UploadProgress[]>([]); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [now, setNow] = useState(() => Date.now());
+  const [analyses, setAnalyses] = useState<DocumentAnalysis[]>([]); const [orders, setOrders] = useState<Array<{ id: number; order_number: string; supplier_name?: string; status?: string }>>([]); const [selectedOrderId, setSelectedOrderId] = useState(""); const [confirmSupplier, setConfirmSupplier] = useState(false); const [allowPriceUpdates, setAllowPriceUpdates] = useState(false); const [documentNumber, setDocumentNumber] = useState(""); const [documentDate, setDocumentDate] = useState(""); const [invoiceAmount, setInvoiceAmount] = useState(""); const [deliveryLineEdits, setDeliveryLineEdits] = useState<Record<number, { quantity: string; unit: string }>>({}); const [deliveryNoteNotes, setDeliveryNoteNotes] = useState(""); const [selectedId, setSelectedId] = useState<number | null>(null); const [mappings, setMappings] = useState<Record<number, Mapping>>({}); const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set()); const [newProductDrafts, setNewProductDrafts] = useState<Record<number, { open: boolean; name: string; supplier_id: number | string; supplier_sku: string; barcode: string; unit: string; units_per_carton: number | string; current_price: number | string }>>({}); const [progress, setProgress] = useState<UploadProgress[]>([]); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [now, setNow] = useState(() => Date.now());
   useEffect(() => { if (!busy) return; const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, [busy]);
   useEffect(() => {
     const requestedOrderId = new URLSearchParams(window.location.search).get("orderId");
@@ -137,6 +137,15 @@ export default function DocumentIntelligencePage() {
     setDocumentDate(data?.document_date || "");
     setInvoiceAmount(data?.totals?.total != null ? String(data.totals.total) : "");
   }, [analysis?.id, reconciliation?.order_id, data?.document_number, data?.document_date, data?.totals?.total]);
+  useEffect(() => {
+    if (!analysis) return;
+    const lines = reconciliation?.lines || [];
+    setDeliveryLineEdits(Object.fromEntries(lines.map((line) => [line.line_index, {
+      quantity: line.extracted_quantity == null ? "" : String(line.extracted_quantity),
+      unit: line.unit || "",
+    }])));
+    setDeliveryNoteNotes(data?.operator_notes || "");
+  }, [analysis?.id, reconciliation?.compared_at, data?.operator_notes]);
   useEffect(() => { setAllowPriceUpdates(false); }, [analysis?.id]);
   const productOptions = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name, "he")).map((p) => ({ id: p.id, name: p.name, extra: p.sku })), [products]);
   const supplierOptions = useMemo(() => [...suppliers].sort((a, b) => a.name.localeCompare(b.name, "he")).map((s) => ({ id: s.id, name: s.name, extra: s.customer_number })), [suppliers]);
@@ -244,12 +253,36 @@ export default function DocumentIntelligencePage() {
     return true;
   }
 
+  async function saveDeliveryNoteCorrections() {
+    if (!analysis || !reconciliation) return false;
+    const lines = reconciliation.lines
+      .filter((line) => line.matched)
+      .map((line) => ({
+        original: line,
+        line_index: line.line_index,
+        quantity: deliveryLineEdits[line.line_index]?.quantity ?? String(line.extracted_quantity ?? ""),
+        unit: deliveryLineEdits[line.line_index]?.unit ?? line.unit ?? "",
+      }))
+      .filter((line) => line.quantity !== "" && line.unit.trim() !== "" &&
+        (Number(line.quantity) !== Number(line.original.extracted_quantity) ||
+          line.unit.trim() !== (line.original.unit || "").trim()))
+      .map(({ original, ...line }) => line);
+    if (lines.length === 0 && deliveryNoteNotes === (data?.operator_notes || "")) return true;
+    const response = await apiClient.patch<{ success: boolean; analysis: DocumentAnalysis; reconciliation: OrderReconciliation }>(
+      `/api/document-intelligence/${analysis.id}/delivery-note-lines`,
+      { lines, notes: deliveryNoteNotes },
+    );
+    setAnalyses((all) => all.map((item) => item.id === response.data.analysis.id ? response.data.analysis : item));
+    return true;
+  }
+
   async function postDeliveryNote() {
     if (!analysis) return;
     if (!window.confirm("הפעולה תיצור קבלת סחורה ותעדכן את המלאי לפי הכמויות שבתעודה. להמשיך?")) return;
     setBusy(true); setError(""); setNotice("");
     try {
       await persistDocumentMetadata();
+      await saveDeliveryNoteCorrections();
       const result = await documentIntelligenceService.applyDeliveryNote(analysis.id);
       setAnalyses((all) => all.map((item) => item.id === result.analysis.id ? result.analysis : item));
       await queryClient.invalidateQueries({ queryKey: ["products"] });
@@ -439,8 +472,14 @@ export default function DocumentIntelligencePage() {
           <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">שורות לבדיקה</div><div className="font-bold">{reconciliation.review_count}</div></div>
         </div>
         {!["MATCH", "MATCH_MANUAL"].includes(reconciliation.supplier_check) && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">זהות הספק לא אומתה באופן חד-משמעי. יש לבדוק את הספק לפני רישום המסמך.</div>}
-        <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-right text-xs dark:bg-slate-900"><tr><th className="p-2">פריט במסמך</th><th className="p-2">מוצר בהזמנה</th><th className="p-2">{analysis.document_type === "DELIVERY_NOTE" ? "יתרה לקבלה" : "כמות בהזמנה"}</th><th className="p-2">כמות במסמך</th><th className="p-2">מחיר בהזמנה</th><th className="p-2">מחירון ספק</th><th className="p-2">מחיר במסמך</th><th className="p-2">סטטוס</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{reconciliation.lines.map((line) => <tr key={line.line_index}><td className="p-2">{line.description || "—"}</td><td className="p-2">{line.product_name || "לא זוהה"}</td><td className="p-2">{line.expected_quantity ?? "—"}</td><td className="p-2">{line.extracted_quantity ?? "—"}</td><td className="p-2">{line.expected_unit_price ?? "—"}</td><td className="p-2">{line.catalog_unit_price ?? "אין מחירון"}</td><td className="p-2">{line.extracted_unit_price ?? "—"}{line.catalog_price_delta != null && Math.abs(line.catalog_price_delta) > 0.01 ? <div className="text-xs font-semibold text-amber-700">פער מול מחירון: {line.catalog_price_delta > 0 ? "+" : ""}{line.catalog_price_delta}</div> : null}</td><td className="p-2"><span className={line.status === "MATCH" ? "font-bold text-emerald-700" : "font-bold text-amber-700"}>{line.flags?.includes("PARTIAL_DELIVERY") ? "אספקה חלקית" : line.status === "MATCH" ? "תואם" : line.status === "UNMATCHED" ? "לא נמצא" : "נדרשת בדיקה"}</span>{line.flags?.length ? <div className="mt-1 text-xs text-slate-500">{line.flags.join(", ")}</div> : null}</td></tr>)}</tbody></table></div>
-        {data?.document_type === "DELIVERY_NOTE" && <button type="button" onClick={postDeliveryNote} disabled={busy || reconciliation.unmatched_count > 0 || !["MATCH", "MATCH_MANUAL"].includes(reconciliation.supplier_check)} className="rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white disabled:opacity-50">אישור תעודה ורישום קבלת סחורה</button>}
+        <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-sm"><thead className="bg-slate-50 text-right text-xs dark:bg-slate-900"><tr><th className="p-2">פריט במסמך</th><th className="p-2">מוצר בהזמנה</th><th className="p-2">{analysis.document_type === "DELIVERY_NOTE" ? "יתרה לקבלה" : "כמות בהזמנה"}</th><th className="p-2">כמות במסמך</th>{analysis.document_type === "DELIVERY_NOTE" && <th className="p-2">יחידה</th>}<th className="p-2">מחיר בהזמנה</th><th className="p-2">מחירון ספק</th><th className="p-2">מחיר במסמך</th><th className="p-2">סטטוס</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{reconciliation.lines.map((line) => <tr key={line.line_index}><td className="p-2">{line.description || "—"}</td><td className="p-2">{line.product_name || "לא זוהה"}</td><td className="p-2">{line.expected_quantity ?? "—"}</td><td className="p-2">{analysis.document_type === "DELIVERY_NOTE" && line.matched ? <input aria-label={`כמות בשורה ${line.line_index + 1}`} type="number" min="0.001" step="0.001" value={deliveryLineEdits[line.line_index]?.quantity ?? String(line.extracted_quantity ?? "")} onChange={(event) => setDeliveryLineEdits((current) => ({ ...current, [line.line_index]: { quantity: event.target.value, unit: current[line.line_index]?.unit ?? line.unit ?? "" } }))} className="w-24 rounded border border-slate-200 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900" /> : line.extracted_quantity ?? "—"}</td>{analysis.document_type === "DELIVERY_NOTE" && <td className="p-2">{line.matched ? <input aria-label={`יחידת מידה בשורה ${line.line_index + 1}`} value={deliveryLineEdits[line.line_index]?.unit ?? line.unit ?? ""} onChange={(event) => setDeliveryLineEdits((current) => ({ ...current, [line.line_index]: { quantity: current[line.line_index]?.quantity ?? String(line.extracted_quantity ?? ""), unit: event.target.value } }))} className="w-24 rounded border border-slate-200 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900" /> : line.unit || "—"}</td>}<td className="p-2">{line.expected_unit_price ?? "—"}</td><td className="p-2">{line.catalog_unit_price ?? "אין מחירון"}</td><td className="p-2">{line.extracted_unit_price ?? "—"}{line.catalog_price_delta != null && Math.abs(line.catalog_price_delta) > 0.01 ? <div className="text-xs font-semibold text-amber-700">פער מול מחירון: {line.catalog_price_delta > 0 ? "+" : ""}{line.catalog_price_delta}</div> : null}</td><td className="p-2"><span className={line.status === "MATCH" ? "font-bold text-emerald-700" : "font-bold text-amber-700"}>{line.flags?.includes("PARTIAL_DELIVERY") ? "אספקה חלקית" : line.status === "MATCH" ? "תואם" : line.status === "UNMATCHED" ? "לא נמצא" : "נדרשת בדיקה"}</span>{line.flags?.length ? <div className="mt-1 text-xs text-slate-500">{line.flags.join(", ")}</div> : null}</td></tr>)}</tbody></table></div>
+        {data?.document_type === "DELIVERY_NOTE" && <>
+           <label className="block text-sm">הערות לקבלה (למשל חוסר, פריט פגום או אריזה פגומה)<textarea value={deliveryNoteNotes} onChange={(event) => setDeliveryNoteNotes(event.target.value)} maxLength={1000} rows={2} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
+           <div className="flex flex-wrap gap-2">
+             <button type="button" onClick={async () => { setBusy(true); setError(""); try { await saveDeliveryNoteCorrections(); setNotice("תיקוני הכמויות, יחידות המידה וההערות נשמרו וההשוואה חושבה מחדש."); } catch (err: any) { setError(err?.friendlyMessage || err?.response?.data?.message || "לא ניתן לשמור את תיקוני תעודת המשלוח"); } finally { setBusy(false); } }} disabled={busy || reconciliation.unmatched_count > 0 || !["MATCH", "MATCH_MANUAL"].includes(reconciliation.supplier_check)} className="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-3 font-bold text-indigo-700 disabled:opacity-50 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300">שמור תיקוני שורות והערות</button>
+             <button type="button" onClick={postDeliveryNote} disabled={busy || reconciliation.unmatched_count > 0 || reconciliation.review_count > 0 || !["MATCH", "MATCH_MANUAL"].includes(reconciliation.supplier_check)} className="rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white disabled:opacity-50">אישור תעודה ורישום קבלת סחורה</button>
+           </div>
+         </>}
         {data?.document_type === "INVOICE" && <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
           <h3 className="font-bold">רישום חשבונית ועדכון מחירון</h3>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
