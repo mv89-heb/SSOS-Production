@@ -242,6 +242,12 @@ class ProcurementBudgetService:
         }
 
     def evaluate_submission(self, order, user, override_reason=None):
+        initial = self.preview_order(order)
+        # Lock every matching budget in stable order, then recalculate commitments
+        # inside the same transaction to prevent concurrent submissions from
+        # both consuming the same remaining budget.
+        for budget_id in sorted(item["budget_id"] for item in initial["impacts"]):
+            self._get_budget(budget_id, for_update=True)
         impact = self.preview_order(order)
         if impact["blocks"]:
             reason = str(override_reason or "").strip()
