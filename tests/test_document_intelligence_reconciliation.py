@@ -581,6 +581,6 @@ def test_manual_delivery_note_line_correction_recalculates_and_posts_with_operat
     receipt = Receipt.query.filter_by(order_id=order.id).one()
     assert receipt.items[0].quantity == 2
     assert "אריזה פגומה" in receipt.notes
-    saved = DocumentAnalysis.query.get(analysis.id)
+    saved = db.session.get(DocumentAnalysis, analysis.id)
     assert saved.extracted_data["items"][0]["manual_correction"]["quantity"] is True
     assert saved.extracted_data["items"][0]["manual_correction"]["unit"] is True
