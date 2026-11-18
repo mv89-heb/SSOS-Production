@@ -232,6 +232,9 @@ class ReceiptService:
                 "order_id": order.id,
                 "order_number": order.order_number,
                 "item_count": len(parsed),
+                "physical_quantity_total": float(sum((line[0] for line in parsed.values()), Decimal("0"))),
+                "damaged_quantity_total": float(sum((line[1] for line in parsed.values()), Decimal("0"))),
+                "accepted_quantity_total": float(sum((line[0] - line[1] for line in parsed.values()), Decimal("0"))),
             },
         )
         return receipt, False
