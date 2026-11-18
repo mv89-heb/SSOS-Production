@@ -6,10 +6,8 @@ from sqlalchemy import and_, or_, select
 from app.extensions import db
 from app.models.order import (
     Order,
-    STATUS_APPROVED,
     STATUS_COMPLETED,
     STATUS_SENT,
-    STATUS_SUBMITTED,
 )
 from app.models.order_item import OrderItem
 from app.models.product import Product
@@ -24,12 +22,8 @@ class OrderHistoryForecastService:
     guesses carton conversions.
     """
 
-    INCLUDED_STATUSES = (
-        STATUS_SUBMITTED,
-        STATUS_APPROVED,
-        STATUS_SENT,
-        STATUS_COMPLETED,
-    )
+    # Only orders actually sent to the supplier (or completed) represent placed demand.
+    INCLUDED_STATUSES = (STATUS_SENT, STATUS_COMPLETED)
 
     def __init__(self, tenant_id: int):
         self.tenant_id = tenant_id
