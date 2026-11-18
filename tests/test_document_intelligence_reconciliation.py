@@ -605,9 +605,16 @@ def test_delivery_note_order_suggestions_rank_supplier_date_and_explicit_po_refe
     first_response, supplier_id, _ = make_order(
         logged_in_client_a, quantity=4, sku="SUGGEST-OLD", planned_order_date="2026-10-01"
     )
-    second_response, _, _ = make_order(
-        logged_in_client_a, quantity=2, sku="SUGGEST-NEAR", planned_order_date="2026-11-16"
-    )
+    second_product_response = logged_in_client_a.post("/api/catalog/products", json={
+        "supplier_id": supplier_id, "name": "Near-date product",
+        "sku": "SUGGEST-NEAR", "current_price": 10,
+    })
+    assert second_product_response.status_code == 201, second_product_response.get_json()
+    second_response = logged_in_client_a.post("/api/orders", json={
+        "supplier_id": supplier_id,
+        "planned_order_date": "2026-11-16",
+        "items": [{"product_id": second_product_response.get_json()["product"]["id"], "quantity": 2}],
+    })
     other_tenant_response, _, _ = make_order(
         logged_in_client_b, quantity=4, sku="SUGGEST-OTHER-TENANT"
     )
