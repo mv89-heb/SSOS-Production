@@ -9,6 +9,7 @@ from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.services.order_service import OrderService
+from app.services.procurement_budget_service import BudgetLimitExceeded
 from app.services.order_history_forecast_service import OrderHistoryForecastService
 from app.services.receipt_service import ReceiptService
 from app.services.ocr_service import OCRService, validate_upload, OCRProviderError
@@ -157,6 +158,8 @@ def duplicate_order(order_id):
             "currency": source.currency,
             "notes": source.notes,
             "planned_order_date": None,
+            "department": source.department,
+            "project": source.project,
             "items": [
                 {"product_id": item.product_id, "quantity": float(item.quantity)}
                 for item in source.order_items
@@ -215,9 +218,23 @@ def submit_order(order_id):
         PermissionService.require_permission("orders.edit")
     except HTTPException as exc:
         return _handle(exc)
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return _handle(BadRequest("Submit payload must be an object"))
     service = OrderService(tenant_id=current_user.tenant_id)
     try:
-        order = service.submit_order(current_user, order_id)
+        order = service.submit_order(
+            current_user, order_id,
+            budget_override_reason=payload.get("budget_override_reason"),
+        )
+    except BudgetLimitExceeded as exc:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "error": "budget_exceeded",
+            "message": exc.description,
+            "budget_impact": exc.budget_impact,
+        }), 409
     except HTTPException as exc:
         db.session.rollback()
         return _handle(exc)
