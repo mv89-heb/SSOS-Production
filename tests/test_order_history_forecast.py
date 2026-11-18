@@ -41,7 +41,7 @@ def test_supplier_forecast_uses_issued_orders_and_excludes_drafts(db, tenant_a_a
             order_number=f"HIST-{index}",
             supplier_name=supplier.name,
             status=STATUS_SUBMITTED,
-            planned_order_date=order_date,
+            planned_order_date=None if index == 3 else order_date,
             created_at=datetime.combine(order_date, datetime.min.time(), tzinfo=timezone.utc),
         )
         db.session.add(order)
