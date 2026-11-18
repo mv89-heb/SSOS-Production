@@ -335,3 +335,86 @@ def test_document_reference_text_cannot_be_applied_as_product_line(
     assert product.current_price == original_price
     db.session.refresh(analysis)
     assert analysis.extracted_data.get("applied_line_indexes", []) == []
+
+
+
+def test_delivery_note_uses_corrected_document_date_for_receipt(
+    logged_in_client_a, db, make_order
+):
+    response, supplier_id, product_id = make_order(logged_in_client_a)
+    assert response.status_code == 201, response.get_json()
+    order = db.session.get(Order, response.get_json()["order"]["id"])
+    order.status = STATUS_SENT
+    db.session.commit()
+    order_item = OrderItem.query.filter_by(
+        tenant_id=order.tenant_id, order_id=order.id, product_id=product_id
+    ).one()
+    product = db.session.get(Product, product_id)
+    user = User.query.filter_by(email="admin@acme.test").one()
+    analysis = _analysis(db, user, "delivery-note-dated.pdf", "DELIVERY_NOTE", {
+        "document_type": "DELIVERY_NOTE",
+        "document_number": "DN-DATED-001",
+        "document_date": "2026-11-07",
+        "supplier_matching": {"supplier_id": supplier_id, "decision": "AUTO_MATCH"},
+        "items": [{
+            "description": "Test Product",
+            "quantity": 1,
+            "unit": product.unit or "יחידה",
+        }],
+        "order_reconciliation": {
+            "order_id": order.id,
+            "supplier_check": "MATCH",
+            "lines": [{
+                "line_index": 0,
+                "matched": True,
+                "status": "MATCH",
+                "order_item_id": order_item.id,
+                "product_id": product_id,
+                "confidence": 0.99,
+                "flags": [],
+            }],
+        },
+    })
+
+    result = logged_in_client_a.post(
+        f"/api/document-intelligence/{analysis.id}/apply-delivery-note",
+        json={},
+    )
+    assert result.status_code == 201, result.get_json()
+    receipt = Receipt.query.filter_by(
+        tenant_id=order.tenant_id, order_id=order.id
+    ).one()
+    assert receipt.receipt_number == "DN-DATED-001"
+    assert receipt.received_at.date().isoformat() == "2026-11-07"
+
+
+def test_document_metadata_correction_is_tenant_scoped_and_validated(
+    logged_in_client_a, logged_in_client_b, db
+):
+    user = User.query.filter_by(email="admin@acme.test").one()
+    analysis = _analysis(db, user, "metadata-correction.pdf", "DELIVERY_NOTE", {
+        "document_type": "DELIVERY_NOTE",
+        "document_number": "OLD-NUMBER",
+        "document_date": "2026-11-01",
+        "items": [],
+    })
+    corrected = logged_in_client_a.patch(
+        f"/api/document-intelligence/{analysis.id}/metadata",
+        json={"document_number": "DN-CORRECTED-42", "document_date": "2026-11-08"},
+    )
+    assert corrected.status_code == 200, corrected.get_json()
+    extracted = corrected.get_json()["analysis"]["extracted_data"]
+    assert extracted["document_number"] == "DN-CORRECTED-42"
+    assert extracted["document_date"] == "2026-11-08"
+
+    invalid = logged_in_client_a.patch(
+        f"/api/document-intelligence/{analysis.id}/metadata",
+        json={"document_date": "2026-13-45"},
+    )
+    assert invalid.status_code == 400
+
+    hidden = logged_in_client_b.patch(
+        f"/api/document-intelligence/{analysis.id}/metadata",
+        json={"document_number": "CROSS-TENANT"},
+    )
+    assert hidden.status_code == 404
