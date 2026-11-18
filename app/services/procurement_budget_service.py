@@ -191,22 +191,27 @@ class ProcurementBudgetService:
         )
         order_amount = Decimal(str(order.final_total or 0))
         currency = (order.currency or "ILS").upper()
+        missing_scopes = []
         for scope_type in ("department", "project"):
+            period_budgets = []
+            for period_type in ("weekly", "monthly"):
+                period_start = self._period_start_for(period_type, order_date)
+                period_budgets.extend(ProcurementBudget.query.filter(
+                    ProcurementBudget.tenant_id == self.tenant_id,
+                    ProcurementBudget.active.is_(True),
+                    ProcurementBudget.scope_type == scope_type,
+                    ProcurementBudget.period_type == period_type,
+                    ProcurementBudget.period_start == period_start,
+                    ProcurementBudget.currency == currency,
+                ).all())
             scope_value = getattr(order, scope_type, None)
-            if not scope_value or not str(scope_value).strip():
-                continue
-            normalized_scope = str(scope_value).strip().casefold()
-            budgets = ProcurementBudget.query.filter(
-                ProcurementBudget.tenant_id == self.tenant_id,
-                ProcurementBudget.active.is_(True),
-                ProcurementBudget.scope_type == scope_type,
-                func.lower(ProcurementBudget.scope_value) == normalized_scope,
-                ProcurementBudget.currency == currency,
-            ).all()
-            for budget in budgets:
-                period_start = self._period_start_for(budget.period_type, order_date)
-                if budget.period_start != period_start:
-                    continue
+            matching = [
+                budget for budget in period_budgets
+                if scope_value and budget.scope_value.casefold() == str(scope_value).strip().casefold()
+            ]
+            if period_budgets and not matching:
+                missing_scopes.append(scope_type)
+            for budget in matching:
                 spent = self._spent_for_budget(budget, exclude_order_id=order.id)
                 projected = spent + order_amount
                 budget_amount = Decimal(str(budget.amount))
@@ -227,6 +232,9 @@ class ProcurementBudgetService:
                     "enforcement_mode": budget.enforcement_mode,
                 })
         impacts.sort(key=lambda item: (item["scope_type"], item["scope_value"]))
+        blocks = [item for item in impacts if item["over_budget"] and item["enforcement_mode"] == "block"]
+        warnings = [item for item in impacts if item["over_budget"] and item["enforcement_mode"] == "warn"]
+        assignment_required = bool(missing_scopes)
         return {
             "order_id": order.id,
             "order_number": order.order_number,
@@ -236,32 +244,51 @@ class ProcurementBudgetService:
             "budget_date": order_date.isoformat(),
             "impacts": impacts,
             "over_budget": any(item["over_budget"] for item in impacts),
-            "blocked": any(item["over_budget"] and item["enforcement_mode"] == "block" for item in impacts),
-            "warnings": [item for item in impacts if item["over_budget"] and item["enforcement_mode"] == "warn"],
-            "blocks": [item for item in impacts if item["over_budget"] and item["enforcement_mode"] == "block"],
+            "assignment_required": assignment_required,
+            "missing_scopes": missing_scopes,
+            "blocked": bool(blocks or assignment_required),
+            "warnings": warnings,
+            "blocks": blocks,
         }
 
+    def _active_budget_ids_for_order(self, order):
+        order_date = order.planned_order_date or (
+            order.created_at.date() if order.created_at else datetime.now(timezone.utc).date()
+        )
+        ids = set()
+        for period_type in ("weekly", "monthly"):
+            period_start = self._period_start_for(period_type, order_date)
+            ids.update(db.session.scalars(select(ProcurementBudget.id).where(
+                ProcurementBudget.tenant_id == self.tenant_id,
+                ProcurementBudget.active.is_(True),
+                ProcurementBudget.period_type == period_type,
+                ProcurementBudget.period_start == period_start,
+                ProcurementBudget.currency == (order.currency or "ILS").upper(),
+            )).all())
+        return sorted(ids)
+
     def evaluate_submission(self, order, user, override_reason=None):
-        initial = self.preview_order(order)
-        # Lock every matching budget in stable order, then recalculate commitments
-        # inside the same transaction to prevent concurrent submissions from
-        # both consuming the same remaining budget.
-        for budget_id in sorted(item["budget_id"] for item in initial["impacts"]):
+        # Lock all active budgets for this period/currency in stable order, then
+        # recalculate commitments inside the transaction to prevent concurrent
+        # submissions from consuming the same remaining budget.
+        for budget_id in self._active_budget_ids_for_order(order):
             self._get_budget(budget_id, for_update=True)
         impact = self.preview_order(order)
-        if impact["blocks"]:
+        if impact["blocked"]:
             reason = str(override_reason or "").strip()
             if not reason:
                 raise BudgetLimitExceeded(impact)
             if user.role not in (ROLE_MANAGER, ROLE_ADMIN):
-                raise Forbidden("Only a manager or administrator can override a budget block")
+                raise Forbidden("Only a manager or administrator can override a budget block or missing budget assignment")
             if len(reason) > 1000:
                 raise BadRequest("Budget override reason is too long")
+            event = "order.budget_assignment_override" if impact["assignment_required"] else "order.budget_override"
             AuditService.log_event(
-                self.tenant_id, user.id, "order.budget_override",
+                self.tenant_id, user.id, event,
                 f"Budget override for order {order.order_number}",
                 {"order_id": order.id, "order_number": order.order_number,
                  "reason": reason, "budget_impact": impact["blocks"],
+                 "missing_scopes": impact["missing_scopes"],
                  "overridden_by": user.id},
             )
         elif impact["warnings"]:
