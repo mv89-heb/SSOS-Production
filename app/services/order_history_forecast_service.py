@@ -141,12 +141,21 @@ class OrderHistoryForecastService:
             )
             observed_orders = len(order_ids.get(product_id, set()))
             observed_weeks = len(order_weeks.get(product_id, set()))
-            enough_history = observed_orders >= 2 and observed_weeks >= 2 and bool(normal_week_starts)
+            observed_normal_weeks = sum(
+                1 for week in normal_week_starts
+                if weekly.get(week, Decimal("0")) > 0
+            )
+            enough_history = (
+                observed_orders >= 2
+                and observed_weeks >= 2
+                and observed_normal_weeks >= 1
+            )
             recommended = normal_average * target_multiplier if enough_history else Decimal("0")
             result.append({
                 **product_meta[product_id],
                 "order_count": observed_orders,
                 "weeks_with_orders": observed_weeks,
+                "normal_weeks_with_orders": observed_normal_weeks,
                 "normal_weeks_in_period": len(normal_week_starts),
                 "boosted_weeks_in_period": len(boosted_week_starts),
                 "normal_weekly_average": round(float(normal_average), 3),
