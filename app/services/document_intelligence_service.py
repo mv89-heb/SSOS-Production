@@ -62,6 +62,14 @@ SYSTEM_INSTRUCTION = """You extract structured procurement data from supplier do
 SUPPLIER IDENTIFICATION RULES: Supplier identity is a required extraction goal, not an optional guess. Inspect the entire document, especially the issuer/header/logo area, company name, tax/VAT registration number, phone/address, invoice/payment details, and repeated page headers/footers. Extract the company that ISSUED the invoice, delivery note, or price list as supplier; do not confuse it with the recipient/customer (for this organization, often ישיבת אוהבי ירושלים / ראשית), a delivery destination, a bank, a payment processor, or a brand/manufacturer mentioned only in a product description. Prefer the clearest visible legal/trading name and include the visible supplier/customer account number in customer_number when present. Preserve Hebrew spelling and meaningful company suffixes; do not replace a visible supplier name with a guessed catalog name. If the document-level supplier is visible, populate supplier.name even when supplier_sections is also returned. For a single-supplier document, repeat the same identified supplier in the single supplier_sections entry. If the issuer cannot be established from visible evidence, leave supplier.name empty rather than inventing one, and still extract all other fields.\n\nRECIPIENT RULES: Identify the document recipient/customer exactly when visible. Keep supplier and recipient as separate entities. For this organization, preserve the visible name and address rather than inferring or normalizing it away.\n\nMULTI-SUPPLIER RULES: A single uploaded document can contain multiple suppliers, including multiple suppliers on one page. You MUST identify every distinct supplier context visible in the document and return one supplier_sections entry for each. Assign every extracted line item to exactly one supplier section. Use explicit supplier names, supplier/customer numbers, table headers, section headers, and unambiguous layout/context. Never assume the whole document belongs to the first supplier you see. Never merge two suppliers just because they sell similar products. If a line's supplier cannot be established from visible evidence, keep that line in a supplier section with an empty supplier object rather than guessing. For a supplier that continues across pages, keep it as the same supplier when the identity is clear.\n\nLINE-ITEM EXTRACTION RULES: Return only actual product rows from the item table. Never turn delivery-note numbers, invoice numbers, dates, headers/footers, recipient details, payment instructions, subtotals, tax totals, or grand totals into product items. Text such as "תעודת משלוח מספר 90190 מיום 15/10/2026" is document-reference metadata, not a product. Never invent a default quantity such as 1; if no quantity is visibly printed, omit quantity. If a line cannot be distinguished from header/reference text, do not include it as a product item."""
 
 
+def _money_value(value):
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("0")
+    return parsed if parsed.is_finite() else Decimal("0")
+
+
 class DocumentIntelligenceService:
     ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".svg"}
     ALLOWED_MIMES = {"application/pdf", "image/png", "image/jpeg", "image/webp", "image/svg+xml"}
@@ -751,7 +759,9 @@ class DocumentIntelligenceService:
             if quantity_delta is None:
                 flags.append("QUANTITY_MISSING")
             elif document_type == "DELIVERY_NOTE":
-                if quantity_delta > 0.001:
+                if _money_value(extracted_quantity) <= 0:
+                    flags.append("QUANTITY_INVALID")
+                elif quantity_delta > 0.001:
                     flags.append("OVER_RECEIPT")
                 elif quantity_delta < -0.001:
                     # A short delivery is valid: the remaining quantity stays
@@ -759,12 +769,13 @@ class DocumentIntelligenceService:
                     flags.append("PARTIAL_DELIVERY")
             elif abs(quantity_delta) > 0.001:
                 flags.append("QUANTITY_VARIANCE")
-            if price_delta is None:
-                flags.append("PRICE_MISSING")
-            elif abs(price_delta) > 0.01:
-                flags.append("PRICE_VARIANCE")
-            if catalog_price_delta is not None and abs(catalog_price_delta) > 0.01:
-                flags.append("CATALOG_PRICE_VARIANCE")
+            if document_type != "DELIVERY_NOTE":
+                if price_delta is None:
+                    flags.append("PRICE_MISSING")
+                elif abs(price_delta) > 0.01:
+                    flags.append("PRICE_VARIANCE")
+                if catalog_price_delta is not None and abs(catalog_price_delta) > 0.01:
+                    flags.append("CATALOG_PRICE_VARIANCE")
             if item.get("unit") and order_line.product and order_line.product.unit:
                 if ProductMatchingService.normalize(item.get("unit")) != ProductMatchingService.normalize(order_line.product.unit):
                     flags.append("UNIT_VARIANCE")
