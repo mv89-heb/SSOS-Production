@@ -104,6 +104,7 @@ export default function NewOrderPage() {
     .join(" · ");
   const hasSelectedLines = lines.some((line) => line.product_id !== "");
   const selectedCount = lines.filter((line) => line.product_id !== "").length;
+  const unitConversionReviewCount = supplierHistoryForecast?.products.filter((item) => item.unit_conversion_issues > 0).length ?? 0;
   const historySuggestions = useMemo(() => {
     if (!products || !supplierHistoryForecast) return [];
     return supplierHistoryForecast.products.filter((item) =>
@@ -282,11 +283,16 @@ export default function NewOrderPage() {
               <h2 className="font-extrabold text-slate-950 dark:text-white">הצעות לפי היסטוריית הזמנות</h2>
               <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
                 מבוסס על הזמנות שנשלחו לספק או הושלמו במערכת בלבד. טיוטות, אישורים פנימיים, ביטולים וספירות מלאי אינם נכללים.
-                המחזור הוא 3 שבועות רגילים ושבוע רביעי בתוספת 40%.
+                הכמויות מנורמלות ליחידת המלאי של המוצר; שורות קרטון מומרות לפי גודל האריזה שנשמר בהזמנה. המחזור הוא 3 שבועות רגילים ושבוע רביעי בתוספת 40%.
               </p>
               <p className="mt-1 text-[11px] text-slate-500">
                 שבוע היעד מחושב לפי מועד ההזמנה בתוספת זמן האספקה של הספק: {forecastTargetDate}.
               </p>
+              {unitConversionReviewCount > 0 && (
+                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                  {unitConversionReviewCount} מוצרים כוללים בהיסטוריה שורות קרטון ללא נתון המרה אמין או יחידות לא עקביות. לא תוצג עבורם המלצת כמות עד לתיקון נתוני היחידות.
+                </p>
+              )}
               {historyForecastLoading || productsLoading ? (
                 <p className="mt-3 text-sm text-slate-500">טוען היסטוריית הזמנות...</p>
               ) : historyForecastError || productsError ? (
@@ -316,7 +322,7 @@ export default function NewOrderPage() {
                 </div>
               ) : (
                 <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-                  אין עדיין מספיק היסטוריית הזמנות מאושרות לספק זה כדי להמליץ על כמויות. לא נשתמש ביתרות מלאי ישנות כתחליף.
+                  אין עדיין מוצרים עם היסטוריית הזמנות מספקת ויחידות מדידה תקינות כדי להמליץ על כמויות. לא נשתמש ביתרות מלאי ישנות כתחליף.
                 </p>
               )}
               {supplierHistoryForecast && (
