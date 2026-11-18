@@ -29,9 +29,10 @@ class InventoryCalendarService:
         """Read a bounded recurring boosted-week configuration."""
         def bounded_int(name, default, minimum, maximum):
             try:
-                return max(minimum, min(int(os.getenv(name, str(default))), maximum))
+                value = int(os.getenv(name, str(default)))
             except (TypeError, ValueError):
                 return default
+            return value if minimum <= value <= maximum else default
 
         try:
             uplift = Decimal(str(os.getenv("SSOS_BOOSTED_WEEK_MULTIPLIER", "1.4")))
