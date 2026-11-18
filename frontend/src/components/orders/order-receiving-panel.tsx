@@ -79,7 +79,7 @@ export function OrderReceivingPanel({ order }: { order: Order }) {
       return data.receipt;
     },
     onSuccess: async (receipt) => {
-      setMessage(`הקבלה ${receipt.receipt_number} נשמרה והמלאי עודכן.`);
+      setMessage(`הקבלה ${receipt.receipt_number} נשמרה. הכמות התקינה נוספה למלאי והכמות הפגומה הוחרגה.`);
       setQuantities({});
       setDamagedQuantities({});
       setDamageNotes({});
@@ -143,7 +143,7 @@ export function OrderReceivingPanel({ order }: { order: Order }) {
             <CheckCircle2 size={16} /> {createReceipt.isPending ? "שומר קבלה..." : "רישום קבלת סחורה"}
           </Button>
         </div>
-        {(receiptsQuery.data ?? []).length > 0 && <div className="space-y-2 border-t pt-3">{receiptsQuery.data!.map((receipt) => <div key={receipt.id} className="rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700"><div className="flex flex-wrap justify-between gap-2 font-bold"><span>{receipt.receipt_number}</span><span className="text-slate-500">{receipt.received_at ? new Date(receipt.received_at).toLocaleString("he-IL") : "ללא תאריך"}</span></div>{receipt.notes && <p className="mt-1 whitespace-pre-wrap text-slate-600 dark:text-slate-300">{receipt.notes}</p>}<p className="mt-1 text-xs text-slate-500">{receipt.items.length} שורות קבלה · {receipt.items.reduce((sum, item) => sum + Number(item.damaged_quantity ?? 0), 0)} פגומות</p></div>)}</div>}
+        {(receiptsQuery.data ?? []).length > 0 && <div className="space-y-2 border-t pt-3">{receiptsQuery.data!.map((receipt) => <div key={receipt.id} className="rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700"><div className="flex flex-wrap justify-between gap-2 font-bold"><span>{receipt.receipt_number}</span><span className="text-slate-500">{receipt.received_at ? new Date(receipt.received_at).toLocaleString("he-IL") : "ללא תאריך"}</span></div>{receipt.notes && <p className="mt-1 whitespace-pre-wrap text-slate-600 dark:text-slate-300">{receipt.notes}</p>}<p className="mt-1 text-xs text-slate-500">{receipt.items.length} שורות קבלה · {receipt.items.reduce((sum, item) => sum + Number(item.damaged_quantity ?? 0), 0)} פגומות</p>{receipt.items.filter((item) => Number(item.damaged_quantity ?? 0) > 0).map((item) => <p key={item.id} className="mt-1 text-xs text-amber-700">פריט {item.order_item_id}: {item.damaged_quantity} פגומות — {item.damage_notes || "ללא סיבת פגם"}</p>)}</div>)}</div>}
       </CardContent>
     </Card>
   );
