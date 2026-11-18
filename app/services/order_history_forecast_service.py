@@ -1,7 +1,7 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
-from sqlalchemy import Date, and_, cast, or_, select
+from sqlalchemy import and_, or_, select
 
 from app.extensions import db
 from app.models.order import (
@@ -97,8 +97,8 @@ class OrderHistoryForecastService:
                     ),
                     and_(
                         Order.planned_order_date.is_(None),
-                        cast(Order.created_at, Date) >= start_date,
-                        cast(Order.created_at, Date) <= end_date,
+                        Order.created_at >= datetime.combine(start_date, time.min),
+                        Order.created_at < datetime.combine(end_date + timedelta(days=1), time.min),
                     ),
                 ),
             )
@@ -144,10 +144,6 @@ class OrderHistoryForecastService:
         for product_id, weekly in weekly_quantities.items():
             normal_total = sum(
                 (weekly.get(week, Decimal("0")) for week in normal_week_starts),
-                Decimal("0"),
-            )
-            boosted_total = sum(
-                (weekly.get(week, Decimal("0")) for week in boosted_week_starts),
                 Decimal("0"),
             )
             normal_average = (
