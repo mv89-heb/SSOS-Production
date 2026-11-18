@@ -105,10 +105,11 @@ class OrderHistoryForecastService:
             weekly_quantities[product_id][week] = (
                 weekly_quantities[product_id].get(week, Decimal("0")) + quantity
             )
+            snapshot = item.product_snapshot if isinstance(item.product_snapshot, dict) else {}
             product_meta[product_id] = {
                 "product_id": product_id,
                 "product_name": product.name,
-                "unit": (item.product_snapshot or {}).get("unit") or product.unit or "יחידה לא הוגדרה",
+                "unit": snapshot.get("unit") or product.unit or "יחידה לא הוגדרה",
                 "units_per_carton": product.units_per_carton,
             }
             order_ids.setdefault(product_id, set()).add(order.id)
