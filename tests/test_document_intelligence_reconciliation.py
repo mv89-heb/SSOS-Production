@@ -519,7 +519,7 @@ def test_delivery_note_supports_sequential_partial_receipts_and_blocks_over_rece
 
 
 def test_manual_delivery_note_line_correction_recalculates_and_posts_with_operator_notes(
-    logged_in_client_a, db, make_order
+    logged_in_client_a, logged_in_client_b, db, make_order
 ):
     response, supplier_id, product_id = make_order(
         logged_in_client_a, quantity=5, price=10.0
