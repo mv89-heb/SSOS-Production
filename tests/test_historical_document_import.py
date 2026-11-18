@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from app.routes.historical_document_import import _date, _decimal, _norm, _supplier_from_extraction
+from app.routes.historical_document_import import _date, _decimal, _norm, _supplier_from_extraction, _supplier_key
 
 
 def test_historical_import_date_and_decimal_parsing_preserve_unknown_values():
@@ -188,3 +188,8 @@ def test_manual_historical_orders_are_isolated_and_preserve_unknown_units(logged
         "name": "בדיקת הזמנות ידניות 2026", "orders": [],
     })
     assert duplicate.status_code == 409
+
+
+def test_historical_supplier_key_handles_unique_initial_and_company_suffix():
+    assert _supplier_key("ר. שמאי") == _supplier_key("שמאי")
+    assert _supplier_key('פעמית בע"מ') == _supplier_key("פעמית")
