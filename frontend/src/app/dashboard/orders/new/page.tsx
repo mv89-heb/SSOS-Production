@@ -95,12 +95,13 @@ export default function NewOrderPage() {
   };
 
   const addSuggestedProduct = (productId: number, quantity: number) => {
+    const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
     const emptyIndex = lines.findIndex((line) => line.product_id === "");
     if (emptyIndex >= 0) {
-      updateLine(emptyIndex, { product_id: productId, quantity: Math.max(1, quantity) });
+      updateLine(emptyIndex, { product_id: productId, quantity: safeQuantity });
       return;
     }
-    setLines((prev) => [...prev, { product_id: productId, quantity: Math.max(1, quantity) }]);
+    setLines((prev) => [...prev, { product_id: productId, quantity: safeQuantity }]);
   };
 
   const handleSubmit = () => {
