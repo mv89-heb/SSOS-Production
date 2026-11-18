@@ -137,7 +137,7 @@ export default function DocumentIntelligencePage() {
     setPurchaseOrderNumber(data?.purchase_order_number || "");
     setDocumentDate(data?.document_date || "");
     setInvoiceAmount(data?.totals?.total != null ? String(data.totals.total) : "");
-  }, [analysis?.id, reconciliation?.order_id, data?.document_number, data?.document_date, data?.totals?.total]);
+  }, [analysis?.id, reconciliation?.order_id, data?.document_number, data?.purchase_order_number, data?.document_date, data?.totals?.total]);
   useEffect(() => {
     if (!analysis || !analysis.details_loaded || !["ANALYZED", "PARTIALLY_APPLIED"].includes(analysis.status) ||
       !["DELIVERY_NOTE", "INVOICE"].includes(analysis.document_type || "")) {
@@ -511,7 +511,7 @@ export default function DocumentIntelligencePage() {
               </div>
               <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">{candidate.supplier_name || "ספק לא ידוע"} · {candidate.status === "sent" ? "נשלחה" : candidate.status === "approved" ? "אושרה" : "הושלמה"}</div>
               <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-                {candidate.planned_order_date && <span>תאריך מתוכנן: {candidate.planned_order_date}</span>}
+                {candidate.context_order_date && <span>תאריך הזמנה: {candidate.context_order_date}</span>}
                 {candidate.date_delta_days != null && <span>פער תאריכים: {candidate.date_delta_days} ימים</span>}
                 {candidate.remaining_lines > 0 && <span>{candidate.remaining_lines} שורות פתוחות</span>}
               </div>
