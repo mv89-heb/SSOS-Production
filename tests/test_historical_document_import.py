@@ -138,3 +138,55 @@ def test_historical_import_batch_is_tenant_scoped(logged_in_client_a, logged_in_
 
     hidden = logged_in_client_b.get(f"/api/historical-document-import/batches/{batch_id}")
     assert hidden.status_code == 404
+
+
+def test_manual_historical_orders_are_isolated_and_preserve_unknown_units(logged_in_client_a, db):
+    from sqlalchemy import select, func
+    from app.models.historical_document_import import HistoricalImportBatch, HistoricalPurchaseOrder
+    from app.models.order import Order
+    from app.models.product import Product
+    from app.models.supplier import Supplier
+
+    from app.models.user import User
+    user = db.session.scalar(select(User).order_by(User.id.asc()))
+    assert user is not None
+    supplier = Supplier(tenant_id=user.tenant_id, name="פעמית")
+    db.session.add(supplier)
+    db.session.flush()
+    product = Product(
+        tenant_id=supplier.tenant_id, supplier_id=supplier.id,
+        name="מגבת נייר 165מ'", sku="MANUAL-HIST-001",
+        unit="יחידה", units_per_carton=None, active=True,
+    )
+    db.session.add(product)
+    db.session.commit()
+
+    response = logged_in_client_a.post("/api/historical-document-import/manual-orders", json={
+        "name": "בדיקת הזמנות ידניות 2026",
+        "orders": [{
+            "order_date": "2026-07-21",
+            "supplier_name": "פעמית",
+            "items": [
+                {"description": "מגבת נייר 165מ'", "quantity": 10, "unit": "קרטונים", "quantity_unit": "carton"},
+                {"description": "פריט ללא כמות", "quantity": None},
+            ],
+        }],
+    })
+    assert response.status_code == 201, response.get_json()
+    result = response.get_json()
+    assert result["batch"]["status"] == "finalized"
+    assert len(result["orders"]) == 1
+    lines = result["orders"][0]["items"]
+    assert lines[0]["product_id"] == product.id
+    assert lines[0]["quantity"] == 10
+    assert lines[0]["units_per_carton"] is None
+    assert lines[1]["quantity"] is None
+    assert lines[1]["product_id"] is None
+    assert db.session.scalar(select(func.count()).select_from(Order)) == 0
+    assert db.session.scalar(select(func.count()).select_from(HistoricalPurchaseOrder)) == 1
+    assert db.session.scalar(select(func.count()).select_from(HistoricalImportBatch)) == 1
+
+    duplicate = logged_in_client_a.post("/api/historical-document-import/manual-orders", json={
+        "name": "בדיקת הזמנות ידניות 2026", "orders": [],
+    })
+    assert duplicate.status_code == 409
