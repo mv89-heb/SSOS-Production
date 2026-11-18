@@ -3,6 +3,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required, current_user
+from sqlalchemy import select
 from werkzeug.exceptions import BadRequest, HTTPException, NotFound
 from werkzeug.utils import secure_filename
 
@@ -35,7 +36,7 @@ def supplier_history_forecast():
         if not supplier_id:
             raise BadRequest("supplier_id is required")
         supplier = db.session.scalar(
-            db.select(Supplier).where(
+            select(Supplier).where(
                 Supplier.id == supplier_id,
                 Supplier.tenant_id == current_user.tenant_id,
                 Supplier.active.is_(True),
