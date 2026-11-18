@@ -6,6 +6,7 @@ from sqlalchemy import and_, or_, select
 from app.extensions import db
 from app.models.order import Order, STATUS_COMPLETED, STATUS_SENT
 from app.models.order_item import OrderItem
+from app.models.historical_document_import import HistoricalImportBatch, HistoricalPurchaseOrder
 from app.models.product import Product
 from app.services.inventory_calendar_service import InventoryCalendarService
 
@@ -156,6 +157,78 @@ class OrderHistoryForecastService:
             )
             order_ids.setdefault(product_id, set()).add(order.id)
             order_weeks.setdefault(product_id, set()).add(week)
+
+        # Include manually imported historical orders only after their batch is finalized.
+        # These rows are isolated from operational orders and never affect inventory.
+        historical_orders = db.session.scalars(
+            select(HistoricalPurchaseOrder)
+            .join(HistoricalImportBatch, HistoricalImportBatch.id == HistoricalPurchaseOrder.batch_id)
+            .where(
+                HistoricalPurchaseOrder.tenant_id == self.tenant_id,
+                HistoricalPurchaseOrder.supplier_id == supplier_id,
+                HistoricalPurchaseOrder.order_date >= start_date,
+                HistoricalPurchaseOrder.order_date <= end_date,
+                HistoricalImportBatch.tenant_id == self.tenant_id,
+                HistoricalImportBatch.status == "finalized",
+            )
+            .order_by(HistoricalPurchaseOrder.order_date.asc(), HistoricalPurchaseOrder.id.asc())
+        ).all()
+        for historical_order in historical_orders:
+            week = self._week_start(historical_order.order_date)
+            # Negative IDs keep historical records distinct from operational order IDs.
+            historical_order_key = -int(historical_order.id)
+            for line in historical_order.items or []:
+                if not isinstance(line, dict):
+                    continue
+                product_id = line.get("product_id")
+                if not isinstance(product_id, int) or isinstance(product_id, bool) or product_id <= 0:
+                    continue
+                product = db.session.scalar(select(Product).where(
+                    Product.id == product_id,
+                    Product.tenant_id == self.tenant_id,
+                    Product.supplier_id == supplier_id,
+                ))
+                if product is None:
+                    continue
+                if product_id not in product_meta:
+                    product_meta[product_id] = {
+                        "product_id": product_id,
+                        "product_name": product.name,
+                        "unit": str(line.get("stock_unit") or product.unit or "יחידה לא הוגדרה").strip(),
+                        "units_per_carton": product.units_per_carton,
+                    }
+                    weekly_quantities[product_id] = {}
+                    conversion_issues[product_id] = 0
+                try:
+                    quantity = Decimal(str(line.get("quantity")))
+                except (InvalidOperation, TypeError, ValueError):
+                    conversion_issues[product_id] += 1
+                    continue
+                if not quantity.is_finite() or quantity <= 0:
+                    conversion_issues[product_id] += 1
+                    continue
+                quantity_unit = str(line.get("quantity_unit") or "unverified").strip().lower()
+                stock_unit = str(product_meta[product_id]["unit"] or "").strip()
+                if quantity_unit == "carton":
+                    pack_size = self._positive_pack_size(line.get("units_per_carton"))
+                    if pack_size is None:
+                        conversion_issues[product_id] += 1
+                        continue
+                    quantity *= Decimal(pack_size)
+                elif quantity_unit in ("piece", "unit"):
+                    if stock_unit != "יחידה":
+                        conversion_issues[product_id] += 1
+                        continue
+                else:
+                    # A bare count from a historic spreadsheet is not assumed to be
+                    # pieces or cartons. It must be explicitly classified first.
+                    conversion_issues[product_id] += 1
+                    continue
+                weekly_quantities[product_id][week] = (
+                    weekly_quantities[product_id].get(week, Decimal("0")) + quantity
+                )
+                order_ids.setdefault(product_id, set()).add(historical_order_key)
+                order_weeks.setdefault(product_id, set()).add(week)
 
         target_multiplier = InventoryCalendarService._seasonal_multiplier_for_date(
             target_date, config
