@@ -34,8 +34,9 @@ export default function ManualHistoricalImportPage() {
    if(!Array.isArray(orders)||!orders.length)throw new Error("נדרשת רשימת הזמנות תקינה.");
    const {data}=await apiClient.post("/api/historical-document-import/manual-orders",{name:"הזמנות היסטוריות פעמית ושמאי 2026-11-18",orders});
    setMessage("נשמרו "+data.orders.length+" הזמנות היסטוריות באצווה "+data.batch.id+". לא נוצרו הזמנות פעילות ולא עודכן מלאי.");
-  }catch(e){
-   const ex=e;setError(ex.response?.data?.message??ex.message??"ייבוא ההזמנות נכשל.");
+  }catch(e: unknown){
+   const ex=e as {response?:{data?:{message?:string}};message?:string};
+   setError(ex.response?.data?.message??ex.message??"ייבוא ההזמנות נכשל.");
   }finally{setBusy(false);}
  }
  if(!canManage)return <div className="rounded-xl border bg-white p-8 text-center text-sm text-slate-500">נדרשת הרשאת מנהל כדי לייבא היסטוריית הזמנות.</div>;
