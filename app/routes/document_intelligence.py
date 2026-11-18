@@ -234,6 +234,28 @@ def apply_document(analysis_id):
         return _internal_error(exc, "apply")
 
 
+
+@document_intelligence_bp.route("/<int:analysis_id>/delivery-note-lines", methods=["PATCH"])
+@login_required
+def correct_delivery_note_lines(analysis_id):
+    try:
+        PermissionService.require_permission("documents.process")
+        payload = request.get_json(silent=True) or {}
+        row, reconciliation = DocumentIntelligenceService(
+            current_user.tenant_id, current_user.id
+        ).correct_delivery_note_lines(analysis_id, payload)
+        return jsonify({
+            "success": True,
+            "analysis": row.to_dict(),
+            "reconciliation": reconciliation,
+        }), 200
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+    except Exception as exc:
+        return _internal_error(exc, "delivery note line correction")
+
+
 @document_intelligence_bp.route("/<int:analysis_id>/apply-delivery-note", methods=["POST"])
 @login_required
 def apply_scanned_delivery_note(analysis_id):
