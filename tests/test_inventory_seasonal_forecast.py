@@ -1,6 +1,7 @@
+from datetime import date
 from decimal import Decimal
 
-from app.services.inventory_planning_service import InventoryPlanningService
+from app.services.inventory_calendar_service import InventoryCalendarService
 
 
 def test_default_four_week_cycle_uses_three_normal_and_one_boosted_week(monkeypatch):
@@ -8,15 +9,18 @@ def test_default_four_week_cycle_uses_three_normal_and_one_boosted_week(monkeypa
     monkeypatch.delenv("SSOS_BOOSTED_WEEKS", raising=False)
     monkeypatch.delenv("SSOS_BOOSTED_WEEK_MULTIPLIER", raising=False)
 
-    forecast = InventoryPlanningService._seasonal_forecast_metrics(Decimal("1"))
+    config = InventoryCalendarService._seasonality_config()
+    metrics = InventoryCalendarService._seasonality_metrics(Decimal("1"), config)
 
-    assert forecast["normal_weeks_per_cycle"] == 3
-    assert forecast["boosted_weeks_per_cycle"] == 1
-    assert forecast["boosted_week_multiplier"] == 1.4
-    assert forecast["normal_weekly_demand"] == 7
-    assert forecast["boosted_weekly_demand"] == 9.8
-    assert forecast["average_weekly_demand"] == 7.7
-    assert forecast["monthly_forecast_demand"] == 30.8
+    assert config["normal_weeks"] == 3
+    assert config["boosted_weeks"] == 1
+    assert config["uplift"] == Decimal("1.4")
+    assert metrics["normal_weekly_demand"] == 7
+    assert metrics["boosted_weekly_demand"] == 9.8
+    assert metrics["average_weekly_demand"] == 7.7
+    assert metrics["monthly_forecast_demand"] == 30.8
+    assert InventoryCalendarService._seasonal_multiplier_for_date(date(2020, 1, 6), config) == 1
+    assert InventoryCalendarService._seasonal_multiplier_for_date(date(2020, 1, 27), config) == Decimal("1.4")
 
 
 def test_seasonal_cycle_is_configurable_and_bounded(monkeypatch):
@@ -24,12 +28,14 @@ def test_seasonal_cycle_is_configurable_and_bounded(monkeypatch):
     monkeypatch.setenv("SSOS_BOOSTED_WEEKS", "1")
     monkeypatch.setenv("SSOS_BOOSTED_WEEK_MULTIPLIER", "1.5")
 
-    forecast = InventoryPlanningService._seasonal_forecast_metrics(2)
+    config = InventoryCalendarService._seasonality_config()
+    metrics = InventoryCalendarService._seasonality_metrics(Decimal("2"), config)
 
-    assert forecast["normal_weeks_per_cycle"] == 2
-    assert forecast["boosted_weeks_per_cycle"] == 1
-    assert forecast["boosted_week_multiplier"] == 1.5
-    assert forecast["average_weekly_demand"] == 16.333
+    assert config["normal_weeks"] == 2
+    assert config["boosted_weeks"] == 1
+    assert config["uplift"] == Decimal("1.5")
+    assert metrics["average_weekly_demand"] == 16.333
+    assert InventoryCalendarService._seasonal_multiplier_for_date(date(2020, 1, 20), config) == Decimal("1.5")
 
 
 def test_invalid_configuration_falls_back_to_safe_defaults(monkeypatch):
@@ -37,17 +43,18 @@ def test_invalid_configuration_falls_back_to_safe_defaults(monkeypatch):
     monkeypatch.setenv("SSOS_BOOSTED_WEEKS", "99")
     monkeypatch.setenv("SSOS_BOOSTED_WEEK_MULTIPLIER", "NaN")
 
-    forecast = InventoryPlanningService._seasonal_forecast_metrics(1)
+    config = InventoryCalendarService._seasonality_config()
 
-    assert forecast["boosted_cycle_weeks"] == 4
-    assert forecast["boosted_weeks_per_cycle"] == 1
-    assert forecast["boosted_week_multiplier"] == 1.4
+    assert config["cycle_weeks"] == 4
+    assert config["boosted_weeks"] == 1
+    assert config["uplift"] == Decimal("1.4")
 
 
 def test_seasonality_does_not_invent_consumption_when_no_measurements_exist():
-    forecast = InventoryPlanningService._seasonal_forecast_metrics(0)
+    config = InventoryCalendarService._seasonality_config()
+    metrics = InventoryCalendarService._seasonality_metrics(Decimal("0"), config)
 
-    assert forecast["normal_weekly_demand"] == 0
-    assert forecast["boosted_weekly_demand"] == 0
-    assert forecast["average_weekly_demand"] == 0
-    assert forecast["monthly_forecast_demand"] == 0
+    assert metrics["normal_weekly_demand"] == 0
+    assert metrics["boosted_weekly_demand"] == 0
+    assert metrics["average_weekly_demand"] == 0
+    assert metrics["monthly_forecast_demand"] == 0
