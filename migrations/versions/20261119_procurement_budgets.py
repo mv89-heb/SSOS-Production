@@ -15,10 +15,12 @@ depends_on = None
 def upgrade():
     op.add_column("orders", sa.Column("department", sa.String(length=120), nullable=True))
     op.add_column("orders", sa.Column("project", sa.String(length=120), nullable=True))
+    op.create_index("ix_orders_department", "orders", ["department"])
+    op.create_index("ix_orders_project", "orders", ["project"])
     op.create_table(
         "procurement_budgets",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("tenant_id", sa.Integer(), sa.ForeignKey("tenants.id"), nullable=False, index=True),
+        sa.Column("tenant_id", sa.Integer(), sa.ForeignKey("tenants.id"), nullable=False),
         sa.Column("scope_type", sa.String(length=20), nullable=False),
         sa.Column("scope_value", sa.String(length=120), nullable=False),
         sa.Column("period_type", sa.String(length=20), nullable=False),
@@ -35,6 +37,7 @@ def upgrade():
         sa.CheckConstraint("enforcement_mode IN ('warn', 'block')", name="ck_procurement_budgets_enforcement_mode"),
         sa.CheckConstraint("amount > 0", name="ck_procurement_budgets_amount_positive"),
     )
+    op.create_index("ix_procurement_budgets_tenant_id", "procurement_budgets", ["tenant_id"])
     op.create_index(
         "ix_procurement_budgets_scope_period",
         "procurement_budgets",
@@ -45,6 +48,9 @@ def upgrade():
 
 def downgrade():
     op.drop_index("ix_procurement_budgets_scope_period", table_name="procurement_budgets")
+    op.drop_index("ix_procurement_budgets_tenant_id", table_name="procurement_budgets")
     op.drop_table("procurement_budgets")
+    op.drop_index("ix_orders_project", table_name="orders")
+    op.drop_index("ix_orders_department", table_name="orders")
     op.drop_column("orders", "project")
     op.drop_column("orders", "department")
