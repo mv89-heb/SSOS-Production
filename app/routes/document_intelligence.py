@@ -178,6 +178,24 @@ def rematch_document(analysis_id):
         return _internal_error(exc, "rematch")
 
 
+
+@document_intelligence_bp.route("/<int:analysis_id>/metadata", methods=["PATCH"])
+@login_required
+def update_document_metadata(analysis_id):
+    try:
+        PermissionService.require_permission("documents.process")
+        payload = request.get_json(silent=True) or {}
+        row = DocumentIntelligenceService(
+            current_user.tenant_id, current_user.id
+        ).update_document_metadata(analysis_id, payload)
+        return jsonify({"success": True, "analysis": row.to_dict()}), 200
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+    except Exception as exc:
+        return _internal_error(exc, "metadata correction")
+
+
 @document_intelligence_bp.route("/<int:analysis_id>/compare-order", methods=["POST"])
 @login_required
 def compare_document_with_order(analysis_id):
