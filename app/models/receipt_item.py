@@ -32,6 +32,10 @@ class ReceiptItem(db.Model):
     receipt = db.relationship("Receipt", back_populates="items")
     order_item = db.relationship("OrderItem", back_populates="receipt_items")
 
+    @property
+    def accepted_quantity(self):
+        return (self.quantity or 0) - (self.damaged_quantity or 0)
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -39,7 +43,7 @@ class ReceiptItem(db.Model):
             "order_item_id": self.order_item_id,
             "quantity": float(self.quantity),
             "damaged_quantity": float(self.damaged_quantity or 0),
-            "accepted_quantity": float((self.quantity or 0) - (self.damaged_quantity or 0)),
+            "accepted_quantity": float(self.accepted_quantity),
             "damage_notes": self.damage_notes,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
