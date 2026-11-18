@@ -1,5 +1,6 @@
 from datetime import date
 
+from app.models.audit import AuditLog
 from app.models.order import Order, STATUS_DRAFT, STATUS_SUBMITTED
 from app.models.procurement_budget import ProcurementBudget
 from app.models.user import User, ROLE_EMPLOYEE
@@ -69,7 +70,7 @@ def test_blocked_budget_requires_manager_override_reason_and_audit(
         None,
     )
     assert override_event is not None
-    assert "אספקה דחופה" in str(override_event.details)
+    assert "אספקה דחופה" in str(override_event.metadata_json)
 
 
 def test_warning_budget_allows_submission_and_tracks_committed_spend(
