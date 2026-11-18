@@ -28,6 +28,8 @@ export default function NewOrderPage() {
   );
   const [notes, setNotes] = useState("");
   const [plannedOrderDate, setPlannedOrderDate] = useState(preselectedDate || "");
+  const [department, setDepartment] = useState("");
+  const [project, setProject] = useState("");
   const [lines, setLines] = useState<DraftLine[]>([{ product_id: "", quantity: 1 }]);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -162,6 +164,8 @@ export default function NewOrderPage() {
       supplier_id: supplierId,
       notes: notes || undefined,
       planned_order_date: plannedOrderDate || undefined,
+      department: department.trim() || undefined,
+      project: project.trim() || undefined,
       items: items.map((line) => ({ product_id: line.product_id as number, quantity: line.quantity, ...(line.quantity_unit ? { quantity_unit: line.quantity_unit } : {}) })),
     });
   };
@@ -259,6 +263,23 @@ export default function NewOrderPage() {
               </div>
             );
           })()}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-3xl border-slate-200/80 shadow-sm dark:border-slate-800">
+        <CardHeader className="border-b border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/40">
+          <CardTitle className="text-base text-slate-900 dark:text-white">שיוך תקציבי</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 p-5 sm:grid-cols-2">
+          <label className="block space-y-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            מחלקה / יחידה
+            <input className={inputClass} value={department} onChange={(event) => setDepartment(event.target.value)} maxLength={120} placeholder="למשל: מטבח, פנימייה, בית מדרש" />
+          </label>
+          <label className="block space-y-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            פרויקט
+            <input className={inputClass} value={project} onChange={(event) => setProject(event.target.value)} maxLength={120} placeholder="למשל: שיפוץ קיץ 2027" />
+          </label>
+          <p className="sm:col-span-2 text-xs leading-5 text-slate-500">השיוך מאפשר לבדוק את ההשפעה על תקציב שבועי או חודשי לפני שליחת ההזמנה לאישור. ללא שיוך או ללא תקציב פעיל, ההזמנה אינה נחסמת.</p>
         </CardContent>
       </Card>
 
