@@ -450,6 +450,13 @@ def test_delivery_note_supports_sequential_partial_receipts_and_blocks_over_rece
                 "description": "Test Product",
                 "quantity": quantity,
                 "unit": product.unit,
+                "product_matching": {
+                    "best_match": {
+                        "product_id": product_id,
+                        "confidence": 0.99,
+                        "decision": "AUTO_MATCH",
+                    },
+                },
             }],
             "order_reconciliation": None,
         })
@@ -463,7 +470,7 @@ def test_delivery_note_supports_sequential_partial_receipts_and_blocks_over_rece
     first_line = compared.get_json()["reconciliation"]["lines"][0]
     assert first_line["expected_quantity"] == 5.0
     assert first_line["status"] == "MATCH"
-    assert "PARTIAL_DELIVERY" in first_line["flags"]
+    assert first_line["flags"] == ["PARTIAL_DELIVERY"]
     assert compared.get_json()["reconciliation"]["review_count"] == 0
 
     posted_first = logged_in_client_a.post(
