@@ -782,7 +782,14 @@ class DocumentIntelligenceService:
                 id=supplier_id, tenant_id=self.tenant_id, active=True
             ).first()
             if supplier is None:
-                supplier_id = None
+                return {
+                    "success": True, "analysis_id": row.id, "suggestions": [],
+                    "context": {"multi_supplier_document": False, "supplier_id": None,
+                                "invalid_supplier_match": True,
+                                "purchase_order_number": extracted.get("purchase_order_number"),
+                                "document_date": extracted.get("document_date")},
+                    "message": "The detected supplier is not available in this tenant. Verify supplier matching before selecting an order.",
+                }
 
         eligible_statuses = (
             [STATUS_SENT] if document_type == "DELIVERY_NOTE"
@@ -880,6 +887,7 @@ class DocumentIntelligenceService:
                 "supplier_name": order.supplier_name,
                 "status": order.status,
                 "planned_order_date": order.planned_order_date.isoformat() if order.planned_order_date else None,
+                "context_order_date": order_date.isoformat() if order_date else None,
                 "created_at": order.created_at.isoformat() if order.created_at else None,
                 "date_delta_days": date_delta,
                 "remaining_lines": remaining_lines,
@@ -896,7 +904,7 @@ class DocumentIntelligenceService:
         )
         suggestions = suggestions[:max(1, min(int(limit or 30), 50))]
         if suggestions:
-            suggestions[0]["recommended"] = True
+            suggestions[0]["recommended"] = suggestions[0]["match_score"] > 0
             for candidate in suggestions[1:]:
                 candidate["recommended"] = False
         return {
