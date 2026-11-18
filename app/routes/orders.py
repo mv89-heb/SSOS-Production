@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required, current_user
 from sqlalchemy import select
@@ -46,7 +46,7 @@ def supplier_history_forecast():
             raise NotFound("Supplier not found")
 
         today = datetime.now(timezone.utc).date()
-        default_start = today - timedelta(days=150)
+        default_start = date(today.year if today.month >= 7 else today.year - 1, 7, 1)
         try:
             start_date = date.fromisoformat(request.args.get("start_date", default_start.isoformat()))
             end_date = date.fromisoformat(request.args.get("end_date", today.isoformat()))
