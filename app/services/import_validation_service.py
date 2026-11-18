@@ -325,7 +325,7 @@ class ImportValidationService:
                 if price_error:
                     add_issue(SEVERITY_ERROR, "invalid_price", price_error, "price")
                     primary_price = None
-                else:
+                elif primary_price is not None and primary_price >= 0:
                     price_type = "after_vat" if target == TARGET_PRICE_AFTER_VAT else "before_vat"
                     primary_price = normalize_price_before_vat(primary_price, price_type)
                 break
