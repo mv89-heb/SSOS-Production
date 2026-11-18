@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
@@ -148,7 +148,7 @@ class ReceiptService:
             receipt_number=receipt_number,
             status=RECEIPT_POSTED,
             received_by=user.id,
-            received_at=datetime.now(timezone.utc),
+            received_at=self._received_at(payload),
             notes=notes,
         )
         db.session.add(receipt)
@@ -208,7 +208,7 @@ class ReceiptService:
                     reference_type="receipt",
                     reference_id=str(receipt.id),
                     note=f"Receipt {receipt.receipt_number}",
-                    occurred_at=receipt.received_at,
+                    occurred_at=receipt.received_at or datetime.now(timezone.utc),
                 )
             )
 
@@ -294,6 +294,27 @@ class ReceiptService:
             )
         )
         return Decimal(value or 0)
+
+
+    @staticmethod
+    def _received_at(payload: dict) -> datetime | None:
+        # Manual receipts are timestamped at entry. Document-derived receipts
+        # may explicitly provide a corrected document date; null means that
+        # the actual delivery date is unknown and must remain unknown.
+        if "received_at" not in payload:
+            return datetime.now(timezone.utc)
+        value = payload.get("received_at")
+        if value in (None, ""):
+            return None
+        if not isinstance(value, str):
+            raise BadRequest("received_at must use YYYY-MM-DD")
+        try:
+            parsed = date.fromisoformat(value)
+        except (TypeError, ValueError):
+            raise BadRequest("received_at must use YYYY-MM-DD")
+        if parsed.isoformat() != value or parsed > datetime.now(timezone.utc).date():
+            raise BadRequest("received_at must be a valid date no later than today")
+        return datetime.combine(parsed, time.min, tzinfo=timezone.utc)
 
     def _parse_items(self, raw_items: list) -> dict[int, Decimal]:
         parsed: dict[int, Decimal] = {}
