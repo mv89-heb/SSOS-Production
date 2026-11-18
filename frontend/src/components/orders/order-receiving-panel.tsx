@@ -14,14 +14,14 @@ type ReceiptResponse = { success: boolean; receipts: Receipt[] };
 type ReceiptCreateResponse = { success: boolean; receipt: Receipt };
 type OCRResponse = {
   success: boolean;
-  result?: { status?: string; text?: string; detected_items?: string[]; message?: string };
+  result?: { status?: string; text?: string; detected_items?: Array<{ raw_line: string }>; message?: string };
 };
 type OCRDocument = {
   id: string;
   name: string;
   status: "processing" | "success" | "error";
   text?: string;
-  detectedItems?: string[];
+  detectedItems?: Array<{ raw_line: string }>;
   message?: string;
 };
 
@@ -212,7 +212,7 @@ export function OrderReceivingPanel({ order }: { order: Order }) {
                       )}
                       {(document.detectedItems ?? []).length > 0 && (
                         <ul className="mt-2 list-disc space-y-1 pr-5 text-xs text-slate-600 dark:text-slate-300">
-                          {document.detectedItems!.map((item, itemIndex) => <li key={itemIndex}>{item}</li>)}
+                          {document.detectedItems!.map((item, itemIndex) => <li key={itemIndex}>{item.raw_line}</li>)}
                         </ul>
                       )}
                     </details>
