@@ -80,7 +80,7 @@ function SearchableSelect({ value, onChange, options, placeholder, disabled = fa
 export default function DocumentIntelligencePage() {
   const inputRef = useRef<HTMLInputElement>(null); const queryClient = useQueryClient();
   const { data: products = [] } = useProducts(undefined, true); const { data: suppliers = [] } = useSuppliers(true);
-  const [analyses, setAnalyses] = useState<DocumentAnalysis[]>([]); const [orders, setOrders] = useState<Array<{ id: number; order_number: string; supplier_name?: string; status?: string }>>([]); const [selectedOrderId, setSelectedOrderId] = useState(""); const [confirmSupplier, setConfirmSupplier] = useState(false); const [allowPriceUpdates, setAllowPriceUpdates] = useState(false); const [invoiceNumber, setInvoiceNumber] = useState(""); const [invoiceAmount, setInvoiceAmount] = useState(""); const [selectedId, setSelectedId] = useState<number | null>(null); const [mappings, setMappings] = useState<Record<number, Mapping>>({}); const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set()); const [newProductDrafts, setNewProductDrafts] = useState<Record<number, { open: boolean; name: string; supplier_id: number | string; supplier_sku: string; barcode: string; unit: string; units_per_carton: number | string; current_price: number | string }>>({}); const [progress, setProgress] = useState<UploadProgress[]>([]); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [now, setNow] = useState(() => Date.now());
+  const [analyses, setAnalyses] = useState<DocumentAnalysis[]>([]); const [orders, setOrders] = useState<Array<{ id: number; order_number: string; supplier_name?: string; status?: string }>>([]); const [selectedOrderId, setSelectedOrderId] = useState(""); const [confirmSupplier, setConfirmSupplier] = useState(false); const [allowPriceUpdates, setAllowPriceUpdates] = useState(false); const [documentNumber, setDocumentNumber] = useState(""); const [documentDate, setDocumentDate] = useState(""); const [invoiceAmount, setInvoiceAmount] = useState(""); const [selectedId, setSelectedId] = useState<number | null>(null); const [mappings, setMappings] = useState<Record<number, Mapping>>({}); const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set()); const [newProductDrafts, setNewProductDrafts] = useState<Record<number, { open: boolean; name: string; supplier_id: number | string; supplier_sku: string; barcode: string; unit: string; units_per_carton: number | string; current_price: number | string }>>({}); const [progress, setProgress] = useState<UploadProgress[]>([]); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [now, setNow] = useState(() => Date.now());
   useEffect(() => { if (!busy) return; const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, [busy]);
   useEffect(() => {
     const requestedOrderId = new URLSearchParams(window.location.search).get("orderId");
@@ -133,7 +133,7 @@ export default function DocumentIntelligencePage() {
   useEffect(() => {
     if (!analysis) return;
     setSelectedOrderId(reconciliation?.order_id ? String(reconciliation.order_id) : "");
-    setInvoiceNumber(data?.document_number || "");
+    setDocumentNumber(data?.document_number || "");\n    setDocumentDate(data?.document_date || "");
     setInvoiceAmount(data?.totals?.total != null ? String(data.totals.total) : "");
   }, [analysis?.id, reconciliation?.order_id, data?.document_number, data?.totals?.total]);
   useEffect(() => { setAllowPriceUpdates(false); }, [analysis?.id]);
@@ -233,11 +233,22 @@ export default function DocumentIntelligencePage() {
     } catch (err: any) { setError(err?.friendlyMessage || err?.response?.data?.message || "לא ניתן להשוות מול הזמנת הרכש"); }
     finally { setBusy(false); }
   }
+  async function persistDocumentMetadata() {
+    if (!analysis) return false;
+    const response = await apiClient.patch<{ success: boolean; analysis: DocumentAnalysis }>(
+      `/api/document-intelligence/${analysis.id}/metadata`,
+      { document_number: documentNumber.trim(), document_date: documentDate || null },
+    );
+    setAnalyses((all) => all.map((item) => item.id === response.data.analysis.id ? response.data.analysis : item));
+    return true;
+  }
+
   async function postDeliveryNote() {
     if (!analysis) return;
     if (!window.confirm("הפעולה תיצור קבלת סחורה ותעדכן את המלאי לפי הכמויות שבתעודה. להמשיך?")) return;
     setBusy(true); setError(""); setNotice("");
     try {
+      await persistDocumentMetadata();
       const result = await documentIntelligenceService.applyDeliveryNote(analysis.id);
       setAnalyses((all) => all.map((item) => item.id === result.analysis.id ? result.analysis : item));
       await queryClient.invalidateQueries({ queryKey: ["products"] });
@@ -248,11 +259,11 @@ export default function DocumentIntelligencePage() {
   async function recordInvoice() {
     if (!analysis) return;
     const amount = Number(invoiceAmount);
-    if (!invoiceNumber.trim() || !Number.isFinite(amount) || amount <= 0) { setError("יש לוודא שמספר החשבונית והסכום הכולל נכונים."); return; }
+    if (!documentNumber.trim() || !Number.isFinite(amount) || amount <= 0) { setError("יש לוודא שמספר החשבונית והסכום הכולל נכונים."); return; }
     if (!window.confirm(allowPriceUpdates ? "החשבונית תירשם, ומחירים יתעדכנו רק לשורות בהתאמה ודאית וביחידת מידה תואמת. להמשיך?" : "החשבונית תירשם ללא עדכון מחירים. להמשיך?")) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      const result = await documentIntelligenceService.applyInvoice(analysis.id, { invoice_number: invoiceNumber.trim(), amount, invoice_date: data?.document_date, currency: data?.currency || "ILS", allow_price_updates: allowPriceUpdates });
+      await persistDocumentMetadata();\n      const result = await documentIntelligenceService.applyInvoice(analysis.id, { invoice_number: documentNumber.trim(), amount, invoice_date: documentDate || undefined, currency: data?.currency || "ILS", allow_price_updates: allowPriceUpdates });
       setAnalyses((all) => all.map((item) => item.id === result.analysis.id ? result.analysis : item));
       await queryClient.invalidateQueries({ queryKey: ["products"] });
       const changes = result.automatic_price_updates || [];
@@ -400,6 +411,12 @@ export default function DocumentIntelligencePage() {
         <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-950/50"><div className="text-xs text-slate-500">מספר מסמך</div><div className="mt-1 font-semibold">{data.workflow_routing.document_number_identified ? "זוהה" : "לא זוהה"}</div></div>
       </div>
       {data.workflow_routing.missing_fields.length > 0 && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"><strong>להשלמת הניתוב:</strong> {data.workflow_routing.missing_fields.join(" · ")}</div>}
+      <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-slate-700 dark:bg-slate-950/50 sm:grid-cols-[1fr_220px_auto]">
+        <label className="text-sm">מספר מסמך (ניתן לתיקון)<input value={documentNumber} onChange={(e) => setDocumentNumber(e.target.value)} maxLength={120} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
+        <label className="text-sm">תאריך מסמך (ניתן לתיקון)<input type="date" value={documentDate} max={today()} onChange={(e) => setDocumentDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
+        <button type="button" onClick={async () => { setBusy(true); setError(""); try { await persistDocumentMetadata(); setNotice("פרטי המסמך המתוקנים נשמרו."); } catch (err: any) { setError(err?.friendlyMessage || err?.response?.data?.message || "לא ניתן לשמור את פרטי המסמך"); } finally { setBusy(false); } }} disabled={busy || Boolean(analysis.applied_at)} className="self-end rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 disabled:opacity-50 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300">שמור תיקונים</button>
+        <p className="text-xs leading-5 text-slate-500 sm:col-span-3">תאריך תעודת המשלוח ישמש כתאריך הקבלה לצורך מדידת זמני אספקה. אם התאריך אינו ידוע, השאר ריק — לא נניח תאריך על סמך מועד הסריקה.</p>
+      </div>
       <p className="mt-3 text-xs text-slate-500">המסמך סווג אוטומטית בלבד. לא נוצרה קבלה או חשבונית, לא עודכן מחירון ולא השתנה המלאי.</p>
     </section>}
 
@@ -425,7 +442,7 @@ export default function DocumentIntelligencePage() {
         {data?.document_type === "INVOICE" && <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
           <h3 className="font-bold">רישום חשבונית ועדכון מחירון</h3>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="text-sm">מספר חשבונית<input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
+            <label className="text-sm">מספר חשבונית<input value={documentNumber} onChange={(e) => setDocumentNumber(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
             <label className="text-sm">סכום כולל<input type="number" min="0.01" step="0.01" value={invoiceAmount} onChange={(e) => setInvoiceAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
           </div>
           <label className="mt-3 flex items-start gap-2 text-sm"><input type="checkbox" checked={allowPriceUpdates} onChange={(e) => setAllowPriceUpdates(e.target.checked)} className="mt-1" /><span><b>אישור מפורש לעדכון מחירים לאחר בדיקה</b><span className="block text-xs text-slate-500">רק התאמה ברמת ביטחון גבוהה, ספק ההזמנה, מטבע ויחידת מידה תואמים, ללא הנחה לא מפוענחת. כל שינוי מתועד בהיסטוריית המחירים.</span></span></label>
