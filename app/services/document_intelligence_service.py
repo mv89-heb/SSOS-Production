@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 
 from flask import current_app
 from werkzeug.exceptions import BadRequest, Conflict, NotFound, HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, select
 
 from app.extensions import db
 from app.models.document_analysis import DocumentAnalysis
