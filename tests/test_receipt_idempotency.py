@@ -169,3 +169,34 @@ def test_duplicate_receipt_number_returns_conflict_without_changing_stock(
     assert retry.get_json()["replayed"] is False
     assert db.session.query(Receipt).filter_by(order_id=second_order["id"]).count() == 1
     assert db.session.get(Product, second_product_id).current_stock == 1
+
+
+
+def test_receipt_does_not_turn_unknown_stock_into_zero_based_balance(
+    logged_in_client_a, make_order, db
+):
+    response, _, product_id = make_order(
+        logged_in_client_a, quantity=2, price=10.0, sku="SKU-UNKNOWN-STOCK-RECEIPT"
+    )
+    order = response.get_json()["order"]
+    order_item_id = order["order_items"][0]["id"]
+    _send_order(db, order["id"])
+
+    product = db.session.get(Product, product_id)
+    product.current_stock = None
+    db.session.commit()
+
+    receipt = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={"items": [{"order_item_id": order_item_id, "quantity": 2}]},
+        headers={"Idempotency-Key": "unknown-stock-receipt"},
+    )
+
+    assert receipt.status_code == 201, receipt.get_json()
+    assert db.session.get(Product, product_id).current_stock is None
+    movement = db.session.query(InventoryMovement).filter_by(
+        receipt_id=receipt.get_json()["receipt"]["id"],
+        product_id=product_id,
+    ).one()
+    assert movement.quantity == 2
+    assert movement.balance_after is None
