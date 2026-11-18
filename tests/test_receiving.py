@@ -267,3 +267,37 @@ def test_damaged_receipt_requires_reason_and_cannot_exceed_physical_quantity(
     assert Receipt.query.filter_by(order_id=order["id"]).count() == 0
     assert db.session.get(Product, product_id).current_stock == 0
     assert InventoryMovement.query.filter_by(product_id=product_id).count() == 0
+
+
+def test_fully_damaged_receipt_is_recorded_without_zero_or_positive_stock_movement(
+    logged_in_client_a, make_order, db
+):
+    response, _, product_id = make_order(logged_in_client_a, quantity=2, price=10.0)
+    order = response.get_json()["order"]
+    order_item_id = order["order_items"][0]["id"]
+    _set_known_zero_stock(db, product_id)
+    _send_order(logged_in_client_a, db, order["id"])
+
+    damaged = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={"items": [{
+            "order_item_id": order_item_id,
+            "quantity": 2,
+            "damaged_quantity": 2,
+            "damage_notes": "כל היחידות נשברו בהובלה",
+        }]},
+    )
+    assert damaged.status_code == 201, damaged.get_json()
+    item = damaged.get_json()["receipt"]["items"][0]
+    assert item["quantity"] == 2.0
+    assert item["damaged_quantity"] == 2.0
+    assert item["accepted_quantity"] == 0.0
+    assert db.session.get(Product, product_id).current_stock == 0
+    assert InventoryMovement.query.filter_by(receipt_id=damaged.get_json()["receipt"]["id"]).count() == 0
+
+    replacement = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={"items": [{"order_item_id": order_item_id, "quantity": 2}]},
+    )
+    assert replacement.status_code == 201, replacement.get_json()
+    assert db.session.get(Product, product_id).current_stock == 2
