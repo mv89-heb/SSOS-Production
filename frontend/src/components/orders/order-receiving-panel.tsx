@@ -155,7 +155,7 @@ export function OrderReceivingPanel({ order }: { order: Order }) {
               <p className="mt-1 text-xs text-slate-500">אפשר לבחור או לגרור כמה קובצי PDF ותמונות. המסמכים מנותחים אחד-אחד ואינם נשמרים בשרת.</p>
             </div>
             {ocrDocuments.length > 0 && (
-              <Button type="button" size="sm" variant="ghost" onClick={() => setOcrDocuments([])} disabled={isOCRProcessing}>
+              <Button type="button" variant="ghost" onClick={() => setOcrDocuments([])} disabled={isOCRProcessing}>
                 <X size={14} /> נקה תוצאות
               </Button>
             )}
@@ -184,7 +184,7 @@ export function OrderReceivingPanel({ order }: { order: Order }) {
             <div className="text-sm text-slate-600 dark:text-slate-300">
               {isOCRProcessing ? "מעבד מסמכים ברצף..." : "גרור לכאן מסמכים או בחר קבצים מהמכשיר"}
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isOCRProcessing}>
+            <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isOCRProcessing}>
               {isOCRProcessing ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
               {isOCRProcessing ? "ממתין לסריקה..." : "בחירת מסמכים"}
             </Button>
