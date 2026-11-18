@@ -27,6 +27,24 @@ type SpendGroup = {
   documents: SpendDocument[];
 };
 type SpendBasis = { totals_by_currency: Record<string, number>; by_supplier: SpendGroup[] };
+type ReliabilityMetric = {
+  supplier_id: number | null;
+  supplier_name: string;
+  category: string;
+  completed_orders: number;
+  delivery_sample_size: number;
+  late_orders: number;
+  late_rate_percent: number | null;
+  shortage_sample_size: number;
+  short_orders: number;
+  shortage_rate_percent: number | null;
+  missing_planned_date: number;
+  missing_receipt_date: number;
+  orders_without_posted_receipt: number;
+  credit_adjustment_frequency: number | null;
+  credit_adjustment_data_available: boolean;
+  credit_adjustment_note: string;
+};
 type SpendResponse = {
   success: boolean;
   period: { start_date: string; end_date: string };
@@ -34,6 +52,7 @@ type SpendResponse = {
   ordered: SpendBasis;
   invoiced: SpendBasis;
   paid: SpendBasis;
+  supplier_reliability: ReliabilityMetric[];
 };
 
 function localDate(value: Date) {
