@@ -66,6 +66,36 @@ def test_ocr_upload_endpoint_end_to_end(logged_in_client_a, make_order):
     assert resp.get_json()["result"]["status"] == "success"
 
 
+def test_ocr_upload_removes_source_file_after_analysis(logged_in_client_a, make_order, monkeypatch):
+    create, _, _ = make_order(logged_in_client_a)
+    order_id = create.get_json()["order"]["id"]
+    observed = {}
+
+    def fake_process_document(self, file_path):
+        observed["path"] = file_path
+        assert os.path.isfile(file_path)
+        with open(file_path, "rb") as source:
+            assert source.read().startswith(b"\x89PNG")
+        return {"status": "success", "text": "sample", "detected_items": []}
+
+    monkeypatch.setattr("app.routes.orders.OCRService.process_document", fake_process_document)
+    png_bytes = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0"
+        b"\x00\x00\x03\x01\x01\x00\x18\xdd\x8d\xb0\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    response = logged_in_client_a.post(
+        f"/api/orders/{order_id}/ocr",
+        data={"file": (io.BytesIO(png_bytes), "delivery-note.png")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["success"] is True
+    assert observed["path"]
+    assert not os.path.exists(observed["path"])
+
+
 def test_ocr_upload_requires_existing_order(logged_in_client_a):
     data = {"file": (io.BytesIO(b"x"), "invoice.png")}
     resp = logged_in_client_a.post("/api/orders/999999/ocr", data=data, content_type="multipart/form-data")

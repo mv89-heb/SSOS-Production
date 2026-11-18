@@ -1,5 +1,5 @@
 import os
-import uuid
+import tempfile
 from datetime import date, datetime, timezone
 from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required, current_user
@@ -372,8 +372,10 @@ def ocr_upload(order_id):
         validate_upload(filename, mime_type, file_size, max_size=current_app.config["MAX_CONTENT_LENGTH"])
     except OCRProviderError as exc:
         return jsonify({"success": False, "error": "invalid_upload", "message": str(exc)}), 400
-    unique_name = f"{uuid.uuid4().hex}_{filename}"
-    save_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_name)
-    upload.save(save_path)
-    result = OCRService().process_document(save_path)
+    # Order-document OCR is an analysis-only operation. Keep the source file
+    # in an isolated temporary directory and remove it on success or failure.
+    with tempfile.TemporaryDirectory(prefix="ssos-order-ocr-") as temp_dir:
+        save_path = os.path.join(temp_dir, filename)
+        upload.save(save_path)
+        result = OCRService().process_document(save_path)
     return jsonify({"success": result["status"] == "success", "result": result}), 200
