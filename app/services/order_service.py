@@ -47,6 +47,9 @@ class OrderService:
         planned_order_date = self._parse_planned_order_date(payload.get("planned_order_date"))
         department = self._normalize_order_scope(payload.get("department"), "department")
         project = self._normalize_order_scope(payload.get("project"), "project")
+        currency = str(payload.get("currency") or "ILS").strip().upper()
+        if len(currency) != 3 or not currency.isalpha():
+            raise BadRequest("currency must be a three-letter ISO currency code")
         input_items = payload.get("items", [])
         if not isinstance(input_items, list) or not input_items:
             raise BadRequest("Order must have items")
@@ -63,7 +66,7 @@ class OrderService:
             supplier_email=supplier.email,
             status=STATUS_DRAFT,
             items=enriched_items,
-            currency=payload.get("currency", "ILS"),
+            currency=currency,
             notes=payload.get("notes"),
             planned_order_date=planned_order_date,
             department=department,
