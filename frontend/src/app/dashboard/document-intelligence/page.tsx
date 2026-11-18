@@ -135,7 +135,7 @@ export default function DocumentIntelligencePage() {
     setSelectedOrderId(reconciliation?.order_id ? String(reconciliation.order_id) : "");
     setDocumentNumber(data?.document_number || "");\n    setDocumentDate(data?.document_date || "");
     setInvoiceAmount(data?.totals?.total != null ? String(data.totals.total) : "");
-  }, [analysis?.id, reconciliation?.order_id, data?.document_number, data?.totals?.total]);
+  }, [analysis?.id, reconciliation?.order_id, data?.document_number, data?.document_date, data?.totals?.total]);
   useEffect(() => { setAllowPriceUpdates(false); }, [analysis?.id]);
   const productOptions = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name, "he")).map((p) => ({ id: p.id, name: p.name, extra: p.sku })), [products]);
   const supplierOptions = useMemo(() => [...suppliers].sort((a, b) => a.name.localeCompare(b.name, "he")).map((s) => ({ id: s.id, name: s.name, extra: s.customer_number })), [suppliers]);
@@ -413,7 +413,7 @@ export default function DocumentIntelligencePage() {
       {data.workflow_routing.missing_fields.length > 0 && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"><strong>להשלמת הניתוב:</strong> {data.workflow_routing.missing_fields.join(" · ")}</div>}
       <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-slate-700 dark:bg-slate-950/50 sm:grid-cols-[1fr_220px_auto]">
         <label className="text-sm">מספר מסמך (ניתן לתיקון)<input value={documentNumber} onChange={(e) => setDocumentNumber(e.target.value)} maxLength={120} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
-        <label className="text-sm">תאריך מסמך (ניתן לתיקון)<input type="date" value={documentDate} max={today()} onChange={(e) => setDocumentDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
+        <label className="text-sm">תאריך מסמך (ניתן לתיקון)<input type="date" value={documentDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setDocumentDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
         <button type="button" onClick={async () => { setBusy(true); setError(""); try { await persistDocumentMetadata(); setNotice("פרטי המסמך המתוקנים נשמרו."); } catch (err: any) { setError(err?.friendlyMessage || err?.response?.data?.message || "לא ניתן לשמור את פרטי המסמך"); } finally { setBusy(false); } }} disabled={busy || Boolean(analysis.applied_at)} className="self-end rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 disabled:opacity-50 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300">שמור תיקונים</button>
         <p className="text-xs leading-5 text-slate-500 sm:col-span-3">תאריך תעודת המשלוח ישמש כתאריך הקבלה לצורך מדידת זמני אספקה. אם התאריך אינו ידוע, השאר ריק — לא נניח תאריך על סמך מועד הסריקה.</p>
       </div>
@@ -442,7 +442,6 @@ export default function DocumentIntelligencePage() {
         {data?.document_type === "INVOICE" && <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
           <h3 className="font-bold">רישום חשבונית ועדכון מחירון</h3>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="text-sm">מספר חשבונית<input value={documentNumber} onChange={(e) => setDocumentNumber(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
             <label className="text-sm">סכום כולל<input type="number" min="0.01" step="0.01" value={invoiceAmount} onChange={(e) => setInvoiceAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /></label>
           </div>
           <label className="mt-3 flex items-start gap-2 text-sm"><input type="checkbox" checked={allowPriceUpdates} onChange={(e) => setAllowPriceUpdates(e.target.checked)} className="mt-1" /><span><b>אישור מפורש לעדכון מחירים לאחר בדיקה</b><span className="block text-xs text-slate-500">רק התאמה ברמת ביטחון גבוהה, ספק ההזמנה, מטבע ויחידת מידה תואמים, ללא הנחה לא מפוענחת. כל שינוי מתועד בהיסטוריית המחירים.</span></span></label>
