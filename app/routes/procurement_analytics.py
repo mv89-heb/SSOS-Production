@@ -4,11 +4,14 @@ from decimal import Decimal
 
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.extensions import db
 from app.models.order import Order, STATUS_APPROVED, STATUS_SENT, STATUS_COMPLETED
+from app.models.order_item import OrderItem
+from app.models.receipt import Receipt, RECEIPT_POSTED
+from app.models.receipt_item import ReceiptItem
 from app.models.supplier import Supplier
 from app.models.supplier_invoice import SupplierInvoice, SupplierInvoicePayment
 from app.services.permission_service import PermissionService
@@ -62,6 +65,127 @@ def _add(groups, supplier_id, supplier_name, category, currency, amount, documen
     group = groups[key]
     group["total"] += amount
     group["documents"].append(document)
+
+
+def _supplier_reliability(tenant_id: int, start_at: datetime, end_at: datetime):
+    """Measure only completed orders with recorded posted receipts and dates."""
+    rows = db.session.execute(
+        select(Order, Supplier)
+        .outerjoin(
+            Supplier,
+            (Supplier.id == Order.supplier_id) & (Supplier.tenant_id == tenant_id),
+        )
+        .where(
+            Order.tenant_id == tenant_id,
+            Order.status == STATUS_COMPLETED,
+            Order.created_at >= start_at,
+            Order.created_at < end_at,
+        )
+        .order_by(Order.id.asc())
+    ).all()
+    if not rows:
+        return []
+
+    orders = [row[0] for row in rows]
+    supplier_by_order = {order.id: supplier for order, supplier in rows}
+    order_ids = [order.id for order in orders]
+    receipts = db.session.scalars(
+        select(Receipt).where(
+            Receipt.tenant_id == tenant_id,
+            Receipt.order_id.in_(order_ids),
+            Receipt.status == RECEIPT_POSTED,
+            or_(Receipt.received_at.is_(None), Receipt.received_at < end_at),
+        ).order_by(Receipt.received_at.asc(), Receipt.id.asc())
+    ).all()
+    receipt_by_order = defaultdict(list)
+    receipt_ids = []
+    for receipt in receipts:
+        receipt_by_order[receipt.order_id].append(receipt)
+        receipt_ids.append(receipt.id)
+
+    received_by_item = defaultdict(Decimal)
+    if receipt_ids:
+        receipt_lines = db.session.scalars(
+            select(ReceiptItem).where(
+                ReceiptItem.tenant_id == tenant_id,
+                ReceiptItem.receipt_id.in_(receipt_ids),
+            )
+        ).all()
+        for line in receipt_lines:
+            received_by_item[line.order_item_id] += Decimal(str(line.quantity))
+
+    order_items = db.session.scalars(
+        select(OrderItem).where(
+            OrderItem.tenant_id == tenant_id,
+            OrderItem.order_id.in_(order_ids),
+        ).order_by(OrderItem.order_id.asc(), OrderItem.id.asc())
+    ).all()
+    items_by_order = defaultdict(list)
+    for item in order_items:
+        items_by_order[item.order_id].append(item)
+
+    metrics = {}
+    for order in orders:
+        supplier = supplier_by_order.get(order.id)
+        supplier_id = supplier.id if supplier else order.supplier_id
+        supplier_name = supplier.name if supplier else order.supplier_name
+        category = supplier.supplier_category if supplier else "לא מסווג"
+        key = (supplier_id, supplier_name or "ספק לא ידוע", category or "לא מסווג")
+        metric = metrics.setdefault(key, {
+            "completed_orders": 0,
+            "delivery_sample_size": 0,
+            "late_orders": 0,
+            "shortage_sample_size": 0,
+            "short_orders": 0,
+            "missing_planned_date": 0,
+            "missing_receipt_date": 0,
+            "orders_without_posted_receipt": 0,
+        })
+        metric["completed_orders"] += 1
+        if not order.planned_order_date:
+            metric["missing_planned_date"] += 1
+
+        order_receipts = receipt_by_order.get(order.id, [])
+        if not order_receipts:
+            metric["orders_without_posted_receipt"] += 1
+            metric["missing_receipt_date"] += 1
+            continue
+
+        dated_receipts = [r.received_at for r in order_receipts if r.received_at is not None]
+        if not dated_receipts:
+            metric["missing_receipt_date"] += 1
+        elif order.planned_order_date:
+            completion_date = max(dated_receipts).date()
+            metric["delivery_sample_size"] += 1
+            if completion_date > order.planned_order_date:
+                metric["late_orders"] += 1
+
+        lines = items_by_order.get(order.id, [])
+        if lines:
+            metric["shortage_sample_size"] += 1
+            has_shortage = any(
+                received_by_item.get(item.id, Decimal("0")) < Decimal(str(item.quantity))
+                for item in lines
+            )
+            if has_shortage:
+                metric["short_orders"] += 1
+
+    result = []
+    for (supplier_id, supplier_name, category), metric in metrics.items():
+        delivery_n = metric["delivery_sample_size"]
+        shortage_n = metric["shortage_sample_size"]
+        result.append({
+            "supplier_id": supplier_id,
+            "supplier_name": supplier_name,
+            "category": category,
+            **metric,
+            "late_rate_percent": round(metric["late_orders"] * 100 / delivery_n, 1) if delivery_n else None,
+            "shortage_rate_percent": round(metric["short_orders"] * 100 / shortage_n, 1) if shortage_n else None,
+            "credit_adjustment_frequency": None,
+            "credit_adjustment_data_available": False,
+            "credit_adjustment_note": "אין במערכת קישור מובנה בין זיכויים/התאמות לבין ספק והזמנה; המדד אינו מחושב.",
+        })
+    return sorted(result, key=lambda row: row["supplier_name"].casefold())
 
 
 @procurement_analytics_bp.route("/spend", methods=["GET"])
@@ -170,10 +294,12 @@ def procurement_spend():
                 "invoiced": "Recorded supplier invoices by invoice date. This is not added to ordered spend.",
                 "paid": "Recorded invoice payments by payment date. Partial payments are counted only when paid.",
                 "currency": "Totals are separated by currency; currencies are never converted or summed together.",
+                "reliability": "Supplier reliability uses completed orders created in the selected period. Lateness is measured from planned date to the last posted receipt; shortage means at least one line has a recorded received quantity below the ordered quantity. Missing dates and sample sizes are shown; credit/adjustment frequency is not available without structured linkage.",
             },
             "ordered": {"totals_by_currency": totals(ordered_groups), "by_supplier": _serialize_groups(ordered_groups)},
             "invoiced": {"totals_by_currency": totals(invoiced_groups), "by_supplier": _serialize_groups(invoiced_groups)},
             "paid": {"totals_by_currency": totals(paid_groups), "by_supplier": _serialize_groups(paid_groups)},
+            "supplier_reliability": _supplier_reliability(tenant_id, start_at, end_at),
         }), 200
     except HTTPException as exc:
         return jsonify({"success": False, "error": exc.name.lower().replace(" ", "_"), "message": exc.description}), exc.code

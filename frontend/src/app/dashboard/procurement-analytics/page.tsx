@@ -27,6 +27,24 @@ type SpendGroup = {
   documents: SpendDocument[];
 };
 type SpendBasis = { totals_by_currency: Record<string, number>; by_supplier: SpendGroup[] };
+type ReliabilityMetric = {
+  supplier_id: number | null;
+  supplier_name: string;
+  category: string;
+  completed_orders: number;
+  delivery_sample_size: number;
+  late_orders: number;
+  late_rate_percent: number | null;
+  shortage_sample_size: number;
+  short_orders: number;
+  shortage_rate_percent: number | null;
+  missing_planned_date: number;
+  missing_receipt_date: number;
+  orders_without_posted_receipt: number;
+  credit_adjustment_frequency: number | null;
+  credit_adjustment_data_available: boolean;
+  credit_adjustment_note: string;
+};
 type SpendResponse = {
   success: boolean;
   period: { start_date: string; end_date: string };
@@ -34,6 +52,7 @@ type SpendResponse = {
   ordered: SpendBasis;
   invoiced: SpendBasis;
   paid: SpendBasis;
+  supplier_reliability: ReliabilityMetric[];
 };
 
 function localDate(value: Date) {
@@ -148,6 +167,29 @@ export default function ProcurementAnalyticsPage() {
             <SpendCard title="תשלומים שבוצעו" description={query.data.definitions.paid} icon={Wallet} basis={query.data.paid} />
           </div>
           <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">{query.data.definitions.currency} הנתונים מוצגים לפי תאריך יצירת ההזמנה, תאריך החשבונית ותאריך התשלום בהתאמה. אין לחבר בין שלושת המדדים, כדי למנוע ספירה כפולה.</p>
+          <Card>
+            <CardHeader className="border-b border-slate-100 dark:border-slate-800">
+              <CardTitle className="text-base">אמינות ספקים</CardTitle>
+              <p className="text-xs leading-5 text-slate-500">{query.data.definitions.reliability}</p>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-4">
+              {query.data.supplier_reliability.length === 0 ? <p className="text-sm text-slate-500">אין הזמנות שהושלמו בתקופה שנבחרה לצורך חישוב מדדי אמינות.</p> : query.data.supplier_reliability.map((metric) => (
+                <div key={metric.supplier_id ?? metric.supplier_name} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-bold">{metric.supplier_name}<span className="mr-2 text-xs font-normal text-slate-500">{metric.category}</span></div>
+                    <span className="text-xs text-slate-500">{metric.completed_orders} הזמנות שהושלמו</span>
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div><div className="text-xs text-slate-500">איחורים</div><div className="font-bold">{metric.late_rate_percent === null ? "אין מדגם" : `${metric.late_rate_percent}%`}<span className="mr-1 text-xs font-normal text-slate-500">({metric.late_orders}/{metric.delivery_sample_size})</span></div></div>
+                    <div><div className="text-xs text-slate-500">חוסרים</div><div className="font-bold">{metric.shortage_rate_percent === null ? "אין מדגם" : `${metric.shortage_rate_percent}%`}<span className="mr-1 text-xs font-normal text-slate-500">({metric.short_orders}/{metric.shortage_sample_size})</span></div></div>
+                    <div><div className="text-xs text-slate-500">תאריכים חסרים</div><div className="font-bold">{metric.missing_planned_date + metric.missing_receipt_date}</div><div className="text-[11px] text-slate-500">תכנון: {metric.missing_planned_date} · קבלה: {metric.missing_receipt_date}</div></div>
+                    <div><div className="text-xs text-slate-500">זיכויים / התאמות</div><div className="font-bold">אין נתונים מובנים</div></div>
+                  </div>
+                  <p className="mt-2 text-[11px] leading-5 text-slate-500">{metric.credit_adjustment_note}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </>
       )}
     </div>
