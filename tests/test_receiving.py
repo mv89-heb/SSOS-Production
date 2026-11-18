@@ -196,3 +196,74 @@ def test_receipt_can_preserve_unknown_delivery_date(logged_in_client_a, make_ord
         receipt_id=received.get_json()["receipt"]["id"]
     ).one()
     assert movement.occurred_at is not None
+
+
+def test_damaged_units_are_recorded_but_only_accepted_units_enter_stock_and_order_balance(
+    logged_in_client_a, make_order, db
+):
+    response, _, product_id = make_order(logged_in_client_a, quantity=5, price=10.0)
+    assert response.status_code == 201
+    order = response.get_json()["order"]
+    order_item_id = order["order_items"][0]["id"]
+    _set_known_zero_stock(db, product_id)
+    _send_order(logged_in_client_a, db, order["id"])
+
+    first = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={"items": [{
+            "order_item_id": order_item_id,
+            "quantity": 3,
+            "damaged_quantity": 1,
+            "damage_notes": "אריזה קרועה",
+        }]},
+    )
+    assert first.status_code == 201, first.get_json()
+    first_item = first.get_json()["receipt"]["items"][0]
+    assert first_item["quantity"] == 3.0
+    assert first_item["damaged_quantity"] == 1.0
+    assert first_item["accepted_quantity"] == 2.0
+    assert first_item["damage_notes"] == "אריזה קרועה"
+    assert db.session.get(Product, product_id).current_stock == 2
+    first_movement = InventoryMovement.query.filter_by(receipt_id=first.get_json()["receipt"]["id"]).one()
+    assert float(first_movement.quantity) == 2.0
+    assert "damaged not stocked" in first_movement.note
+
+    replacement = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={"items": [{"order_item_id": order_item_id, "quantity": 3}]},
+    )
+    assert replacement.status_code == 201, replacement.get_json()
+    assert db.session.get(Product, product_id).current_stock == 5
+    received_items = ReceiptItem.query.filter_by(order_item_id=order_item_id).all()
+    assert sum(Decimal(str(item.quantity)) for item in received_items) == Decimal("6")
+    assert sum(Decimal(str(item.quantity - item.damaged_quantity)) for item in received_items) == Decimal("5")
+
+
+def test_damaged_receipt_requires_reason_and_cannot_exceed_physical_quantity(
+    logged_in_client_a, make_order, db
+):
+    response, _, product_id = make_order(logged_in_client_a, quantity=2, price=10.0)
+    order = response.get_json()["order"]
+    order_item_id = order["order_items"][0]["id"]
+    _set_known_zero_stock(db, product_id)
+    _send_order(logged_in_client_a, db, order["id"])
+
+    missing_reason = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={"items": [{"order_item_id": order_item_id, "quantity": 1, "damaged_quantity": 1}]},
+    )
+    assert missing_reason.status_code == 400
+
+    over_damaged = logged_in_client_a.post(
+        f"/api/orders/{order['id']}/receipts",
+        json={"items": [{
+            "order_item_id": order_item_id,
+            "quantity": 1,
+            "damaged_quantity": 2,
+            "damage_notes": "לא תקין",
+        }]},
+    )
+    assert over_damaged.status_code == 400
+    assert Receipt.query.filter_by(order_id=order["id"]).count() == 0
+    assert db.session.get(Product, product_id).current_stock == 0
+    assert InventoryMovement.query.filter_by(product_id=product_id).count() == 0
