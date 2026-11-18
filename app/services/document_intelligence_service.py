@@ -176,6 +176,55 @@ class DocumentIntelligenceService:
             raise NotFound("Document analysis not found")
         return row
 
+
+    def update_document_metadata(self, analysis_id: int, payload: dict):
+        """Save operator-corrected document number/date without retaining the source file."""
+        if not isinstance(payload, dict):
+            raise BadRequest("Document metadata must be an object")
+        row = DocumentAnalysis.query.filter_by(
+            tenant_id=self.tenant_id, id=analysis_id
+        ).with_for_update().first()
+        if row is None:
+            raise NotFound("Document analysis not found")
+        if row.status not in {"ANALYZED", "PARTIALLY_APPLIED"} or row.applied_at:
+            raise Conflict("Document metadata can only be corrected before posting")
+        data = dict(row.extracted_data) if isinstance(row.extracted_data, dict) else {}
+        changed = []
+        if "document_number" in payload:
+            value = payload.get("document_number")
+            if value is not None and not isinstance(value, str):
+                raise BadRequest("document_number must be a string")
+            value = (value or "").strip()
+            if len(value) > 120:
+                raise BadRequest("document_number is too long")
+            data["document_number"] = value or None
+            changed.append("document_number")
+        if "document_date" in payload:
+            value = payload.get("document_date")
+            if value in (None, ""):
+                data["document_date"] = None
+            else:
+                if not isinstance(value, str):
+                    raise BadRequest("document_date must use YYYY-MM-DD")
+                try:
+                    parsed = date.fromisoformat(value)
+                except (TypeError, ValueError):
+                    raise BadRequest("document_date must use YYYY-MM-DD")
+                if parsed.isoformat() != value or parsed > datetime.now(timezone.utc).date():
+                    raise BadRequest("document_date must be a valid date no later than today")
+                data["document_date"] = parsed.isoformat()
+            changed.append("document_date")
+        if not changed:
+            raise BadRequest("No document metadata fields were provided")
+        row.extracted_data = data
+        AuditService.log_event(
+            self.tenant_id, self.user_id, "document.metadata_corrected",
+            f"Document metadata corrected for {row.filename}",
+            {"analysis_id": row.id, "fields": changed},
+        )
+        db.session.commit()
+        return row
+
     def analyze(self, analysis_id: int):
         PermissionService.require_role_at_least("manager")
         row = self._get(analysis_id)
@@ -792,8 +841,10 @@ class DocumentIntelligenceService:
             receipt_quantities[order_item_id] = receipt_quantities.get(order_item_id, Decimal("0")) + amount
         receipt_items = [{"order_item_id": item_id, "quantity": str(quantity)} for item_id, quantity in sorted(receipt_quantities.items())]
         receipt_number = str(data.get("document_number") or "").strip() or f"SCAN-DN-{analysis_id}"
+        document_date = data.get("document_date")
         receipt_payload = {
             "receipt_number": receipt_number,
+            "received_at": document_date if document_date else None,
             "notes": f"נוצר מסריקת תעודת משלוח: {row.filename}",
             "items": receipt_items,
         }
