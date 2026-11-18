@@ -40,6 +40,7 @@ export function useUpdateDraftOrder(id: number) {
     onSuccess: (order) => {
       queryClient.setQueryData(orderKey(id), order);
       queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["order-budget-impact", id] });
     },
   });
 }
