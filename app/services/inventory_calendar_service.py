@@ -1,5 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+import os
 
 from sqlalchemy import distinct, select
 
@@ -22,6 +23,62 @@ class InventoryCalendarService:
     def __init__(self, tenant_id: int):
         self.tenant_id = tenant_id
         self.base = InventoryPlanningService(tenant_id)
+
+    @staticmethod
+    def _seasonality_config():
+        """Read a bounded recurring boosted-week configuration."""
+        def bounded_int(name, default, minimum, maximum):
+            try:
+                value = int(os.getenv(name, str(default)))
+            except (TypeError, ValueError):
+                return default
+            return value if minimum <= value <= maximum else default
+
+        try:
+            uplift = Decimal(str(os.getenv("SSOS_BOOSTED_WEEK_MULTIPLIER", "1.4")))
+        except (InvalidOperation, TypeError, ValueError):
+            uplift = Decimal("1.4")
+        if not uplift.is_finite():
+            uplift = Decimal("1.4")
+        uplift = max(Decimal("1"), min(uplift, Decimal("3")))
+        cycle_weeks = bounded_int("SSOS_BOOSTED_CYCLE_WEEKS", 4, 2, 12)
+        boosted_weeks = bounded_int("SSOS_BOOSTED_WEEKS", 1, 1, cycle_weeks - 1)
+        return {
+            "cycle_weeks": cycle_weeks,
+            "boosted_weeks": boosted_weeks,
+            "normal_weeks": cycle_weeks - boosted_weeks,
+            "uplift": uplift,
+        }
+
+    @staticmethod
+    def _seasonal_multiplier_for_date(target_date: date, config):
+        """Boost the final configured week(s) in a stable repeating cycle."""
+        cycle_anchor = date(2020, 1, 6)  # Monday; first cycle week is normal.
+        week_index = (target_date - cycle_anchor).days // 7
+        cycle_position = week_index % config["cycle_weeks"]
+        return config["uplift"] if cycle_position >= config["normal_weeks"] else Decimal("1")
+
+    @staticmethod
+    def _seasonality_metrics(daily_rate: Decimal, config):
+        normal_week = daily_rate * Decimal(7)
+        boosted_week = normal_week * config["uplift"]
+        average_week = (
+            normal_week * Decimal(config["normal_weeks"])
+            + boosted_week * Decimal(config["boosted_weeks"])
+        ) / Decimal(config["cycle_weeks"])
+        return {
+            "normal_weekly_demand": round(float(normal_week), 3),
+            "boosted_weekly_demand": round(float(boosted_week), 3),
+            "average_weekly_demand": round(float(average_week), 3),
+            "monthly_forecast_demand": round(float(average_week * Decimal(4)), 3),
+            "seasonal_forecast": {
+                "cycle_weeks": config["cycle_weeks"],
+                "normal_weeks": config["normal_weeks"],
+                "boosted_weeks": config["boosted_weeks"],
+                "boosted_week_multiplier": float(config["uplift"]),
+                "basis": "measured_consumption_with_recurring_boosted_week",
+            },
+        }
 
     @staticmethod
     def _parse_weekdays(value):
@@ -117,13 +174,18 @@ class InventoryCalendarService:
             [int(product_id) for product_id in product_ids]
         )
 
-    def _forecast_demand(self, daily_rate: Decimal, start: date, end: date, periods):
+    def _forecast_demand(self, daily_rate: Decimal, start: date, end: date, periods, seasonality=None):
         if end < start or daily_rate <= 0:
             return Decimal("0")
+        seasonality = seasonality or self._seasonality_config()
         total = Decimal("0")
         current = start
         while current <= end:
-            total += daily_rate * self.multiplier_for_date(current, periods)
+            total += (
+                daily_rate
+                * self.multiplier_for_date(current, periods)
+                * self._seasonal_multiplier_for_date(current, seasonality)
+            )
             current += timedelta(days=1)
         return total
 
@@ -149,8 +211,10 @@ class InventoryCalendarService:
         else:
             target_end = today + timedelta(days=base_horizon)
         target_end = min(target_end, window_end)
-        holiday_adjusted_demand = self._forecast_demand(daily_rate, today, target_end, periods)
-        safety_stock = self._forecast_demand(daily_rate, target_end + timedelta(days=1), target_end + timedelta(days=max(1, int(safety_days))), periods)
+        seasonality = self._seasonality_config()
+        seasonal_metrics = self._seasonality_metrics(daily_rate, seasonality)
+        holiday_adjusted_demand = self._forecast_demand(daily_rate, today, target_end, periods, seasonality)
+        safety_stock = self._forecast_demand(daily_rate, target_end + timedelta(days=1), target_end + timedelta(days=max(1, int(safety_days))), periods, seasonality)
         target_stock = holiday_adjusted_demand + safety_stock
         configured_targets = [
             Decimal(str(value))
@@ -195,6 +259,7 @@ class InventoryCalendarService:
             "base_average_daily_usage": round(float(daily_rate), 3),
             "receipts_in_observation_period": round(float(total_receipts), 3),
             "confirmed_inbound": float(inbound),
+            **seasonal_metrics,
             "holiday_adjusted_demand": round(float(holiday_adjusted_demand), 3),
             "holiday_adjusted_target_stock": round(float(target_stock), 3),
             "safety_stock": round(float(safety_stock), 3),
@@ -253,6 +318,7 @@ class InventoryCalendarService:
         periods = self.periods(start=today, end=today + timedelta(days=180), active_only=True)
         from app.services.inventory_consumption_planning_service import InventoryConsumptionPlanningService
         consumption_metrics = InventoryConsumptionPlanningService(self.tenant_id)._consumption_batch(ids, since)
+        seasonality = self._seasonality_config()
         rows = []
         for product in products:
             daily = {}
@@ -275,8 +341,10 @@ class InventoryCalendarService:
             delivery = date.fromisoformat(schedule["next_delivery_date"]) if schedule.get("next_delivery_date") else None
             horizon = max(1, (delivery - today).days + safety_days) if delivery and delivery >= today else max(1, safety_days)
             horizon_end = min(today + timedelta(days=horizon), today + timedelta(days=180))
-            demand = self._forecast_demand(rate, today, horizon_end, periods)
-            safety = rate * Decimal(safety_days)
+            seasonal_metrics = self._seasonality_metrics(rate, seasonality)
+            demand = self._forecast_demand(rate, today, horizon_end, periods, seasonality)
+            safety_end = horizon_end + timedelta(days=max(1, safety_days))
+            safety = self._forecast_demand(rate, horizon_end + timedelta(days=1), safety_end, periods, seasonality)
             stock = Decimal(str(product.current_stock or 0))
             inbound_qty = inbound.get(product.id, Decimal("0"))
             target = demand + safety
@@ -313,7 +381,8 @@ class InventoryCalendarService:
                 "average_daily_usage": round(float(rate), 3), "base_average_daily_usage": round(float(rate), 3),
                 "receipts_in_observation_period": round(float(received_total), 3),
                 "adjustment_delta_in_observation_period": round(float(adjustment_delta), 3),
-                "confirmed_inbound": float(inbound_qty), "holiday_adjusted_demand": round(float(demand), 3),
+                "confirmed_inbound": float(inbound_qty), **seasonal_metrics,
+                "holiday_adjusted_demand": round(float(demand), 3),
                 "holiday_adjusted_target_stock": round(float(target), 3), "safety_stock": round(float(safety), 3),
                 "reorder_point": round(float(target), 3), "recommended_order": round(float(recommended), 3),
                 "coverage_days": round(float(coverage), 1) if coverage is not None else None,
