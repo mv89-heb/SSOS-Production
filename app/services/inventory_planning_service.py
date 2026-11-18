@@ -1,6 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_CEILING
-import os
 import re
 
 from sqlalchemy import select
@@ -26,52 +25,6 @@ class InventoryPlanningService:
 
     def __init__(self, tenant_id: int):
         self.tenant_id = tenant_id
-
-    @staticmethod
-    def _seasonal_forecast_metrics(average_daily_usage):
-        """Apply a configurable recurring boosted week to future demand only.
-
-        Observed consumption remains untouched. Defaults follow the supplied
-        monthly model: three normal weeks and one boosted week, with a 40%
-        uplift. Environment overrides are validated and bounded.
-        """
-        def bounded_int(name, default, minimum, maximum):
-            try:
-                return max(minimum, min(int(os.getenv(name, default)), maximum))
-            except (TypeError, ValueError):
-                return default
-
-        try:
-            uplift = Decimal(str(os.getenv("SSOS_BOOSTED_WEEK_MULTIPLIER", "1.4")))
-        except (InvalidOperation, TypeError, ValueError):
-            uplift = Decimal("1.4")
-        if not uplift.is_finite():
-            uplift = Decimal("1.4")
-        uplift = max(Decimal("1"), min(uplift, Decimal("3")))
-
-        cycle_weeks = bounded_int("SSOS_BOOSTED_CYCLE_WEEKS", 4, 2, 12)
-        boosted_weeks = bounded_int("SSOS_BOOSTED_WEEKS", 1, 1, cycle_weeks - 1)
-        normal_weeks = cycle_weeks - boosted_weeks
-        daily = Decimal(str(average_daily_usage or 0))
-        normal_week = daily * Decimal(7)
-        boosted_week = normal_week * uplift
-        cycle_average_week = (
-            normal_week * Decimal(normal_weeks) + boosted_week * Decimal(boosted_weeks)
-        ) / Decimal(cycle_weeks)
-        return {
-            "normal_weekly_demand": round(float(normal_week), 3),
-            "boosted_weekly_demand": round(float(boosted_week), 3),
-            "average_weekly_demand": round(float(cycle_average_week), 3),
-            "monthly_forecast_demand": round(float(
-                cycle_average_week * Decimal(4)
-            ), 3),
-            "forecast_daily_usage": cycle_average_week / Decimal(7),
-            "boosted_week_multiplier": float(uplift),
-            "boosted_cycle_weeks": cycle_weeks,
-            "boosted_weeks_per_cycle": boosted_weeks,
-            "normal_weeks_per_cycle": normal_weeks,
-            "forecast_basis": "measured_counts_with_seasonal_estimate",
-        }
 
     @staticmethod
     def _decimal(value, field="quantity"):
@@ -282,10 +235,8 @@ class InventoryPlanningService:
         horizon_days = lead_time_days + safety_days
         if days_until_order is not None:
             horizon_days = max(horizon_days, days_until_order + lead_time_days + safety_days)
-        seasonal = self._seasonal_forecast_metrics(average_daily_usage)
-        forecast_daily_usage = seasonal["forecast_daily_usage"]
-        lead_time_demand = forecast_daily_usage * Decimal(horizon_days)
-        safety_stock = forecast_daily_usage * Decimal(safety_days)
+        lead_time_demand = average_daily_usage * Decimal(horizon_days)
+        safety_stock = average_daily_usage * Decimal(safety_days)
         reorder_point = lead_time_demand
         current_stock = Decimal(str(product.current_stock or 0))
         recommended_order = max(Decimal("0"), reorder_point - current_stock)
@@ -299,7 +250,7 @@ class InventoryPlanningService:
             status = "reorder"
         else:
             status = "healthy"
-        return {"product_id": product.id, "product_name": product.name, "current_stock": float(current_stock), "lookback_days": lookback_days, "stock_checks_in_period": len(counts), "observed_days": round(float(observed_days), 1), "estimated_depletion": float(estimated_depletion), "average_daily_usage": round(float(average_daily_usage), 3), "forecast_daily_usage": round(float(forecast_daily_usage), 3), "seasonal_forecast": {key: value for key, value in seasonal.items() if key != "forecast_daily_usage"}, "lead_time_days": lead_time_days, "days_until_next_order": days_until_order, "planning_horizon_days": horizon_days, "lead_time_demand": round(float(lead_time_demand), 3), "safety_stock": round(float(safety_stock), 3), "reorder_point": round(float(reorder_point), 3), "recommended_order": round(float(recommended_order), 3), "coverage_days": round(float(coverage_days), 1) if coverage_days is not None else None, "status": status, "last_count_at": counts[-1].occurred_at.isoformat() if counts and counts[-1].occurred_at else None, "data_ready": len(counts) >= 2, "supplier_schedule": schedule, **carton_metrics}
+        return {"product_id": product.id, "product_name": product.name, "current_stock": float(current_stock), "lookback_days": lookback_days, "stock_checks_in_period": len(counts), "observed_days": round(float(observed_days), 1), "estimated_depletion": float(estimated_depletion), "average_daily_usage": round(float(average_daily_usage), 3), "lead_time_days": lead_time_days, "days_until_next_order": days_until_order, "planning_horizon_days": horizon_days, "lead_time_demand": round(float(lead_time_demand), 3), "safety_stock": round(float(safety_stock), 3), "reorder_point": round(float(reorder_point), 3), "recommended_order": round(float(recommended_order), 3), "coverage_days": round(float(coverage_days), 1) if coverage_days is not None else None, "status": status, "last_count_at": counts[-1].occurred_at.isoformat() if counts and counts[-1].occurred_at else None, "data_ready": len(counts) >= 2, "supplier_schedule": schedule, **carton_metrics}
 
     def recommendations(self, *, lookback_days=60, lead_time_days=None, safety_days=2, limit=100):
         products = db.session.scalars(select(Product).where(Product.tenant_id == self.tenant_id, Product.active.is_(True)).order_by(Product.name).limit(max(1, min(int(limit), 500)))).all()
@@ -366,10 +317,8 @@ class InventoryPlanningService:
         horizon_days = effective_lead_time + safety_days
         if days_until_order is not None:
             horizon_days = max(horizon_days, days_until_order + effective_lead_time + safety_days)
-        seasonal = self._seasonal_forecast_metrics(average_daily_usage)
-        forecast_daily_usage = seasonal["forecast_daily_usage"]
-        lead_time_demand = forecast_daily_usage * Decimal(horizon_days)
-        safety_stock = forecast_daily_usage * Decimal(safety_days)
+        lead_time_demand = average_daily_usage * Decimal(horizon_days)
+        safety_stock = average_daily_usage * Decimal(safety_days)
         reorder_point = lead_time_demand
         current_stock = Decimal(str(product.current_stock or 0))
         recommended_order = max(Decimal("0"), reorder_point - current_stock)
@@ -383,4 +332,4 @@ class InventoryPlanningService:
             status = "reorder"
         else:
             status = "healthy"
-        return {"product_id": product.id, "product_name": product.name, "current_stock": float(current_stock), "lookback_days": lookback_days, "stock_checks_in_period": len(counts), "observed_days": round(float(observed_days), 1), "estimated_depletion": float(estimated_depletion), "average_daily_usage": round(float(average_daily_usage), 3), "forecast_daily_usage": round(float(forecast_daily_usage), 3), "seasonal_forecast": {key: value for key, value in seasonal.items() if key != "forecast_daily_usage"}, "lead_time_days": effective_lead_time, "days_until_next_order": days_until_order, "planning_horizon_days": horizon_days, "lead_time_demand": round(float(lead_time_demand), 3), "safety_stock": round(float(safety_stock), 3), "reorder_point": round(float(reorder_point), 3), "recommended_order": round(float(recommended_order), 3), "coverage_days": round(float(coverage_days), 1) if coverage_days is not None else None, "status": status, "data_ready": len(counts) >= 2, "supplier_schedule": schedule, **carton_metrics}
+        return {"product_id": product.id, "product_name": product.name, "current_stock": float(current_stock), "lookback_days": lookback_days, "stock_checks_in_period": len(counts), "observed_days": round(float(observed_days), 1), "estimated_depletion": float(estimated_depletion), "average_daily_usage": round(float(average_daily_usage), 3), "lead_time_days": effective_lead_time, "days_until_next_order": days_until_order, "planning_horizon_days": horizon_days, "lead_time_demand": round(float(lead_time_demand), 3), "safety_stock": round(float(safety_stock), 3), "reorder_point": round(float(reorder_point), 3), "recommended_order": round(float(recommended_order), 3), "coverage_days": round(float(coverage_days), 1) if coverage_days is not None else None, "status": status, "data_ready": len(counts) >= 2, "supplier_schedule": schedule, **carton_metrics}
