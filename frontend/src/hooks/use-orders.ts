@@ -59,10 +59,11 @@ export function useDeleteOrder() {
 export function useSubmitOrder(id: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => orderService.submitOrder(id),
+    mutationFn: (budgetOverrideReason?: string) => orderService.submitOrder(id, budgetOverrideReason),
     onSuccess: (order) => {
       queryClient.setQueryData(orderKey(id), order);
       queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["order-budget-impact", id] });
     },
   });
 }
