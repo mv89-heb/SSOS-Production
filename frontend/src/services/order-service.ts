@@ -21,6 +21,7 @@ export interface SupplierHistoryForecastProduct {
   target_week_multiplier: number;
   data_ready: boolean;
   readiness_reason: string | null;
+  unit_conversion_issues: number;
 }
 
 export interface SupplierHistoryForecast {
