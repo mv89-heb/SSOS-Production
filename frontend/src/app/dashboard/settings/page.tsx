@@ -62,6 +62,7 @@ export default function SettingsPage() {
   const canManageImports = permissions.canManageImports(user);
   const canManageUsers = permissions.canManageUsers(user);
   const canViewAudit = permissions.canViewAudit(user);
+  const canManageBudgets = permissions.canApproveOrders(user);
 
   return (
     <div dir="rtl" className="space-y-8 pb-10">
@@ -122,6 +123,7 @@ export default function SettingsPage() {
 
       <Section title="ניהול, בקרה ותיעוד" description="כלים לבדיקת פעולות המערכת, הרשאות ותהליכי עבודה.">
         {canManageUsers && <SettingsCard title="מרכז ניהול מערכת" description="ניהול משתמשים, תפקידים והרשאות וכן צפייה בנתוני ניהול." href="/dashboard/admin" icon={Users} />}
+        {canManageBudgets && <SettingsCard title="תקציבי רכש" description="הגדרת תקציבים שבועיים וחודשיים לפי מחלקה או פרויקט, כולל אזהרה או חסימה לפני הגשת הזמנה." href="/dashboard/settings/procurement-budgets" icon={Warehouse} tag="חדש" />}
         {canViewAudit && <SettingsCard title="יומן פעולות" description="עיון בפעולות המתועדות במערכת, לפי הרשאות המשתמש." href="/dashboard/audit" icon={History} />}
         {canManageUsers && <SettingsCard title="בדיקת שלמות יומן הביקורת" description="בדיקת תקינות שרשרת הביקורת במרכז ניהול המערכת." href="/dashboard/admin/audit" icon={ShieldCheck} tag="מנהל מערכת" />}
         <SettingsCard title="הזמנות רכש" description="גישה לתהליך ההזמנה, סטטוסים ופרטי ההזמנות." href="/dashboard/orders" icon={ShoppingBag} />
