@@ -420,3 +420,91 @@ def test_document_metadata_correction_is_tenant_scoped_and_validated(
         json={"document_number": "CROSS-TENANT"},
     )
     assert hidden.status_code == 404
+
+
+
+def test_delivery_note_supports_sequential_partial_receipts_and_blocks_over_receipt(
+    logged_in_client_a, db, make_order
+):
+    response, supplier_id, product_id = make_order(
+        logged_in_client_a, quantity=5, price=10.0
+    )
+    assert response.status_code == 201, response.get_json()
+    order = db.session.get(Order, response.get_json()["order"]["id"])
+    order.status = STATUS_SENT
+    product = db.session.get(Product, product_id)
+    product.unit = product.unit or "יחידה"
+    product.current_stock = 0
+    db.session.commit()
+    order_item = OrderItem.query.filter_by(
+        tenant_id=order.tenant_id, order_id=order.id, product_id=product_id
+    ).one()
+    user = User.query.filter_by(email="admin@acme.test").one()
+
+    def create_note(number, quantity):
+        return _analysis(db, user, f"{number}.pdf", "DELIVERY_NOTE", {
+            "document_type": "DELIVERY_NOTE",
+            "document_number": number,
+            "supplier_matching": {"supplier_id": supplier_id, "decision": "AUTO_MATCH"},
+            "items": [{
+                "description": "Test Product",
+                "quantity": quantity,
+                "unit": product.unit,
+            }],
+            "order_reconciliation": None,
+        })
+
+    first = create_note("DN-PART-001", 2)
+    compared = logged_in_client_a.post(
+        f"/api/document-intelligence/{first.id}/compare-order",
+        json={"order_id": order.id},
+    )
+    assert compared.status_code == 200, compared.get_json()
+    first_line = compared.get_json()["reconciliation"]["lines"][0]
+    assert first_line["expected_quantity"] == 5.0
+    assert first_line["status"] == "MATCH"
+    assert "PARTIAL_DELIVERY" in first_line["flags"]
+    assert compared.get_json()["reconciliation"]["review_count"] == 0
+
+    posted_first = logged_in_client_a.post(
+        f"/api/document-intelligence/{first.id}/apply-delivery-note",
+        json={},
+    )
+    assert posted_first.status_code == 201, posted_first.get_json()
+    assert posted_first.get_json()["receipt"]["items"][0]["quantity"] == 2.0
+    assert db.session.get(Product, product_id).current_stock == 2
+
+    second = create_note("DN-PART-002", 3)
+    compared_second = logged_in_client_a.post(
+        f"/api/document-intelligence/{second.id}/compare-order",
+        json={"order_id": order.id},
+    )
+    assert compared_second.status_code == 200, compared_second.get_json()
+    second_line = compared_second.get_json()["reconciliation"]["lines"][0]
+    assert second_line["expected_quantity"] == 3.0
+    assert second_line["status"] == "MATCH"
+    assert second_line["flags"] == []
+
+    posted_second = logged_in_client_a.post(
+        f"/api/document-intelligence/{second.id}/apply-delivery-note",
+        json={},
+    )
+    assert posted_second.status_code == 201, posted_second.get_json()
+    assert db.session.get(Product, product_id).current_stock == 5
+
+    excess = create_note("DN-OVER-003", 1)
+    compared_excess = logged_in_client_a.post(
+        f"/api/document-intelligence/{excess.id}/compare-order",
+        json={"order_id": order.id},
+    )
+    assert compared_excess.status_code == 200, compared_excess.get_json()
+    excess_line = compared_excess.get_json()["reconciliation"]["lines"][0]
+    assert excess_line["expected_quantity"] == 0.0
+    assert excess_line["status"] == "REVIEW"
+    assert "OVER_RECEIPT" in excess_line["flags"]
+    blocked = logged_in_client_a.post(
+        f"/api/document-intelligence/{excess.id}/apply-delivery-note",
+        json={},
+    )
+    assert blocked.status_code == 409
+    assert db.session.get(Product, product_id).current_stock == 5
