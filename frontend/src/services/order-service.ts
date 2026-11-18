@@ -35,7 +35,7 @@ export interface OrderBudgetImpactItem {
 export interface OrderBudgetImpact {
   order_id: number; order_number: string; department?: string | null; project?: string | null;
   currency: string; budget_date: string; impacts: OrderBudgetImpactItem[];
-  over_budget: boolean; blocked: boolean; warnings: OrderBudgetImpactItem[]; blocks: OrderBudgetImpactItem[];
+  over_budget: boolean; assignment_required: boolean; missing_scopes: Array<"department" | "project">; blocked: boolean; warnings: OrderBudgetImpactItem[]; blocks: OrderBudgetImpactItem[];
 }
 export interface ProcurementBudget {
   id: number; scope_type: "department" | "project"; scope_value: string;
