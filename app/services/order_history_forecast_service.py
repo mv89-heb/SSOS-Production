@@ -1,5 +1,5 @@
 from datetime import date, datetime, time, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
 
 from sqlalchemy import and_, or_, select
 
@@ -180,7 +180,10 @@ class OrderHistoryForecastService:
                 and observed_weeks >= 2
                 and observed_normal_weeks >= 1
             )
-            recommended = normal_average * target_multiplier if enough_history else Decimal("0")
+            recommended_exact = normal_average * target_multiplier if enough_history else Decimal("0")
+            # OrderService accepts integer quantities only; always round up to avoid
+            # silently truncating a forecast (for example 19.6) to an under-order (19).
+            recommended = int(recommended_exact.to_integral_value(rounding=ROUND_CEILING))
             if has_unit_issues:
                 readiness_reason = "unit_conversion_requires_review"
             elif not enough_history:
@@ -206,7 +209,8 @@ class OrderHistoryForecastService:
                     )
                     / Decimal(cycle_weeks)
                 ), 3),
-                "recommended_quantity": round(float(recommended), 3),
+                "recommended_quantity": recommended,
+                "recommended_quantity_exact": round(float(recommended_exact), 3),
                 "target_week_multiplier": float(target_multiplier),
                 "data_ready": enough_history,
                 "readiness_reason": readiness_reason,
