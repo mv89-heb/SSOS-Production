@@ -71,7 +71,7 @@ def test_ocr_upload_removes_source_file_after_analysis(logged_in_client_a, make_
     order_id = create.get_json()["order"]["id"]
     observed = {}
 
-    def fake_process_document(file_path):
+    def fake_process_document(self, file_path):
         observed["path"] = file_path
         assert os.path.isfile(file_path)
         with open(file_path, "rb") as source:
