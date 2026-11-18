@@ -83,6 +83,14 @@ export default function DocumentIntelligencePage() {
   const [analyses, setAnalyses] = useState<DocumentAnalysis[]>([]); const [orders, setOrders] = useState<Array<{ id: number; order_number: string; supplier_name?: string; status?: string }>>([]); const [selectedOrderId, setSelectedOrderId] = useState(""); const [confirmSupplier, setConfirmSupplier] = useState(false); const [allowPriceUpdates, setAllowPriceUpdates] = useState(false); const [invoiceNumber, setInvoiceNumber] = useState(""); const [invoiceAmount, setInvoiceAmount] = useState(""); const [selectedId, setSelectedId] = useState<number | null>(null); const [mappings, setMappings] = useState<Record<number, Mapping>>({}); const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set()); const [newProductDrafts, setNewProductDrafts] = useState<Record<number, { open: boolean; name: string; supplier_id: number | string; supplier_sku: string; barcode: string; unit: string; units_per_carton: number | string; current_price: number | string }>>({}); const [progress, setProgress] = useState<UploadProgress[]>([]); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [now, setNow] = useState(() => Date.now());
   useEffect(() => { if (!busy) return; const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, [busy]);
   useEffect(() => {
+    const requestedOrderId = new URLSearchParams(window.location.search).get("orderId");
+    const parsedOrderId = Number(requestedOrderId);
+    if (!requestedOrderId || !Number.isInteger(parsedOrderId) || parsedOrderId <= 0) return;
+    if (orders.some((order) => order.id === parsedOrderId)) {
+      setSelectedOrderId(String(parsedOrderId));
+    }
+  }, [orders]);
+  useEffect(() => {
     apiClient.get<{ success: boolean; orders: Array<{ id: number; order_number: string; supplier_name?: string; status?: string }> }>("/api/orders?limit=200")
       .then(({ data }) => setOrders(data.orders ?? []))
       .catch(() => setOrders([]));
