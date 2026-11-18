@@ -393,14 +393,14 @@ def import_manual_orders():
         orders_payload = payload.get("orders")
         if not name or len(name) > 200:
             raise BadRequest("A batch name of up to 200 characters is required")
-        if not isinstance(orders_payload, list) or not orders_payload or len(orders_payload) > 500:
-            raise BadRequest("orders must be a non-empty list of at most 500 orders")
         existing = db.session.scalar(select(HistoricalImportBatch).where(
             HistoricalImportBatch.tenant_id == current_user.tenant_id,
             HistoricalImportBatch.name == name,
         ))
         if existing:
             raise Conflict("A historical import batch with this name already exists; use a new name to avoid duplicate imports")
+        if not isinstance(orders_payload, list) or not orders_payload or len(orders_payload) > 500:
+            raise BadRequest("orders must be a non-empty list of at most 500 orders")
 
         suppliers = db.session.scalars(select(Supplier).where(
             Supplier.tenant_id == current_user.tenant_id
