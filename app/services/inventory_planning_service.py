@@ -63,7 +63,7 @@ class InventoryPlanningService:
             "boosted_weekly_demand": round(float(boosted_week), 3),
             "average_weekly_demand": round(float(cycle_average_week), 3),
             "monthly_forecast_demand": round(float(
-                normal_week * Decimal(3) + boosted_week
+                cycle_average_week * Decimal(4)
             ), 3),
             "forecast_daily_usage": cycle_average_week / Decimal(7),
             "boosted_week_multiplier": float(uplift),
