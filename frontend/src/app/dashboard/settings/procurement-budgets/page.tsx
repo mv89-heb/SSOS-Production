@@ -29,7 +29,8 @@ function periodStart(type: "weekly" | "monthly", source = new Date()) {
   return isoDate(date);
 }
 function money(currency: string, value: number) {
-  return new Intl.NumberFormat("he-IL", { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
+  try { return new Intl.NumberFormat("he-IL", { style: "currency", currency, maximumFractionDigits: 0 }).format(value); }
+  catch { return `${value.toFixed(2)} ${currency}`; }
 }
 
 export default function ProcurementBudgetsPage() {
