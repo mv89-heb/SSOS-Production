@@ -642,9 +642,11 @@ class DocumentIntelligenceService:
         reconciliation = data.get("order_reconciliation")
         if not isinstance(reconciliation, dict) or not reconciliation.get("order_id"):
             raise Conflict("Compare the delivery note with a purchase order before correcting lines")
-        raw_corrections = payload.get("lines")
-        if not isinstance(raw_corrections, list) or not raw_corrections or len(raw_corrections) > 200:
-            raise BadRequest("Provide between 1 and 200 line corrections")
+        raw_corrections = payload.get("lines", [])
+        if not isinstance(raw_corrections, list) or len(raw_corrections) > 200:
+            raise BadRequest("Provide up to 200 line corrections")
+        if not raw_corrections and "notes" not in payload:
+            raise BadRequest("Provide line corrections or operator notes")
         extracted_items = data.get("items") if isinstance(data.get("items"), list) else []
         compared_lines = reconciliation.get("lines") if isinstance(reconciliation.get("lines"), list) else []
         by_index = {
