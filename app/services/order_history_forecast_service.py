@@ -69,17 +69,6 @@ class OrderHistoryForecastService:
         ]
         boosted_week_starts = [week for week in week_starts if week not in normal_week_starts]
 
-        def exposure_weeks(weeks):
-            exposure = Decimal("0")
-            for week in weeks:
-                overlap_start = max(start_date, week)
-                overlap_end = min(end_date, week + timedelta(days=6))
-                overlap_days = max(0, (overlap_end - overlap_start).days + 1)
-                exposure += Decimal(overlap_days) / Decimal("7")
-            return exposure
-
-        normal_exposure_weeks = exposure_weeks(normal_week_starts)
-
         rows = db.session.execute(
             select(Order, OrderItem, Product)
             .join(OrderItem, OrderItem.order_id == Order.id)
@@ -147,18 +136,18 @@ class OrderHistoryForecastService:
                 Decimal("0"),
             )
             normal_average = (
-                normal_total / normal_exposure_weeks
-                if normal_exposure_weeks > 0 else Decimal("0")
+                normal_total / Decimal(len(normal_week_starts))
+                if normal_week_starts else Decimal("0")
             )
             observed_orders = len(order_ids.get(product_id, set()))
             observed_weeks = len(order_weeks.get(product_id, set()))
-            enough_history = observed_orders >= 2 and observed_weeks >= 2 and normal_exposure_weeks > 0
+            enough_history = observed_orders >= 2 and observed_weeks >= 2 and bool(normal_week_starts)
             recommended = normal_average * target_multiplier if enough_history else Decimal("0")
             result.append({
                 **product_meta[product_id],
                 "order_count": observed_orders,
                 "weeks_with_orders": observed_weeks,
-                "normal_weeks_in_period": round(float(normal_exposure_weeks), 3),
+                "normal_weeks_in_period": len(normal_week_starts),
                 "boosted_weeks_in_period": len(boosted_week_starts),
                 "normal_weekly_average": round(float(normal_average), 3),
                 "boosted_weekly_forecast": round(float(normal_average * uplift), 3),
