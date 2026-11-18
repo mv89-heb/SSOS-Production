@@ -258,11 +258,16 @@ export default function DocumentIntelligencePage() {
     const lines = reconciliation.lines
       .filter((line) => line.matched)
       .map((line) => ({
+        original: line,
         line_index: line.line_index,
         quantity: deliveryLineEdits[line.line_index]?.quantity ?? String(line.extracted_quantity ?? ""),
         unit: deliveryLineEdits[line.line_index]?.unit ?? line.unit ?? "",
       }))
-      .filter((line) => line.quantity !== "" && line.unit.trim() !== "");
+      .filter((line) => line.quantity !== "" && line.unit.trim() !== "" &&
+        (Number(line.quantity) !== Number(line.original.extracted_quantity) ||
+          line.unit.trim() !== (line.original.unit || "").trim()))
+      .map(({ original, ...line }) => line);
+    if (lines.length === 0 && deliveryNoteNotes === (data?.operator_notes || "")) return true;
     const response = await apiClient.patch<{ success: boolean; analysis: DocumentAnalysis; reconciliation: OrderReconciliation }>(
       `/api/document-intelligence/${analysis.id}/delivery-note-lines`,
       { lines, notes: deliveryNoteNotes },
