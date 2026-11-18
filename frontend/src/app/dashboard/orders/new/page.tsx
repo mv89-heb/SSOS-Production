@@ -22,8 +22,6 @@ export default function NewOrderPage() {
   const searchParams = useSearchParams();
   const preselectedSupplierId = searchParams.get("supplier_id");
   const preselectedDate = searchParams.get("planned_order_date");
-  const preselectedItems = searchParams.get("items");
-  const forecastSource = searchParams.get("source") === "inventory-forecast";
 
   const [supplierId, setSupplierId] = useState<number | "">(
     preselectedSupplierId ? Number(preselectedSupplierId) : ""
@@ -50,42 +48,17 @@ export default function NewOrderPage() {
     }
   }, [suppliers, supplierId]);
 
-  useEffect(() => {
-    if (!forecastSource || !preselectedItems || !products?.length) return;
-    const requested = preselectedItems.split(",").map((entry) => {
-      const [rawId, rawQuantity] = entry.split(":");
-      return { product_id: Number(rawId), quantity: Number(rawQuantity) };
-    }).filter((item) => Number.isInteger(item.product_id) && item.product_id > 0 && Number.isFinite(item.quantity) && item.quantity > 0);
-    const available = requested.filter((item) => products.some((product) => product.id === item.product_id)).map((item) => ({ ...item, quantity_unit: "carton" as const }));
-    if (available.length) {
-      setLines(available);
-      setNotes((current) => current || "טיוטה מוצעת לפי צריכה שבועית מחושבת מספירות מלאי פיזיות. יש לבדוק כמויות ומחירים לפני שליחה לאישור.");
-    } else {
-      setFormError("המוצר שחושב בתחזית אינו משויך לקטלוג של הספק שנבחר. בחר ספק מתאים והוסף את המוצר ידנית.");
-    }
-  }, [products, forecastSource, preselectedItems]);
+  const { data: supplierHistoryForecast, isLoading: historyForecastLoading } = useQuery({
+    queryKey: ["orders", "supplier-history-forecast", supplierId, plannedOrderDate],
+    queryFn: () => orderService.getSupplierHistoryForecast(supplierId as number, plannedOrderDate || undefined),
+    enabled: supplierId !== "",
+    staleTime: 30_000,
+  });
 
   const createMutation = useMutation({
     mutationFn: orderService.createOrder,
     onSuccess: (order) => router.push(`/dashboard/orders/${order.id}`),
   });
-
-  const selectedProductIds = useMemo(
-    () => new Set(lines.filter((line) => line.product_id !== "").map((line) => line.product_id)),
-    [lines]
-  );
-
-  const lowStockSuggestions = useMemo(() => {
-    if (!products) return [];
-    return products
-      .filter((product) =>
-        product.current_stock !== null &&
-        product.min_stock !== null &&
-        product.current_stock <= product.min_stock &&
-        !selectedProductIds.has(product.id)
-      )
-      .slice(0, 6);
-  }, [products, selectedProductIds]);
 
   // An order has one supplier and must not present a mixed-currency amount as one total.
   // Keep the estimate grouped by the actual selected product currencies.
@@ -121,13 +94,13 @@ export default function NewOrderPage() {
     });
   };
 
-  const addSuggestedProduct = (productId: number) => {
+  const addSuggestedProduct = (productId: number, quantity: number) => {
     const emptyIndex = lines.findIndex((line) => line.product_id === "");
     if (emptyIndex >= 0) {
-      updateLine(emptyIndex, { product_id: productId, quantity: 1 });
+      updateLine(emptyIndex, { product_id: productId, quantity: Math.max(1, quantity) });
       return;
     }
-    setLines((prev) => [...prev, { product_id: productId, quantity: 1 }]);
+    setLines((prev) => [...prev, { product_id: productId, quantity: Math.max(1, quantity) }]);
   };
 
   const handleSubmit = () => {
@@ -270,29 +243,49 @@ export default function NewOrderPage() {
         </CardContent>
       </Card>
 
-      {supplierId !== "" && lowStockSuggestions.length > 0 && (
-        <section className="rounded-3xl border border-amber-200 bg-amber-50/70 p-5 dark:border-amber-900/60 dark:bg-amber-950/20">
+      {supplierId !== "" && (
+        <section className="rounded-3xl border border-indigo-200 bg-indigo-50/60 p-5 dark:border-indigo-900/60 dark:bg-indigo-950/20">
           <div className="flex items-start gap-3">
-            <div className="rounded-xl bg-amber-500 p-2 text-white"><AlertTriangle size={18} /></div>
+            <div className="rounded-xl bg-indigo-600 p-2 text-white"><PackageSearch size={18} /></div>
             <div className="min-w-0 flex-1">
-              <h2 className="font-extrabold text-amber-950 dark:text-amber-200">מוצרים שכדאי לשקול להזמין</h2>
-              <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">המערכת זיהתה מוצרים של הספק שנמצאים במלאי מינימום.</p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {lowStockSuggestions.map((product) => (
-                  <button
-                    key={product.id}
-                    type="button"
-                    onClick={() => addSuggestedProduct(product.id)}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-white p-3 text-right transition hover:-translate-y-0.5 hover:shadow-sm dark:border-amber-900/60 dark:bg-slate-900"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-bold text-slate-800 dark:text-white">{product.name}</span>
-                      <span className="mt-1 block text-[11px] text-red-600">מלאי: {product.current_stock} / מינימום: {product.min_stock}</span>
-                    </span>
-                    <span className="shrink-0 rounded-xl bg-indigo-600 p-2 text-white"><Plus size={15} /></span>
-                  </button>
-                ))}
-              </div>
+              <h2 className="font-extrabold text-slate-950 dark:text-white">הצעות לפי היסטוריית הזמנות</h2>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                מבוסס על הזמנות שהוגשו/אושרו/נשלחו/הושלמו במערכת בלבד. טיוטות, ביטולים וספירות מלאי אינם נכללים.
+                המחזור הוא 3 שבועות רגילים ושבוע רביעי בתוספת 40%.
+              </p>
+              {historyForecastLoading ? (
+                <p className="mt-3 text-sm text-slate-500">טוען היסטוריית הזמנות...</p>
+              ) : (supplierHistoryForecast?.products ?? []).filter((item) => item.data_ready && !lines.some((line) => line.product_id === item.product_id)).length > 0 ? (
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {(supplierHistoryForecast?.products ?? []).filter((item) => item.data_ready && !lines.some((line) => line.product_id === item.product_id)).slice(0, 6).map((item) => (
+                    <div key={item.product_id} className="rounded-2xl border border-indigo-100 bg-white p-3 dark:border-indigo-900/50 dark:bg-slate-900">
+                      <div className="font-bold text-slate-900 dark:text-white">{item.product_name}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        ממוצע שבוע רגיל: {item.normal_weekly_average.toLocaleString("he-IL", { maximumFractionDigits: 2 })} {item.unit}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        שבוע מתוגבר: {item.boosted_weekly_forecast.toLocaleString("he-IL", { maximumFractionDigits: 2 })} {item.unit}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => addSuggestedProduct(item.product_id, item.recommended_quantity)}
+                        className="mt-3 w-full rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700"
+                      >
+                        הוסף להזמנה · {item.recommended_quantity.toLocaleString("he-IL", { maximumFractionDigits: 2 })} {item.unit}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                  אין עדיין מספיק היסטוריית הזמנות מאושרות לספק זה כדי להמליץ על כמויות. לא נשתמש ביתרות מלאי ישנות כתחליף.
+                </p>
+              )}
+              {supplierHistoryForecast && (
+                <p className="mt-3 text-[11px] text-slate-500">
+                  נבדקו {supplierHistoryForecast.order_count} הזמנות בטווח {supplierHistoryForecast.period.start_date} עד {supplierHistoryForecast.period.end_date}.
+                </p>
+              )}
             </div>
           </div>
         </section>
