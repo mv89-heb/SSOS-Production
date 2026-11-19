@@ -8,7 +8,7 @@ import { orderService } from "@/services/order-service";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AlertCircle, ArrowLeft, Bell, BookmarkPlus, CheckCircle2, Clock3, Download, PackageCheck, Plus, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, Bell, BookmarkPlus, CheckCircle2, Clock3, Download, FileSpreadsheet, PackageCheck, Plus, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
 
 const STATUS_FILTERS = [
   { value: "all", label: "הכול" },
@@ -75,6 +75,7 @@ export default function OrdersPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [exportError, setExportError] = useState("");
   const [selectedSavedSearchId, setSelectedSavedSearchId] = useState("");
   const [showSaveSearch, setShowSaveSearch] = useState(false);
@@ -147,8 +148,9 @@ export default function OrdersPage() {
       },
     });
   };
-  const handleExport = async () => {
-    setIsExporting(true);
+  const handleExport = async (format: "csv" | "xlsx") => {
+    if (format === "csv") setIsExporting(true);
+    else setIsExportingExcel(true);
     setExportError("");
     try {
       const blob = await orderService.exportOrders({
@@ -156,11 +158,11 @@ export default function OrdersPage() {
         status: status === "all" ? undefined : status,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
-      });
+      }, format);
       const url = window.URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`;
+      anchor.download = `orders-${new Date().toISOString().slice(0, 10)}.${format}`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -168,7 +170,8 @@ export default function OrdersPage() {
     } catch {
       setExportError("הייצוא נכשל. אם יש יותר מ־5,000 הזמנות, צמצם את החיפוש או את טווח התאריכים.");
     } finally {
-      setIsExporting(false);
+      if (format === "csv") setIsExporting(false);
+      else setIsExportingExcel(false);
     }
   };
 
@@ -200,9 +203,14 @@ export default function OrdersPage() {
               <Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <Input value={search} onChange={(e) => { setSearch(e.target.value); setSelectedSavedSearchId(""); setPage(0); }} placeholder="חיפוש חופשי: הזמנה, ספק, מוצר, מק״ט, הערות, מחלקה או פרויקט..." className="h-10 pr-9" />
             </div>
-            <Button type="button" variant="secondary" onClick={handleExport} disabled={isExporting || totalResults === 0} className="shrink-0">
-              <Download size={15} /> {isExporting ? "מייצא..." : "ייצוא CSV"}
-            </Button>
+            <div className="flex shrink-0 gap-2">
+              <Button type="button" variant="secondary" onClick={() => handleExport("csv")} disabled={isExporting || isExportingExcel || totalResults === 0}>
+                <Download size={15} /> {isExporting ? "מייצא..." : "CSV"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => handleExport("xlsx")} disabled={isExporting || isExportingExcel || totalResults === 0}>
+                <FileSpreadsheet size={15} /> {isExportingExcel ? "מייצא..." : "Excel"}
+              </Button>
+            </div>
             <div className="flex gap-1.5 overflow-x-auto pb-1">
               {STATUS_FILTERS.map((filter) => <button key={filter.value} type="button" onClick={() => changeStatus(filter.value)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition ${status === filter.value ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300"}`}>{filter.label}</button>)}
             </div>
