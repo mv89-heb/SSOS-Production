@@ -13,8 +13,9 @@ append-only audit log whose entries are cryptographically chained, so
 tampering with history is detectable.
 
 Core capabilities:
-- **Multi-tenant isolation** — every query is scoped to `current_user.tenant_id`
-  at the repository layer, not left to individual routes to remember.
+- **Multi-tenant isolation** — tenant-scoped repositories and explicit
+  tenant constraints in domain queries keep records isolated by
+  `current_user.tenant_id`.
 - **Order lifecycle** — draft → submitted → approved → sent → completed, with
   a frozen snapshot taken at submission time so later catalog/price changes
   never rewrite history.
@@ -112,12 +113,13 @@ flask db migrate -m "..."  # generate a new migration after model changes
 2. Copy the pooled connection string from the Neon dashboard (it includes
    `sslmode=require`).
 3. Set it as `DATABASE_URL` in your environment or Render service.
-4. Run `flask db upgrade` against it once (Render's release/pre-deploy step
-   does this automatically — see `render.yaml`).
+4. Render applies all migration heads at service startup when
+   `RUN_MIGRATIONS_ON_START=true` is configured in the Blueprint. For local
+   development, run `flask db upgrade heads` manually.
 
 ## Render Deployment
 
-`render.yaml` defines two services:
+`render.yaml` defines the backend, frontend, and shared rate-limit storage:
 
 **Backend** (`ssos-backend`, Python):
 - **Build:** `pip install -r requirements.txt`
