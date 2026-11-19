@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { orderService } from "@/services/order-service";
 import { OrderStatusBadge } from "@/components/ui/badge";
@@ -63,22 +63,30 @@ function StatusSummary({ label, value, icon: Icon, tone, active, onClick }: Stat
 }
 
 export default function OrdersPage() {
-  const { data: orders, isLoading, isError, refetch } = useQuery({ queryKey: ["orders"], queryFn: () => orderService.getOrders() });
+  const { data: orders } = useQuery({ queryKey: ["orders"], queryFn: () => orderService.getOrders() });
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
-
-  const filteredOrders = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return (orders ?? []).filter((order) => {
-      const matchesStatus = status === "all" || order.status === status;
-      const matchesSearch = !query || order.order_number.toLowerCase().includes(query) || order.supplier_name.toLowerCase().includes(query);
-      return matchesStatus && matchesSearch;
-    });
-  }, [orders, search, status]);
-
+  const [page, setPage] = useState(0);
+  const deferredSearch = useDeferredValue(search.trim());
+  const pageSize = 50;
+  const { data: searchResult, isLoading, isError, refetch } = useQuery({
+    queryKey: ["orders", "search", deferredSearch, status, page],
+    queryFn: () => orderService.searchOrders({
+      q: deferredSearch || undefined,
+      status: status === "all" ? undefined : status,
+      limit: pageSize,
+      offset: page * pageSize,
+    }),
+    placeholderData: (previousData) => previousData,
+  });
+  const filteredOrders = useMemo(() => searchResult?.orders ?? [], [searchResult]);
   const count = (value: string) => (orders ?? []).filter((order) => order.status === value).length;
   const hasFilters = Boolean(search.trim()) || status !== "all";
-  const clearFilters = () => { setSearch(""); setStatus("all"); };
+  const totalResults = searchResult?.pagination.total ?? 0;
+  const hasPreviousPage = page > 0;
+  const hasNextPage = Boolean(searchResult?.pagination.has_more);
+  const changeStatus = (value: StatusFilter) => { setStatus(value); setPage(0); };
+  const clearFilters = () => { setSearch(""); changeStatus("all"); };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -94,11 +102,11 @@ export default function OrdersPage() {
       </header>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-        <StatusSummary label="ממתינות לאישור" value={count("submitted")} icon={Clock3} tone="amber" active={status === "submitted"} onClick={() => setStatus("submitted")} />
-        <StatusSummary label="אושרו" value={count("approved")} icon={CheckCircle2} tone="emerald" active={status === "approved"} onClick={() => setStatus("approved")} />
-        <StatusSummary label="אצל הספק" value={count("sent")} icon={Send} tone="sky" active={status === "sent"} onClick={() => setStatus("sent")} />
-        <StatusSummary label="הושלמו" value={count("completed")} icon={PackageCheck} tone="violet" active={status === "completed"} onClick={() => setStatus("completed")} />
-        <StatusSummary label="בוטלו" value={count("cancelled")} icon={XCircle} tone="red" active={status === "cancelled"} onClick={() => setStatus("cancelled")} />
+        <StatusSummary label="ממתינות לאישור" value={count("submitted")} icon={Clock3} tone="amber" active={status === "submitted"} onClick={() => changeStatus("submitted")} />
+        <StatusSummary label="אושרו" value={count("approved")} icon={CheckCircle2} tone="emerald" active={status === "approved"} onClick={() => changeStatus("approved")} />
+        <StatusSummary label="אצל הספק" value={count("sent")} icon={Send} tone="sky" active={status === "sent"} onClick={() => changeStatus("sent")} />
+        <StatusSummary label="הושלמו" value={count("completed")} icon={PackageCheck} tone="violet" active={status === "completed"} onClick={() => changeStatus("completed")} />
+        <StatusSummary label="בוטלו" value={count("cancelled")} icon={XCircle} tone="red" active={status === "cancelled"} onClick={() => changeStatus("cancelled")} />
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -106,13 +114,13 @@ export default function OrdersPage() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="חיפוש לפי מספר הזמנה או ספק..." className="h-10 pr-9" />
+              <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} placeholder="חיפוש חופשי: מספר הזמנה, ספק, הערות, מחלקה או פרויקט..." className="h-10 pr-9" />
             </div>
             <div className="flex gap-1.5 overflow-x-auto pb-1">
-              {STATUS_FILTERS.map((filter) => <button key={filter.value} type="button" onClick={() => setStatus(filter.value)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition ${status === filter.value ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300"}`}>{filter.label}</button>)}
+              {STATUS_FILTERS.map((filter) => <button key={filter.value} type="button" onClick={() => changeStatus(filter.value)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition ${status === filter.value ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300"}`}>{filter.label}</button>)}
             </div>
           </div>
-          {hasFilters && <div className="mt-2 flex items-center justify-between px-1 text-xs"><span className="text-slate-400">נמצאו {filteredOrders.length} הזמנות</span><button type="button" onClick={clearFilters} className="font-bold text-indigo-600 hover:underline">נקה סינון</button></div>}
+          {hasFilters && <div className="mt-2 flex items-center justify-between px-1 text-xs"><span className="text-slate-400">נמצאו {totalResults.toLocaleString("he-IL")} הזמנות</span><button type="button" onClick={clearFilters} className="font-bold text-indigo-600 hover:underline">נקה סינון</button></div>}
         </div>
 
         {isError ? (
@@ -174,6 +182,18 @@ export default function OrdersPage() {
               </tbody>
               </table>
             </div>
+            {searchResult && (
+              <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 text-sm dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-slate-500">
+                  מציג {totalResults === 0 ? 0 : page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalResults)} מתוך {totalResults.toLocaleString("he-IL")} הזמנות
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button variant="secondary" disabled={!hasPreviousPage} onClick={() => setPage((current) => Math.max(0, current - 1))}>הקודם</Button>
+                  <span className="min-w-16 text-center text-xs font-bold text-slate-500">עמוד {page + 1}</span>
+                  <Button variant="secondary" disabled={!hasNextPage} onClick={() => setPage((current) => current + 1)}>הבא</Button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </section>
