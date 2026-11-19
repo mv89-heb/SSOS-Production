@@ -6,7 +6,7 @@ Revises: 20261119_saved_order_searches
 from alembic import op
 import sqlalchemy as sa
 
-revision = "20261119_supplier_credit_adjustments"
+revision = "20261119_credit_adjustments"
 down_revision = "20261119_saved_order_searches"
 branch_labels = None
 depends_on = None
