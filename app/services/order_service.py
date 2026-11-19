@@ -129,6 +129,27 @@ class OrderService:
         if "project" in payload:
             order.project = self._normalize_order_scope(payload.get("project"), "project")
         if "items" in payload:
+            linked_records = (
+                ("receipt", db.session.scalar(select(Receipt.id).where(
+                    Receipt.tenant_id == self.tenant_id, Receipt.order_id == order.id
+                ).limit(1))),
+                ("supplier invoice", db.session.scalar(select(SupplierInvoice.id).where(
+                    SupplierInvoice.tenant_id == self.tenant_id, SupplierInvoice.order_id == order.id
+                ).limit(1))),
+                ("supplier credit adjustment", db.session.scalar(select(SupplierCreditAdjustment.id).where(
+                    SupplierCreditAdjustment.tenant_id == self.tenant_id, SupplierCreditAdjustment.order_id == order.id
+                ).limit(1))),
+                ("order tracking event", db.session.scalar(select(OrderTrackingEvent.id).where(
+                    OrderTrackingEvent.tenant_id == self.tenant_id, OrderTrackingEvent.order_id == order.id
+                ).limit(1))),
+            )
+            linked_labels = [label for label, record_id in linked_records if record_id is not None]
+            if linked_labels:
+                raise Conflict(
+                    "Order lines cannot be changed while linked operational records exist: "
+                    + ", ".join(linked_labels)
+                    + ". Preserve the original order history."
+                )
             input_items = payload.get("items")
             if not isinstance(input_items, list) or not input_items:
                 raise BadRequest("Order must have items")
