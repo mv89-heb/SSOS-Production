@@ -309,7 +309,7 @@ export default function AnalyticsCenterPage() {
             {label:"תמונת מצב רכש",href:"/dashboard/procurement-intelligence",icon:Activity},
             {label:"תקציבי רכש",href:"/dashboard/settings/procurement-budgets",icon:Wallet},
             {label:"יומן ותזכורות",href:"/dashboard/calendar",icon:CalendarDays},
-            {label:"היסטוריית פעולות",href:"/dashboard/history",icon:Clock3},
+            {label:"היסטוריית פעולות",href:"/dashboard/audit",icon:Clock3},
           ].map((item)=>{const Icon=item.icon;return <Link key={item.href} href={item.href} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-3 text-sm font-bold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-indigo-950/30"><span className="flex items-center gap-2"><Icon size={17} className="text-indigo-600"/>{item.label}</span><ChevronLeft size={16} className="text-slate-400"/></Link>})}
         </div>
       </Panel>
