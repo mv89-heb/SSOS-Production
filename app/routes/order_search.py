@@ -25,7 +25,8 @@ MAX_EXPORT_ROWS = 5000
 
 def _csv_text(value):
     text = str(value if value is not None else "")
-    return "'" + text if text.startswith(("=", "+", "-", "@", "\t", "\r")) else text
+    formula_candidate = text.lstrip(" \t\r\n")
+    return "'" + text if formula_candidate.startswith(("=", "+", "-", "@")) or text.startswith(("\t", "\r")) else text
 
 
 def _parse_date(value, field):
