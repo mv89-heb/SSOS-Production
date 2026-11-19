@@ -207,7 +207,7 @@ def _supplier_reliability(tenant_id: int, start_at: datetime, end_at: datetime):
             "credit_adjustment_data_available": True,
             "credit_adjustment_note": (
                 "אחוז ההזמנות שהושלמו בתקופה ושויך להן לפחות זיכוי/התאמה פעילים. "
-                "המספר בסוגריים הוא מספר המסמכים; זיכויים שבוטלו אינם נספרים."
+                "המספר בסוגריים הוא מספר המסמכים; זיכויים שבוטלו אינם נספרים. המדד כולל רק מסמכים שהוזנו למערכת, והיסטוריה שלא הוזנה אינה נכללת."
             ),
         })
     return sorted(result, key=lambda row: row["supplier_name"].casefold())
