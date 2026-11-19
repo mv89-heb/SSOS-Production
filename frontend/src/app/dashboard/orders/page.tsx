@@ -118,7 +118,7 @@ export default function OrdersPage() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} placeholder="חיפוש חופשי: מספר הזמנה, ספק, הערות, מחלקה או פרויקט..." className="h-10 pr-9" />
+              <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} placeholder="חיפוש חופשי: הזמנה, ספק, מוצר, מק״ט, הערות, מחלקה או פרויקט..." className="h-10 pr-9" />
             </div>
             <div className="flex gap-1.5 overflow-x-auto pb-1">
               {STATUS_FILTERS.map((filter) => <button key={filter.value} type="button" onClick={() => changeStatus(filter.value)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition ${status === filter.value ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300"}`}>{filter.label}</button>)}
