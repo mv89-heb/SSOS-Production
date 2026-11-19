@@ -674,3 +674,46 @@ def test_delete_product_with_price_history_and_observations_is_blocked(
     assert logged_in_client_a.get(f"/api/catalog/products/{product_id}").status_code == 200
     assert db.session.get(PriceHistory, history.id) is not None
     assert db.session.get(PriceObservation, observation.id) is not None
+
+
+def test_delete_supplier_with_historical_prices_is_blocked(
+    logged_in_client_a, db
+):
+    from app.models.price_history import PriceHistory
+    from app.models.price_observation import PriceObservation
+    from app.models.supplier import Supplier
+
+    primary_supplier_id, product_id = _make_product(logged_in_client_a)
+    historical_supplier_response = logged_in_client_a.post(
+        "/api/catalog/suppliers", json={"name": "Historical-only supplier"}
+    )
+    assert historical_supplier_response.status_code == 201
+    historical_supplier_id = historical_supplier_response.get_json()["supplier"]["id"]
+    product = db.session.get(Product, product_id)
+    tenant_id = product.tenant_id
+    history = PriceHistory(
+        tenant_id=tenant_id,
+        product_id=product_id,
+        supplier_id=historical_supplier_id,
+        new_price=9.5,
+        currency="ILS",
+    )
+    observation = PriceObservation(
+        tenant_id=tenant_id,
+        product_id=product_id,
+        supplier_id=historical_supplier_id,
+        observed_price=9.25,
+        currency="ILS",
+    )
+    db.session.add_all([history, observation])
+    db.session.commit()
+
+    response = logged_in_client_a.delete(
+        f"/api/admin/suppliers/{historical_supplier_id}"
+    )
+
+    assert response.status_code == 409
+    assert "price history record(s)" in response.get_json()["message"]
+    assert db.session.get(Supplier, historical_supplier_id) is not None
+    assert db.session.get(PriceHistory, history.id) is not None
+    assert db.session.get(PriceObservation, observation.id) is not None
