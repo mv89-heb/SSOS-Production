@@ -123,7 +123,16 @@ export default function InventoryConsumptionProfilesPanel() {
       <div className="flex gap-2"><button disabled={busy} onClick={save} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-black text-white disabled:opacity-50"><Save size={16}/>{busy?"שומר…":"שמור פרופיל"}</button><button onClick={reset} className="rounded-xl border px-4 text-sm font-bold dark:border-slate-700">ביטול</button></div>
     </div>}
 
-    {profiles.isLoading ? <div className="p-8 text-center text-sm text-slate-500">טוען פרופילי צריכה…</div> : profiles.isError ? <div className="p-5 text-sm text-red-600">לא ניתן לטעון את פרופילי הצריכה.</div> : <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+    {profiles.isLoading ? <div className="p-8 text-center text-sm text-slate-500">טוען פרופילי צריכה…</div> : profiles.isError ? <div className="p-5 text-sm text-red-600">לא ניתן לטעון את פרופילי הצריכה.</div> : <>
+      <div className="grid gap-3 lg:hidden">
+        {(profiles.data ?? []).map(p=><article key={p.id} className="space-y-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+          <div className="flex items-start justify-between gap-3"><div><h3 className="font-black">{p.name}</h3><p className="text-xs text-slate-500">{p.category} · {p.supplier_ids.map(id=>p.supplier_names[id]??id).join(" / ")||"לא הוגדר ספק"}</p></div><span className={p.order_status==="reorder"?"rounded-full bg-amber-100 px-2 py-1 text-xs font-black text-amber-800":"rounded-full bg-emerald-100 px-2 py-1 text-xs font-black text-emerald-800"}>{p.order_status==="reorder"?"להזמנה":"תקין"}</span></div>
+          <div className="grid grid-cols-2 gap-2 text-sm"><div className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><div className="text-[11px] text-slate-500">צריכה רגילה / שבת</div><strong>{qty(p.regular_weekly_consumption)} / {qty(p.reinforced_weekly_consumption)}</strong></div><div className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><div className="text-[11px] text-slate-500">מחזור תגבור</div><strong>כל {qty(p.reinforcement_cycle_weeks)} שבועות</strong></div><div className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><div className="text-[11px] text-slate-500">צריכה שבועית משוקללת</div><strong>{qty(p.weighted_weekly_consumption)}</strong></div><div className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><div className="text-[11px] text-slate-500">צריכה חודשית</div><strong>{qty(p.monthly_consumption)}</strong></div><div className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><div className="text-[11px] text-slate-500">מינ׳ / מקס׳ / ממוצע</div><strong>{qty(p.min_order_quantity)} / {qty(p.max_order_quantity)} / {qty(p.average_order_quantity)}</strong></div><div className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><div className="text-[11px] text-slate-500">מלאי ביטחון</div><strong>{qty(p.safety_stock)}</strong></div></div>
+          <div className="flex items-center justify-between gap-2"><span className={p.mapping_status==="mapped"?"text-xs font-bold text-emerald-700":"text-xs font-bold text-amber-700"}>{p.mapping_status==="mapped"?`${p.product_ids.length} מוצרים מקושרים`:"ממתין לשיוך לקטלוג"}</span><div className="flex gap-2"><button onClick={()=>{setEditingId(p.id);setForm(fromProfile(p));setFormOpen(true);}} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold dark:bg-slate-800">עריכה</button><button onClick={()=>archive(p)} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-red-600 dark:bg-slate-800">ארכיון</button></div></div>
+        </article>)}
+        {!(profiles.data??[]).length&&<div className="rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">אין עדיין פרופילי צריכה. הוסף מוצר ראשון לתכנון.</div>}
+      </div>
+      <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 lg:block">
       <table className="w-full min-w-[1050px] text-right text-sm">
         <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr>{["מוצר","ספקים","מינ׳ / מקס׳ / ממוצע","שבוע רגיל","שבת מתוגברת","מחזור","קצב שבועי","קצב חודשי","ביטחון","סטטוס מקור","שיוך לקטלוג","פעולות"].map(x=><th key={x} className="whitespace-nowrap px-3 py-3 font-black">{x}</th>)}</tr></thead>
         <tbody>{(profiles.data??[]).map(p=><tr key={p.id} className="border-t border-slate-100 dark:border-slate-800">
@@ -136,8 +145,7 @@ export default function InventoryConsumptionProfilesPanel() {
           <td className="px-3 py-3"><div className="flex gap-1"><button onClick={()=>{setEditingId(p.id);setForm(fromProfile(p));setFormOpen(true);}} title="עריכה" className="rounded-lg bg-slate-100 p-2 dark:bg-slate-800"><Link2 size={15}/></button><button onClick={()=>archive(p)} title="העברה לארכיון" className="rounded-lg bg-slate-100 p-2 text-red-600 dark:bg-slate-800"><Archive size={15}/></button></div></td>
         </tr>)}</tbody>
       </table>
-      {!(profiles.data??[]).length&&<div className="p-8 text-center text-sm text-slate-500">אין עדיין פרופילי צריכה. הוסף מוצר ראשון לתכנון.</div>}
-    </div>}
+    </div></>}
     <p className="text-xs leading-5 text-slate-500">הנתונים הם תכנון צריכה ולא ספירת מלאי. הסטטוס המוצג הוא הסטטוס שהגיע מהטבלה, ולא המלצת רכש חיה. קישור לקטלוג אינו משנה מלאי פיזי, מחיר, ספק ברירת מחדל או היסטוריית הזמנות. לאחר שיוך ואימות יחידות ניתן יהיה להרחיב לחישוב המלצת רכש חיה. פרופילים חדשים ניתן להוסיף בכל עת.</p>
   </section>;
 }
