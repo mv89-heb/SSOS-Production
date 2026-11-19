@@ -132,6 +132,29 @@ def test_missing_budget_scope_requires_documented_manager_override(
     assert allowed.status_code == 200, allowed.get_json()
 
 
+def test_assigned_unbudgeted_scope_is_not_blocked_by_another_department_budget(
+    logged_in_client_a, make_order
+):
+    response, _, _ = make_order(
+        logged_in_client_a, quantity=1, price=20.0, planned_order_date="2026-11-18"
+    )
+    order = response.get_json()["order"]
+    _assign_order(logged_in_client_a, order["id"], department="Laundry")
+    _create_budget(
+        logged_in_client_a, scope_type="department", scope_value="Kitchen",
+        amount=500, enforcement_mode="block",
+    )
+
+    preview = logged_in_client_a.get(f"/api/procurement-budgets/orders/{order['id']}/impact")
+    impact = preview.get_json()["budget_impact"]
+    assert impact["impacts"] == []
+    assert impact["assignment_required"] is False
+    assert impact["blocked"] is False
+
+    submitted = logged_in_client_a.post(f"/api/orders/{order['id']}/submit", json={})
+    assert submitted.status_code == 200, submitted.get_json()
+
+
 def test_employee_cannot_override_a_blocked_budget(
     logged_in_client_a, tenant_a_admin, make_order, db
 ):
