@@ -8,7 +8,7 @@ class ProductClassificationFeedback(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
-    product_id = db.Column(db.Integer, db.ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True)
     normalized_name = db.Column(db.String(255), nullable=False, index=True)
     predicted_category = db.Column(db.String(100), nullable=True)
     actual_category = db.Column(db.String(100), nullable=False)
