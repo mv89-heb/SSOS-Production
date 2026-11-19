@@ -448,3 +448,62 @@ def test_supplier_forecast_excludes_partial_boundary_weeks_from_weekly_average(d
     assert forecast["complete_week_order_count"] == 1
     assert forecast["data_ready"] is False
     assert forecast["recommended_quantity"] == 0
+
+
+def test_supplier_forecast_blocks_historical_stock_unit_mismatch(db, tenant_a_admin):
+    from app.models.historical_document_import import HistoricalImportBatch, HistoricalPurchaseOrder
+
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    user_id = tenant_a_admin[0]["user"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="Historical Unit Mismatch Supplier")
+    db.session.add(supplier)
+    db.session.flush()
+    product = Product(
+        tenant_id=tenant_id, supplier_id=supplier.id, name="Historical Unit Mismatch Product",
+        sku="HIST-UNIT-MISMATCH-001", unit="יחידה", active=True,
+    )
+    db.session.add(product)
+    db.session.flush()
+
+    operational = Order(
+        tenant_id=tenant_id, user_id=user_id, supplier_id=supplier.id,
+        order_number="UNIT-MISMATCH-OP", supplier_name=supplier.name,
+        status=STATUS_SENT, planned_order_date=date(2020, 1, 6),
+        created_at=datetime(2020, 1, 6, tzinfo=timezone.utc),
+    )
+    db.session.add(operational)
+    db.session.flush()
+    db.session.add(OrderItem(
+        tenant_id=tenant_id, order_id=operational.id, product_id=product.id,
+        quantity=Decimal("10"), unit_price=Decimal("1"), currency="ILS",
+        product_snapshot={"unit": "יחידה", "stock_unit": "יחידה"},
+    ))
+
+    batch = HistoricalImportBatch(
+        tenant_id=tenant_id, name="Mismatched historical units", status="finalized",
+        created_by=user_id, finalized_by=user_id,
+    )
+    db.session.add(batch)
+    db.session.flush()
+    db.session.add(HistoricalPurchaseOrder(
+        tenant_id=tenant_id, batch_id=batch.id, supplier_id=supplier.id,
+        supplier_name=supplier.name, order_reference="UNIT-MISMATCH-HIST",
+        order_date=date(2020, 1, 13),
+        items=[{
+            "description": product.name, "product_id": product.id,
+            "quantity": 10, "quantity_unit": "piece", "stock_unit": "ארגז",
+        }],
+        created_by=user_id,
+    ))
+    db.session.commit()
+
+    result = OrderHistoryForecastService(tenant_id).supplier_forecast(
+        supplier.id, start_date=date(2020, 1, 6), end_date=date(2020, 2, 2),
+        target_date=date(2020, 1, 20),
+    )
+
+    forecast = result["products"][0]
+    assert forecast["unit_conversion_issues"] == 1
+    assert forecast["data_ready"] is False
+    assert forecast["recommended_quantity"] == 0
+    assert forecast["readiness_reason"] == "unit_conversion_requires_review"
