@@ -89,6 +89,8 @@ def create_order_credit_adjustment(order_id):
     try:
         PermissionService.require_role_at_least("employee")
         order = _order_for_tenant(order_id)
+        if not order.supplier_id:
+            raise Conflict("Order must be linked to a supplier before recording a credit adjustment")
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             raise BadRequest("A JSON object is required")
@@ -114,10 +116,11 @@ def create_order_credit_adjustment(order_id):
             if invoice is None:
                 raise NotFound("Invoice not found for this order and supplier")
 
-        currency = str(data.get("currency") or (invoice.currency if invoice else order.currency) or "ILS").upper().strip()
+        order_currency = order.currency or "ILS"
+        currency = str(data.get("currency") or (invoice.currency if invoice else order_currency) or "ILS").upper().strip()
         if len(currency) != 3 or not currency.isalpha():
             raise BadRequest("currency must be a three-letter code")
-        expected_currency = invoice.currency if invoice else order.currency
+        expected_currency = invoice.currency if invoice else order_currency
         if currency != expected_currency:
             raise Conflict("Credit adjustment currency must match its linked invoice or order")
 
