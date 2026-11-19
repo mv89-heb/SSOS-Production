@@ -11,6 +11,24 @@ import type { Order } from "@/types";
 type Payment = { id: number; amount: number; payment_date: string; reference: string | null; notes: string | null };
 type Invoice = { id: number; order_id: number; approval_status: "pending_approval" | "approved_for_payment"; approved_by: number | null; approved_at: string | null; approval_note: string | null; receipt_id: number | null; invoice_number: string; invoice_date: string | null; due_date: string | null; amount: number; paid_amount: number; balance: number; currency: string; status: string; notes: string | null; attachment_filename: string | null; attachment_size: number | null; line_comparison: Array<{ order_index: number; order_item_id?: number | null; received_quantity?: number | null; received_quantity_difference?: number | null; product_name: string; ordered_quantity: number; invoiced_quantity: number; ordered_unit_price: number; invoiced_unit_price: number; quantity_difference: number; unit_price_difference: number; amount_difference: number }>; payments: Payment[] };
 type InvoiceListResponse = { success: boolean; invoices: Invoice[] };
+type CreditAdjustment = {
+  id: number;
+  invoice_id: number | null;
+  reference_number: string;
+  adjustment_type: "credit_note" | "price_adjustment" | "goods_return";
+  adjustment_date: string;
+  amount: number;
+  currency: string;
+  reason: string | null;
+  status: "active" | "voided";
+  void_reason: string | null;
+};
+type CreditAdjustmentListResponse = { success: boolean; credit_adjustments: CreditAdjustment[] };
+const CREDIT_ADJUSTMENT_LABELS: Record<CreditAdjustment["adjustment_type"], string> = {
+  credit_note: "תעודת זיכוי",
+  price_adjustment: "התאמת מחיר",
+  goods_return: "החזרת סחורה",
+};
 
 function todayLocal() {
   const now = new Date();
@@ -25,6 +43,14 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
   const [dueDate, setDueDate] = useState("");
   const [receiptId, setReceiptId] = useState("");
   const [invoiceNotes, setInvoiceNotes] = useState("");
+  const [creditReference, setCreditReference] = useState("");
+  const [creditType, setCreditType] = useState<CreditAdjustment["adjustment_type"]>("credit_note");
+  const [creditDate, setCreditDate] = useState(todayLocal());
+  const [creditAmount, setCreditAmount] = useState("");
+  const [creditInvoiceId, setCreditInvoiceId] = useState("");
+  const [creditReason, setCreditReason] = useState("");
+  const [voidingCreditId, setVoidingCreditId] = useState<number | null>(null);
+  const [voidReason, setVoidReason] = useState("");
   const [paymentDrafts, setPaymentDrafts] = useState<Record<number, { amount: string; date: string; reference: string }>>({});
   const [approvalNoteDrafts, setApprovalNoteDrafts] = useState<Record<number, string>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -35,8 +61,14 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
     queryFn: async () => (await apiClient.get<InvoiceListResponse>(`/api/orders/${order.id}/invoices`)).data.invoices,
     enabled: order.status === "sent" || order.status === "completed",
   });
+  const creditQuery = useQuery({
+    queryKey: ["order-credit-adjustments", order.id],
+    queryFn: async () => (await apiClient.get<CreditAdjustmentListResponse>(`/api/orders/${order.id}/credit-adjustments`)).data.credit_adjustments,
+    enabled: order.status === "sent" || order.status === "completed",
+  });
   const invalidate = async () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ["order-invoices", order.id] }),
+    queryClient.invalidateQueries({ queryKey: ["order-credit-adjustments", order.id] }),
     queryClient.invalidateQueries({ queryKey: ["order", order.id] }),
   ]);
   const createInvoice = useMutation({
@@ -52,6 +84,52 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
     onError: (error: unknown) => {
       const e = error as { response?: { data?: { message?: string } }; message?: string };
       setMessage(e.response?.data?.message ?? e.message ?? "רישום החשבונית נכשל.");
+    },
+  });
+  const createCreditAdjustment = useMutation({
+    mutationFn: async () => (await apiClient.post<{ success: boolean; credit_adjustment: CreditAdjustment }>(
+      `/api/orders/${order.id}/credit-adjustments`,
+      {
+        reference_number: creditReference.trim(),
+        adjustment_type: creditType,
+        adjustment_date: creditDate,
+        amount: Number(creditAmount),
+        invoice_id: creditInvoiceId ? Number(creditInvoiceId) : null,
+        reason: creditReason.trim() || null,
+        currency: creditInvoiceId
+          ? (query.data ?? []).find((invoice) => invoice.id === Number(creditInvoiceId))?.currency ?? order.currency
+          : order.currency,
+      },
+    )).data.credit_adjustment,
+    onSuccess: async () => {
+      setCreditReference("");
+      setCreditAmount("");
+      setCreditInvoiceId("");
+      setCreditReason("");
+      setCreditDate(todayLocal());
+      setMessage("הזיכוי/ההתאמה נרשמו. סכום החשבונית והתשלומים לא שונו.");
+      await invalidate();
+    },
+    onError: (error: unknown) => {
+      const e = error as { response?: { data?: { message?: string } }; message?: string };
+      setMessage(e.response?.data?.message ?? e.message ?? "רישום הזיכוי/ההתאמה נכשל.");
+    },
+  });
+  const voidCreditAdjustment = useMutation({
+    mutationFn: async ({ id, reason }: { id: number; reason: string }) =>
+      (await apiClient.post<{ success: boolean; credit_adjustment: CreditAdjustment }>(
+        `/api/supplier-credit-adjustments/${id}/void`,
+        { reason },
+      )).data.credit_adjustment,
+    onSuccess: async () => {
+      setVoidingCreditId(null);
+      setVoidReason("");
+      setMessage("רישום הזיכוי בוטל ונשמר ביומן הביקורת.");
+      await invalidate();
+    },
+    onError: (error: unknown) => {
+      const e = error as { response?: { data?: { message?: string } }; message?: string };
+      setMessage(e.response?.data?.message ?? e.message ?? "ביטול הזיכוי נכשל.");
     },
   });
   const updateApproval = useMutation({
