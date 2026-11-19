@@ -225,10 +225,10 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
                   {voidingCreditId === adjustment.id ? (
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <input value={voidReason} onChange={(event) => setVoidReason(event.target.value)} maxLength={1000} placeholder="סיבת ביטול (חובה)" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950" />
-                      <Button type="button" variant="danger" size="sm" disabled={voidCreditAdjustment.isPending || voidReason.trim().length < 3} onClick={() => voidCreditAdjustment.mutate({ id: adjustment.id, reason: voidReason.trim() })}>אשר ביטול</Button>
-                      <Button type="button" variant="ghost" size="sm" onClick={() => { setVoidingCreditId(null); setVoidReason(""); }}>סגור</Button>
+                      <Button type="button" variant="danger" className="min-h-8 px-3 py-1 text-xs" disabled={voidCreditAdjustment.isPending || voidReason.trim().length < 3} onClick={() => voidCreditAdjustment.mutate({ id: adjustment.id, reason: voidReason.trim() })}>אשר ביטול</Button>
+                      <Button type="button" variant="ghost" className="min-h-8 px-3 py-1 text-xs" onClick={() => { setVoidingCreditId(null); setVoidReason(""); }}>סגור</Button>
                     </div>
-                  ) : <Button type="button" variant="ghost" size="sm" onClick={() => { setVoidingCreditId(adjustment.id); setVoidReason(""); }}>ביטול רישום (למנהל)</Button>}
+                  ) : <Button type="button" variant="ghost" className="min-h-8 px-3 py-1 text-xs" onClick={() => { setVoidingCreditId(adjustment.id); setVoidReason(""); }}>ביטול רישום (למנהל)</Button>}
                 </div>
               )}
             </div>
