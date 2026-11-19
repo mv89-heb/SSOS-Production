@@ -12,11 +12,12 @@ from app.services.inventory_calendar_service import InventoryCalendarService
 
 
 class OrderHistoryForecastService:
-    """Forecast from supplier-issued orders, normalized to the product stock unit.
+    """Forecast from issued operational orders and finalized historical imports.
 
     Draft/cancelled/internal orders and physical stock counts are excluded.
-    Carton quantities are converted using the pack-size snapshot captured on
-    each order line; missing or inconsistent conversion data blocks a suggestion.
+    Carton quantities use immutable order-line pack snapshots. Partial boundary
+    weeks are excluded from weekly averages, and inconsistent unit snapshots
+    block a recommendation rather than silently mixing unlike quantities.
     """
 
     INCLUDED_STATUSES = (STATUS_SENT, STATUS_COMPLETED)
