@@ -57,7 +57,9 @@ class Product(db.Model):
         "SupplierProductOffer", back_populates="product", cascade="all, delete-orphan"
     )
     classification_feedback = db.relationship(
-        "ProductClassificationFeedback", back_populates="product", cascade="all, delete-orphan"
+        "ProductClassificationFeedback",
+        back_populates="product",
+        passive_deletes=True,
     )
 
     @staticmethod
