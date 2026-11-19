@@ -7,6 +7,8 @@ from app.extensions import db
 from app.models.import_session import ImportSession
 from app.models.order import Order
 from app.models.product import Product
+from app.models.price_history import PriceHistory
+from app.models.price_observation import PriceObservation
 from app.models.supplier import Supplier
 from app.models.user import ROLE_ADMIN, User
 from app.services.audit_service import AuditService
@@ -94,8 +96,24 @@ class AdminService:
         product_count = len(supplier.products)
         offer_count = len(supplier.offered_products)
         import_count = int(db.session.scalar(select(func.count(ImportSession.id)).where(ImportSession.tenant_id == self.tenant_id, ImportSession.supplier_id == supplier.id)) or 0)
-        if product_count or offer_count or import_count:
-            raise Conflict(f"Supplier has {product_count} product(s), {offer_count} offer(s), or {import_count} import(s). Remove/archive dependent data first.")
+        price_history_count = int(db.session.scalar(
+            select(func.count(PriceHistory.id)).where(
+                PriceHistory.tenant_id == self.tenant_id,
+                PriceHistory.supplier_id == supplier.id,
+            )
+        ) or 0)
+        price_observation_count = int(db.session.scalar(
+            select(func.count(PriceObservation.id)).where(
+                PriceObservation.tenant_id == self.tenant_id,
+                PriceObservation.supplier_id == supplier.id,
+            )
+        ) or 0)
+        if product_count or offer_count or import_count or price_history_count or price_observation_count:
+            raise Conflict(
+                f"Supplier has {product_count} product(s), {offer_count} offer(s), {import_count} import(s), "
+                f"{price_history_count} price history record(s), and {price_observation_count} price observation(s). "
+                "Deactivate the supplier instead to preserve procurement and price history."
+            )
         name = supplier.name
         target_id = supplier.id
         db.session.delete(supplier)
