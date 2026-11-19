@@ -26,7 +26,7 @@ SEED_ROWS = [
     ("סבון ידיים / מקציף", "ניקיון", 1, 3, 1, 0.5, 1, 3, 4.5, "healthy", "pamit"),
     ("נוזל לניקוי כלים", "ניקיון", 1, 12, 1, 1, 2, 3, 4.5, "healthy", "pamit"),
     ("אקונומיקה וחומצה לשירותים", "ניקיון", 3, 6, 3, 1, 2, 3, 4.5, "healthy", "pamit"),
-    ("שקיות אשפה (שחורות / קומפקט)", "תחזוקה", 1, 3, 1, 1, 2, 3, 4.5, "healthy", "pamit"),
+    ("שקיות אשפה (שחורות / קומפקט)", "תחזוקה", 1, 3, 1, 1, 2, 3, 4.5, "healthy", "both"),
     ("כפפות (לטקס / ניטריל)", "תחזוקה", 1, 12, 1, 1, 2, 3, 4.5, "healthy", "pamit"),
     ("פח שובך 50 ליטר", "תחזוקה", 5, 10, 5, 0.2, 0.5, 3, 4.5, "healthy", "pamit"),
     ("מגבים, מטאטאים ויאה", "ציוד", 5, 10, 5, 0.2, 0.5, 3, 4.5, "healthy", "pamit"),
@@ -76,17 +76,22 @@ def upgrade():
         HAVING COUNT(DISTINCT CASE WHEN name ILIKE '%שמאי%' THEN 'shamai' WHEN name ILIKE '%פעמית%' THEN 'pamit' END) = 2
     """)).scalars().all()
     for tenant_id in tenant_ids:
-        supplier_ids = bind.execute(sa.text("""
-            SELECT id FROM suppliers
+        supplier_rows = bind.execute(sa.text("""
+            SELECT id, name FROM suppliers
             WHERE tenant_id = :tenant_id AND active IS TRUE
               AND (name ILIKE '%שמאי%' OR name ILIKE '%פעמית%')
             ORDER BY CASE WHEN name ILIKE '%שמאי%' THEN 0 ELSE 1 END, id
-        """), {"tenant_id": tenant_id}).scalars().all()
+        """), {"tenant_id": tenant_id}).mappings().all()
+        supplier_ids_by_group = {
+            "both": [row["id"] for row in supplier_rows],
+            "shamai": [row["id"] for row in supplier_rows if "שמאי" in row["name"]],
+            "pamit": [row["id"] for row in supplier_rows if "פעמית" in row["name"]],
+        }
         rows = []
         for name, category, minimum, maximum, average, regular, reinforced, cycle, safety, status, supplier_group in SEED_ROWS:
             rows.append({
                 "tenant_id": tenant_id, "name": name, "category": category,
-                "supplier_ids": [sid for sid in supplier_ids if (supplier_group == "both" or (supplier_group == "shamai" and "שמאי" in bind.execute(sa.text("SELECT name FROM suppliers WHERE id = :id"), {"id": sid}).scalar()) or (supplier_group == "pamit" and "פעמית" in bind.execute(sa.text("SELECT name FROM suppliers WHERE id = :id"), {"id": sid}).scalar()))], "product_ids": [],
+                "supplier_ids": supplier_ids_by_group[supplier_group], "product_ids": [],
                 "min_order_quantity": minimum, "max_order_quantity": maximum,
                 "average_order_quantity": average, "regular_weekly_consumption": regular,
                 "reinforced_weekly_consumption": reinforced, "reinforcement_cycle_weeks": cycle,
