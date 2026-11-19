@@ -55,6 +55,14 @@ class OrderService:
             raise BadRequest("Order must have items")
 
         enriched_items = self._build_snapshot_items(input_items, supplier_id)
+        item_currencies = {str(item.get("currency") or "ILS").strip().upper() for item in enriched_items}
+        if len(item_currencies) != 1:
+            raise BadRequest("An order cannot contain products in different currencies")
+        item_currency = next(iter(item_currencies))
+        if payload.get("currency") in (None, ""):
+            currency = item_currency
+        elif currency != item_currency:
+            raise BadRequest("Order currency must match the currency of its products")
         totals = SnapshotService.compute_totals(enriched_items)
         order = Order(
             tenant_id=self.tenant_id,
@@ -121,6 +129,9 @@ class OrderService:
             if not isinstance(input_items, list) or not input_items:
                 raise BadRequest("Order must have items")
             enriched_items = self._build_snapshot_items(input_items, order.supplier_id)
+            item_currencies = {str(item.get("currency") or "ILS").strip().upper() for item in enriched_items}
+            if len(item_currencies) != 1 or next(iter(item_currencies)) != (order.currency or "ILS").upper():
+                raise BadRequest("Updated order items must use the order's existing currency")
             totals = SnapshotService.compute_totals(enriched_items)
             order.items = enriched_items
             order.subtotal = totals["subtotal"]
