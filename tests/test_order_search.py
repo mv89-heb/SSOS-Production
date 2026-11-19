@@ -164,3 +164,22 @@ def test_order_search_csv_export_rejects_oversized_result(
     exported = logged_in_client_a.get("/api/orders/search?format=csv")
     assert exported.status_code == 413
     assert exported.get_json()["error"] == "export_too_large"
+
+
+def test_order_search_csv_export_does_not_silently_truncate(
+    logged_in_client_a, make_order
+):
+    first, _, _ = make_order(
+        logged_in_client_a, product_name="לחם אחיד", sku="BREAD-EXPORT-1"
+    )
+    second, _, _ = make_order(
+        logged_in_client_a, product_name="לחם שיפון", sku="BREAD-EXPORT-2"
+    )
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    exported = logged_in_client_a.get(
+        "/api/orders/search?format=csv&limit=1&q=לחם"
+    )
+    assert exported.status_code == 200
+    assert exported.headers["X-Export-Row-Count"] == "2"
