@@ -13,6 +13,7 @@ import { catalogService } from "@/services/catalog-service";
 import { inventoryService } from "@/services/inventory-service";
 import { orderService } from "@/services/order-service";
 import { priceIntelligenceService } from "@/services/price-intelligence-service";
+import { reminderService } from "@/services/reminder-service";
 
 type SpendDocument = { id: number; reference: string; date: string | null; status: string; amount: number };
 type SpendGroup = { supplier_id: number | null; supplier_name: string; category: string; currency: string; total: number; count: number; documents: SpendDocument[] };
@@ -165,6 +166,7 @@ export default function AnalyticsCenterPage() {
   const portfolio = useQuery({ queryKey: ["analytics-center", "price-portfolio"], queryFn: () => priceIntelligenceService.getPortfolioSummary(20), retry: 1 });
   const supplierScores = useQuery({ queryKey: ["analytics-center", "supplier-price-scores"], queryFn: () => priceIntelligenceService.getSupplierScores(50), retry: 1 });
   const readiness = useQuery({ queryKey: ["analytics-center", "data-readiness"], queryFn: () => priceIntelligenceService.getDataReadiness(), retry: 1 });
+  const reminders = useQuery({ queryKey: ["analytics-center", "open-reminders"], queryFn: () => reminderService.getOpen(), retry: 1, refetchInterval: 60_000 });
 
   const orderRows = orders.data?.orders ?? [];
   const productRows = catalog.data ?? [];
@@ -220,11 +222,11 @@ export default function AnalyticsCenterPage() {
   const orderCurrencies = Object.entries(spendData?.ordered.totals_by_currency ?? {});
   const profileRows = (profiles.data ?? []).filter((row) => row.active).slice(0, 10);
   const readinessData = readiness.data;
-  const loadedCount = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness].filter((query) => query.isSuccess).length;
-  const failedCount = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness].filter((query) => query.isError).length;
-  const loading = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness].some((query) => query.isLoading);
+  const loadedCount = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders].filter((query) => query.isSuccess).length;
+  const failedCount = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders].filter((query) => query.isError).length;
+  const loading = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders].some((query) => query.isLoading);
 
-  const refresh = () => [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness].forEach((query) => void query.refetch());
+  const refresh = () => [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders].forEach((query) => void query.refetch());
 
   return (
     <div dir="rtl" className="min-w-0 space-y-6 pb-10">
@@ -247,14 +249,14 @@ export default function AnalyticsCenterPage() {
         {([{id:"overview",label:"תמונת מצב"},{id:"orders",label:"רכש והזמנות"},{id:"inventory",label:"מלאי וצריכה"},{id:"suppliers",label:"ספקים ומחירים"}] as const).map((tab)=><button key={tab.id} type="button" onClick={()=>setDetailTab(tab.id)} className={`rounded-xl px-4 py-2 text-sm font-bold ${detailTab===tab.id?"bg-indigo-600 text-white":"border border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"}`}>{tab.label}</button>)}
       </nav>
 
-      {failedCount > 0 && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><AlertTriangle className="ml-2 inline" size={16}/>חלק מהמקורות לא נטענו ({loadedCount}/10 זמינים). הנתונים הזמינים מוצגים בנפרד; כשל בטעינה אינו מוצג כאפס.</div>}
+      {failedCount > 0 && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><AlertTriangle className="ml-2 inline" size={16}/>חלק מהמקורות לא נטענו ({loadedCount}/11 זמינים). הנתונים הזמינים מוצגים בנפרד; כשל בטעינה אינו מוצג כאפס.</div>}
 
       {detailTab === "overview" && <>
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="הזמנות במערכת" value={orders.isSuccess?number(totalOrders):"—"} note={orders.isSuccess?`${number(openOrders)} פתוחות בתהליכי עבודה${orders.data.complete?"":` · מוצגות ${number(orderRows.length)} מתוך ${number(totalOrders)}`}`:"מקור ההזמנות לא זמין"} icon={ShoppingCart}/>
           <Metric label="מוצרים פעילים" value={catalog.isSuccess?number(productRows.length):"—"} note="מתוך הקטלוג הפעיל" icon={Package}/>
           <Metric label="ספקים פעילים" value={suppliers.isSuccess?number(supplierRows.length):"—"} note="ספקים בארגון הנוכחי" icon={Truck}/>
-          <Metric label="מוצרים במעקב מלאי" value={recommendations.isSuccess?number(inventoryRows.length):"—"} note="תחזית מלאי אינה ספירה פיזית" icon={Boxes}/><Metric label="מוצרים במלאי נמוך" value={inventory.isSuccess?number(inventory.data.stats.low_stock):"—"} note="לפי סיכום המלאי, לא לפי תחזית בלבד" icon={AlertTriangle} state={inventory.isSuccess && inventory.data.stats.low_stock>0?"warning":"normal"}/><Metric label="תנועות מלאי מתועדות" value={inventory.isSuccess?number(inventory.data.stats.movement_count):"—"} note="תנועות שנרשמו במערכת" icon={Activity}/><Metric label="מסמכים שנותחו" value={readiness.isSuccess?number(readinessData?.documents.analyses):"—"} note="מסמכי רכש שעברו ניתוח במערכת" icon={FileText}/><Metric label="תצפיות מחיר" value={readiness.isSuccess?number(readinessData?.price_intelligence.observation_rows):"—"} note="היסטוריית מחירים שנקלטה בפועל" icon={CircleDollarSign}/>
+          <Metric label="מוצרים במעקב מלאי" value={recommendations.isSuccess?number(inventoryRows.length):"—"} note="תחזית מלאי אינה ספירה פיזית" icon={Boxes}/><Metric label="מוצרים במלאי נמוך" value={inventory.isSuccess?number(inventory.data.stats.low_stock):"—"} note="לפי סיכום המלאי, לא לפי תחזית בלבד" icon={AlertTriangle} state={inventory.isSuccess && inventory.data.stats.low_stock>0?"warning":"normal"}/><Metric label="תנועות מלאי מתועדות" value={inventory.isSuccess?number(inventory.data.stats.movement_count):"—"} note="תנועות שנרשמו במערכת" icon={Activity}/><Metric label="מסמכים שנותחו" value={readiness.isSuccess?number(readinessData?.documents.analyses):"—"} note="מסמכי רכש שעברו ניתוח במערכת" icon={FileText}/><Metric label="תצפיות מחיר" value={readiness.isSuccess?number(readinessData?.price_intelligence.observation_rows):"—"} note="היסטוריית מחירים שנקלטה בפועל" icon={CircleDollarSign}/><Metric label="תזכורות פתוחות" value={reminders.isSuccess?number(reminders.data.length):"—"} note="מעקב אחר הזמנות שדורשות טיפול" icon={Clock3} state={reminders.isSuccess&&reminders.data.length>0?"warning":"normal"}/>
           {orderCurrencies.map(([code,value])=><Metric key={code} label={`הזמנות שאושרו · ${code}`} value={money(value,code)} note="לפי תאריך יצירת הזמנה" icon={CircleDollarSign}/>)}
           <Metric label="חשבוניות ספק" value={spend.isSuccess?Object.entries(spendData?.invoiced.totals_by_currency??{}).map(([code,value])=>money(value,code)).join(" · ")||"אין נתונים":"—"} note="לא מחובר לסכום ההזמנות" icon={Wallet}/>
           <Metric label="תשלומים שבוצעו" value={spend.isSuccess?Object.entries(spendData?.paid.totals_by_currency??{}).map(([code,value])=>money(value,code)).join(" · ")||"אין נתונים":"—"} note="תשלומים שנרשמו בפועל" icon={CheckCircle2}/>
@@ -305,6 +307,9 @@ export default function AnalyticsCenterPage() {
             {label:"מסמכים וקליטה",href:"/dashboard/document-intelligence",icon:Wallet},
             {label:"הוצאות רכש",href:"/dashboard/procurement-analytics",icon:BarChart3},
             {label:"תמונת מצב רכש",href:"/dashboard/procurement-intelligence",icon:Activity},
+            {label:"תקציבי רכש",href:"/dashboard/settings/procurement-budgets",icon:Wallet},
+            {label:"יומן ותזכורות",href:"/dashboard/calendar",icon:CalendarDays},
+            {label:"היסטוריית פעולות",href:"/dashboard/history",icon:Clock3},
           ].map((item)=>{const Icon=item.icon;return <Link key={item.href} href={item.href} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-3 text-sm font-bold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-indigo-950/30"><span className="flex items-center gap-2"><Icon size={17} className="text-indigo-600"/>{item.label}</span><ChevronLeft size={16} className="text-slate-400"/></Link>})}
         </div>
       </Panel>
@@ -326,7 +331,7 @@ export default function AnalyticsCenterPage() {
 
       <footer className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950">
         <span><CalendarDays className="ml-1 inline" size={14}/> תקופת הוצאות: {applied.start} עד {applied.end}</span>
-        <span>{loadedCount}/10 מקורות נטענו בהצלחה · {failedCount? "חלק מהמדדים אינם זמינים":"המקורות הזמינים נטענו"}</span>
+        <span>{loadedCount}/11 מקורות נטענו בהצלחה · {failedCount? "חלק מהמדדים אינם זמינים":"המקורות הזמינים נטענו"}</span>
       </footer>
     </div>
   );
