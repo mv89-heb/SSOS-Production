@@ -34,7 +34,7 @@ def _contains_query(value, query):
     return value is not None and query.casefold() in str(value).casefold()
 
 
-def _matched_search_fields(order, query):
+def _matched_search_fields(order, query, tenant_id):
     if not query:
         return []
     matched = set()
@@ -61,8 +61,10 @@ def _matched_search_fields(order, query):
             matched.add("ברקוד")
 
     for order_item in order.order_items or []:
+        if order_item.tenant_id != tenant_id:
+            continue
         product = order_item.product
-        if product is None:
+        if product is None or product.tenant_id != tenant_id:
             continue
         if _contains_query(product.name, query):
             matched.add("שם מוצר")
@@ -76,13 +78,15 @@ def _matched_search_fields(order, query):
     return [label for label in SEARCHED_FIELD_LABELS if label in matched]
 
 
-def _missing_order_fields(order):
+def _missing_order_fields(order, tenant_id):
     missing = []
     if not order.order_number:
         missing.append("מספר הזמנה")
     if not order.supplier_name:
         missing.append("שם ספק")
-    has_items = bool(order.items) or bool(order.order_items)
+    has_items = bool(order.items) or any(
+        item.tenant_id == tenant_id for item in (order.order_items or [])
+    )
     if not has_items:
         missing.append("פירוט פריטים")
     if not order.created_at:
@@ -272,11 +276,11 @@ def search_orders():
         incomplete_order_count = 0
         for order in orders:
             payload = order.to_dict()
-            missing_fields = _missing_order_fields(order)
+            missing_fields = _missing_order_fields(order, current_user.tenant_id)
             if missing_fields:
                 incomplete_order_count += 1
             payload["search_provenance"] = {
-                "matched_fields": _matched_search_fields(order, query_text),
+                "matched_fields": _matched_search_fields(order, query_text, current_user.tenant_id),
                 "missing_fields": missing_fields,
             }
             order_payloads.append(payload)
