@@ -92,3 +92,30 @@ def test_supplier_reliability_reports_late_delivery_shortage_and_sample_size_wit
     assert metric["credit_adjustment_frequency"] == 100.0
     assert metric["credit_adjustment_count"] == 1
     assert metric["orders_with_credit_adjustments"] == 1
+
+
+def test_supplier_credit_adjustment_frequency_is_zero_when_no_active_records(
+    logged_in_client_a, make_order, db
+):
+    response, _, _ = make_order(
+        logged_in_client_a,
+        supplier_name="No Credit Supplier",
+        sku="NO-CREDIT-001",
+    )
+    order = db.session.get(Order, response.get_json()["order"]["id"])
+    order.status = STATUS_COMPLETED
+    order.created_at = datetime(2026, 11, 8, 10, 0, tzinfo=timezone.utc)
+    db.session.commit()
+
+    result = logged_in_client_a.get(
+        "/api/procurement-analytics/spend?start_date=2026-11-01&end_date=2026-11-30"
+    )
+    assert result.status_code == 200, result.get_json()
+    metric = next(
+        row for row in result.get_json()["supplier_reliability"]
+        if row["supplier_name"] == "No Credit Supplier"
+    )
+    assert metric["credit_adjustment_data_available"] is True
+    assert metric["credit_adjustment_frequency"] == 0.0
+    assert metric["credit_adjustment_count"] == 0
+    assert metric["orders_with_credit_adjustments"] == 0
