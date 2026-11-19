@@ -142,7 +142,21 @@ export default function AnalyticsCenterPage() {
     queryFn: async () => (await apiClient.get<SpendResponse>("/api/procurement-analytics/spend", { params: { start_date: applied.start, end_date: applied.end } })).data,
     retry: 1,
   });
-  const orders = useQuery({ queryKey: ["analytics-center", "orders"], queryFn: () => orderService.getOrders(), retry: 1 });
+  const orders = useQuery({
+    queryKey: ["analytics-center", "orders"],
+    queryFn: async () => {
+      const first = await orderService.searchOrders({ limit: 100, offset: 0 });
+      const allOrders = [...first.orders];
+      const total = first.pagination.total;
+      while (allOrders.length < total && allOrders.length < 5000) {
+        const next = await orderService.searchOrders({ limit: 100, offset: allOrders.length });
+        if (!next.orders.length) break;
+        allOrders.push(...next.orders);
+      }
+      return { orders: allOrders, total, complete: allOrders.length >= total };
+    },
+    retry: 1,
+  });
   const catalog = useQuery({ queryKey: ["analytics-center", "catalog"], queryFn: () => catalogService.listProducts(undefined, true), retry: 1 });
   const suppliers = useQuery({ queryKey: ["analytics-center", "suppliers"], queryFn: () => catalogService.listSuppliers(true), retry: 1 });
   const inventory = useQuery({ queryKey: ["analytics-center", "inventory"], queryFn: () => inventoryService.getSummary(), retry: 1 });
@@ -152,7 +166,7 @@ export default function AnalyticsCenterPage() {
   const supplierScores = useQuery({ queryKey: ["analytics-center", "supplier-price-scores"], queryFn: () => priceIntelligenceService.getSupplierScores(50), retry: 1 });
   const readiness = useQuery({ queryKey: ["analytics-center", "data-readiness"], queryFn: () => priceIntelligenceService.getDataReadiness(), retry: 1 });
 
-  const orderRows = orders.data ?? [];
+  const orderRows = orders.data?.orders ?? [];
   const productRows = catalog.data ?? [];
   const supplierRows = suppliers.data ?? [];
   const inventoryRows = recommendations.data ?? [];
@@ -201,7 +215,7 @@ export default function AnalyticsCenterPage() {
     return Array.from(counts, ([key,value])=>({label:labels[key] ?? key,value,id:key}));
   }, [inventoryRows]);
   const selectedSupplierGroup = orderedGroups.find((group) => String(group.supplier_id ?? group.supplier_name) === selectedSupplier);
-  const totalOrders = orderRows.length;
+  const totalOrders = orders.data?.total ?? 0;
   const openOrders = orderRows.filter((row) => ["draft","submitted","approved","sent"].includes(row.status)).length;
   const orderCurrencies = Object.entries(spendData?.ordered.totals_by_currency ?? {});
   const profileRows = (profiles.data ?? []).filter((row) => row.active).slice(0, 10);
@@ -237,7 +251,7 @@ export default function AnalyticsCenterPage() {
 
       {detailTab === "overview" && <>
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="הזמנות במערכת" value={orders.isSuccess?number(totalOrders):"—"} note={orders.isSuccess?`${number(openOrders)} פתוחות בתהליכי עבודה`:"מקור ההזמנות לא זמין"} icon={ShoppingCart}/>
+          <Metric label="הזמנות במערכת" value={orders.isSuccess?number(totalOrders):"—"} note={orders.isSuccess?`${number(openOrders)} פתוחות בתהליכי עבודה${orders.data.complete?"":` · מוצגות ${number(orderRows.length)} מתוך ${number(totalOrders)}`}`:"מקור ההזמנות לא זמין"} icon={ShoppingCart}/>
           <Metric label="מוצרים פעילים" value={catalog.isSuccess?number(productRows.length):"—"} note="מתוך הקטלוג הפעיל" icon={Package}/>
           <Metric label="ספקים פעילים" value={suppliers.isSuccess?number(supplierRows.length):"—"} note="ספקים בארגון הנוכחי" icon={Truck}/>
           <Metric label="מוצרים במעקב מלאי" value={recommendations.isSuccess?number(inventoryRows.length):"—"} note="תחזית מלאי אינה ספירה פיזית" icon={Boxes}/><Metric label="מוצרים במלאי נמוך" value={inventory.isSuccess?number(inventory.data.stats.low_stock):"—"} note="לפי סיכום המלאי, לא לפי תחזית בלבד" icon={AlertTriangle} state={inventory.isSuccess && inventory.data.stats.low_stock>0?"warning":"normal"}/><Metric label="תנועות מלאי מתועדות" value={inventory.isSuccess?number(inventory.data.stats.movement_count):"—"} note="תנועות שנרשמו במערכת" icon={Activity}/>
