@@ -277,3 +277,34 @@ def test_saved_order_search_requires_authentication(client):
     assert client.post(
         "/api/orders/searches", json={"name": "לא מחובר", "filters": {}}
     ).status_code == 401
+
+
+def test_saved_order_search_is_private_to_its_creator(logged_in_client_a, db):
+    from sqlalchemy import select
+    from app.models.user import User, ROLE_ADMIN
+
+    admin = db.session.scalar(select(User).where(User.email == "admin@acme.test"))
+    other_user = User(
+        tenant_id=admin.tenant_id,
+        email="second-admin@acme.test",
+        full_name="Second Admin",
+        role=ROLE_ADMIN,
+        active=True,
+    )
+    other_user.set_password("Passw0rd1")
+    db.session.add(other_user)
+    db.session.commit()
+
+    created = logged_in_client_a.post(
+        "/api/orders/searches",
+        json={"name": "החיפוש שלי", "filters": {"q": "פרטי"}},
+    )
+    assert created.status_code == 201
+
+    other_client = logged_in_client_a.application.test_client()
+    login = other_client.post(
+        "/api/auth/login",
+        json={"email": "second-admin@acme.test", "password": "Passw0rd1"},
+    )
+    assert login.status_code == 200
+    assert other_client.get("/api/orders/searches").get_json()["saved_searches"] == []
