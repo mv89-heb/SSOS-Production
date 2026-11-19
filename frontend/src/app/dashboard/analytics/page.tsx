@@ -280,6 +280,21 @@ export default function AnalyticsCenterPage() {
         <Panel title="שלמות נתוני ספקים ומחירים" subtitle="המדדים משקפים את הרשומות הקיימות בלבד.">{readiness.isError?<Empty text="מדדי שלמות הנתונים לא זמינים."/>:<div className="grid grid-cols-2 gap-3 text-sm"><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><span className="text-xs text-slate-500">הצעות ספק פעילות</span><b className="mt-1 block text-xl">{number(readinessData?.supplier_offers.active)}</b></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><span className="text-xs text-slate-500">ספקים עם הצעות</span><b className="mt-1 block text-xl">{number(readinessData?.supplier_offers.suppliers_covered)}</b></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><span className="text-xs text-slate-500">היסטוריית מחירים</span><b className="mt-1 block text-xl">{number(readinessData?.price_intelligence.history_rows)}</b></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><span className="text-xs text-slate-500">תצפיות מחיר</span><b className="mt-1 block text-xl">{number(readinessData?.price_intelligence.observation_rows)}</b></div></div>}</Panel>
       </section>}
 
+      <Panel title="כניסה לניתוח מודולים" subtitle="מעבר מהתמונה הכוללת למסכי העבודה והנתונים המפורטים.">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            {label:"הזמנות רכש",href:"/dashboard/orders",icon:ShoppingCart},
+            {label:"ספקים",href:"/dashboard/suppliers",icon:Truck},
+            {label:"מוצרים ומחירים",href:"/dashboard/catalog",icon:Package},
+            {label:"מלאי וספירות",href:"/dashboard/inventory",icon:Boxes},
+            {label:"השוואת מחירים",href:"/dashboard/price-intelligence",icon:CircleDollarSign},
+            {label:"מסמכים וקליטה",href:"/dashboard/document-intelligence",icon:Wallet},
+            {label:"הוצאות רכש",href:"/dashboard/procurement-analytics",icon:BarChart3},
+            {label:"תמונת מצב רכש",href:"/dashboard/procurement-intelligence",icon:Activity},
+          ].map((item)=>{const Icon=item.icon;return <Link key={item.href} href={item.href} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-3 text-sm font-bold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-indigo-950/30"><span className="flex items-center gap-2"><Icon size={17} className="text-indigo-600"/>{item.label}</span><ChevronLeft size={16} className="text-slate-400"/></Link>})}
+        </div>
+      </Panel>
+
       <footer className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950">
         <span><CalendarDays className="ml-1 inline" size={14}/> תקופת הוצאות: {applied.start} עד {applied.end}</span>
         <span>{loadedCount}/10 מקורות נטענו בהצלחה · {failedCount? "חלק מהמדדים אינם זמינים":"המקורות הזמינים נטענו"}</span>
