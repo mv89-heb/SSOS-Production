@@ -183,6 +183,7 @@ export default function OrdersPrintReportPage() {
                   <th className="px-3 py-2">מחלקה</th>
                   <th className="px-3 py-2">פרויקט</th>
                   <th className="px-3 py-2">תאריך מתוכנן</th>
+                  <th className="px-3 py-2">פריטים וכמויות</th>
                   <th className="px-3 py-2">סה״כ</th>
                   <th className="px-3 py-2">תאריך יצירה</th>
                   <th className="px-3 py-2">הערות מקור</th>
@@ -197,6 +198,7 @@ export default function OrdersPrintReportPage() {
                     <td className="px-3 py-2">{order.department || "—"}</td>
                     <td className="px-3 py-2">{order.project || "—"}</td>
                     <td className="px-3 py-2">{formatDate(order.planned_order_date)}</td>
+                    <td className="px-3 py-2">{(order.items || []).map((item) => `${item.product_name} × ${item.quantity}`).join(" · ") || "—"}</td>
                     <td className="px-3 py-2 font-bold">{order.currency} {order.final_total.toLocaleString("he-IL")}</td>
                     <td className="px-3 py-2">{formatDate(order.created_at)}</td>
                     <td className="px-3 py-2">
