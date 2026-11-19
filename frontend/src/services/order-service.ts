@@ -3,9 +3,16 @@ import { CreateOrderInput, Order } from "@/types";
 
 export interface OrderSearchResponse {
   success: boolean;
-  orders: Order[];
+  orders: (Order & {
+    search_provenance?: { matched_fields: string[]; missing_fields: string[] };
+  })[];
   pagination: { total: number; limit: number; offset: number; has_more: boolean };
   filters: { q: string; status: string | null; supplier_id: number | null; start_date: string | null; end_date: string | null };
+  search_context?: {
+    searched_fields: string[];
+    active_filters: { key: string; label: string; value: string }[];
+    data_quality: { checked_orders: number; incomplete_count: number; scope: "current_page" };
+  };
 }
 
 export interface OrderSearchParams {
