@@ -51,15 +51,13 @@ def _matched_search_fields(order, query):
     for item in order.items or []:
         if not isinstance(item, dict):
             continue
+        snapshot_match = snapshot_match or _contains_query(item, query)
         if _contains_query(item.get("product_name") or item.get("name"), query):
             matched.add("שם מוצר")
-            snapshot_match = True
         if any(_contains_query(item.get(key), query) for key in ("sku", "supplier_sku")):
             matched.add("מק״ט")
-            snapshot_match = True
         if _contains_query(item.get("barcode"), query):
             matched.add("ברקוד")
-            snapshot_match = True
 
     for order_item in order.order_items or []:
         product = order_item.product
