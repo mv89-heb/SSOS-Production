@@ -187,6 +187,14 @@ class OrderService:
                 + "). It cannot be permanently deleted; preserve the linked history."
             )
 
+        # Draft lines are the only order children that may be removed. Delete
+        # them explicitly before deleting the parent; the FK is RESTRICT so
+        # accidental direct parent deletion cannot erase submitted order lines.
+        for order_item in list(order.order_items):
+            db.session.delete(order_item)
+        db.session.flush()
+        db.session.expire(order, ["order_items"])
+
         status = order.status
         number = order.order_number
         calendar_event_id = order.google_calendar_event_id
@@ -424,7 +432,10 @@ class OrderService:
         return enriched_items
 
     def _replace_order_items(self, order: Order, enriched_items: list) -> None:
-        order.order_items.clear()
+        for existing_item in list(order.order_items):
+            db.session.delete(existing_item)
+        db.session.flush()
+        db.session.expire(order, ["order_items"])
         for item in enriched_items:
             order.order_items.append(
                 OrderItem(
