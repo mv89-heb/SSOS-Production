@@ -70,7 +70,9 @@ const DEFAULT_ORDER_COLUMNS: OrderColumnKey[] = [
   "order_number", "supplier", "status", "reminder", "total", "created_at",
 ];
 
-function renderOrderColumn(order: Order, column: OrderColumnKey, reminderAt: string | null, reminderDue: boolean): ReactNode {
+type SearchableOrder = Order & { search_provenance?: { matched_fields: string[]; missing_fields: string[] } };
+
+function renderOrderColumn(order: SearchableOrder, column: OrderColumnKey, reminderAt: string | null, reminderDue: boolean): ReactNode {
   switch (column) {
     case "order_number":
       return <>
