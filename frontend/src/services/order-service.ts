@@ -1,6 +1,23 @@
 import { apiClient } from "./api-client";
 import { CreateOrderInput, Order } from "@/types";
 
+export interface OrderSearchResponse {
+  success: boolean;
+  orders: Order[];
+  pagination: { total: number; limit: number; offset: number; has_more: boolean };
+  filters: { q: string; status: string | null; supplier_id: number | null; start_date: string | null; end_date: string | null };
+}
+
+export interface OrderSearchParams {
+  q?: string;
+  status?: string;
+  supplier_id?: number;
+  start_date?: string;
+  end_date?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface UpdateDraftOrderInput {
   notes?: string;
   planned_order_date?: string | null;
@@ -73,6 +90,11 @@ export const orderService = {
       params: { status },
     });
     return data.orders;
+  },
+
+  searchOrders: async (params: OrderSearchParams = {}) => {
+    const { data } = await apiClient.get<OrderSearchResponse>("/api/orders/search", { params });
+    return data;
   },
 
   getOrderById: async (id: number) => {
