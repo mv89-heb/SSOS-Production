@@ -681,9 +681,10 @@ def test_delete_supplier_with_historical_prices_is_blocked(
 ):
     from app.models.price_history import PriceHistory
     from app.models.price_observation import PriceObservation
+    from app.models.product import Product
     from app.models.supplier import Supplier
 
-    primary_supplier_id, product_id = _make_product(logged_in_client_a)
+    _primary_supplier_id, product_id = _make_product(logged_in_client_a)
     historical_supplier_response = logged_in_client_a.post(
         "/api/catalog/suppliers", json={"name": "Historical-only supplier"}
     )
