@@ -48,6 +48,8 @@ def test_overdue_employee_cannot_mutate_operational_data_but_can_submit_count(
     blocked = client.post("/api/catalog/suppliers", json={"name": "Should be blocked"})
     assert blocked.status_code == 423
     assert blocked.get_json()["error"] == "weekly_inventory_count_required"
+    assert "קבוצת המוצרים" in blocked.get_json()["message"]
+    assert "ספירה מלאה" not in blocked.get_json()["message"]
 
     # The weekly gate must not prevent the employee from reaching the count workflow.
     allowed = client.post("/api/inventory/count/bulk", json={"items": []})
