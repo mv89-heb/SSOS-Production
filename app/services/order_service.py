@@ -23,6 +23,7 @@ from app.repositories.product_repository import ProductRepository
 from app.repositories.supplier_repository import SupplierRepository
 from app.services.audit_service import AuditService
 from app.services.snapshot_service import SnapshotService
+from app.services.procurement_budget_service import ProcurementBudgetService
 
 
 class OrderService:
@@ -44,11 +45,24 @@ class OrderService:
             raise BadRequest("A valid supplier_id is required")
         supplier = self.supplier_repo.get_by_id_or_404(supplier_id)
         planned_order_date = self._parse_planned_order_date(payload.get("planned_order_date"))
+        department = self._normalize_order_scope(payload.get("department"), "department")
+        project = self._normalize_order_scope(payload.get("project"), "project")
+        currency = str(payload.get("currency") or "ILS").strip().upper()
+        if len(currency) != 3 or not currency.isascii() or not currency.isalpha():
+            raise BadRequest("currency must be a three-letter ISO currency code")
         input_items = payload.get("items", [])
         if not isinstance(input_items, list) or not input_items:
             raise BadRequest("Order must have items")
 
         enriched_items = self._build_snapshot_items(input_items, supplier_id)
+        item_currencies = {str(item.get("currency") or "ILS").strip().upper() for item in enriched_items}
+        if len(item_currencies) != 1:
+            raise BadRequest("An order cannot contain products in different currencies")
+        item_currency = next(iter(item_currencies))
+        if payload.get("currency") in (None, ""):
+            currency = item_currency
+        elif currency != item_currency:
+            raise BadRequest("Order currency must match the currency of its products")
         totals = SnapshotService.compute_totals(enriched_items)
         order = Order(
             tenant_id=self.tenant_id,
@@ -60,9 +74,11 @@ class OrderService:
             supplier_email=supplier.email,
             status=STATUS_DRAFT,
             items=enriched_items,
-            currency=payload.get("currency", "ILS"),
+            currency=currency,
             notes=payload.get("notes"),
             planned_order_date=planned_order_date,
+            department=department,
+            project=project,
             **totals,
         )
         self._replace_order_items(order, enriched_items)
@@ -104,11 +120,18 @@ class OrderService:
             order.notes = payload.get("notes")
         if "planned_order_date" in payload:
             order.planned_order_date = self._parse_planned_order_date(payload.get("planned_order_date"))
+        if "department" in payload:
+            order.department = self._normalize_order_scope(payload.get("department"), "department")
+        if "project" in payload:
+            order.project = self._normalize_order_scope(payload.get("project"), "project")
         if "items" in payload:
             input_items = payload.get("items")
             if not isinstance(input_items, list) or not input_items:
                 raise BadRequest("Order must have items")
             enriched_items = self._build_snapshot_items(input_items, order.supplier_id)
+            item_currencies = {str(item.get("currency") or "ILS").strip().upper() for item in enriched_items}
+            if len(item_currencies) != 1 or next(iter(item_currencies)) != (order.currency or "ILS").upper():
+                raise BadRequest("Updated order items must use the order's existing currency")
             totals = SnapshotService.compute_totals(enriched_items)
             order.items = enriched_items
             order.subtotal = totals["subtotal"]
@@ -159,7 +182,7 @@ class OrderService:
             raise Forbidden("Only a system administrator can permanently delete an existing order")
         self.delete_order(user, order_id)
 
-    def submit_order(self, user, order_id: int) -> Order:
+    def submit_order(self, user, order_id: int, budget_override_reason: str | None = None) -> Order:
         order = self.repo.get_by_id_for_update(order_id)
         if order is None:
             raise NotFound("Order not found")
@@ -169,9 +192,16 @@ class OrderService:
             raise Conflict("Only the order creator or a manager can submit this draft")
         if not order.order_items:
             raise Conflict("An order must contain at least one item before submission")
+        budget_impact = ProcurementBudgetService(self.tenant_id).evaluate_submission(
+            order, user, override_reason=budget_override_reason
+        )
         order.status = STATUS_SUBMITTED
         SnapshotService.apply_snapshot(order)
-        AuditService.log_event(self.tenant_id, user.id, "order.submitted", f"Order {order.order_number} submitted for approval", {"order_id": order.id})
+        AuditService.log_event(
+            self.tenant_id, user.id, "order.submitted",
+            f"Order {order.order_number} submitted for approval",
+            {"order_id": order.id, "budget_impact": budget_impact},
+        )
         return order
 
     def approve_order(self, user, order_id: int) -> Order:
@@ -226,6 +256,19 @@ class OrderService:
         order.next_reminder_at = None
         AuditService.log_event(self.tenant_id, user.id, "order.completed", f"Order {order.order_number} completed", {"order_id": order.id})
         return order
+
+    @staticmethod
+    def _normalize_order_scope(value, field_name):
+        if value in (None, ""):
+            return None
+        if not isinstance(value, str):
+            raise BadRequest(f"{field_name} must be text")
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if len(normalized) > 120:
+            raise BadRequest(f"{field_name} must not exceed 120 characters")
+        return normalized
 
     @staticmethod
     def _parse_planned_order_date(value):

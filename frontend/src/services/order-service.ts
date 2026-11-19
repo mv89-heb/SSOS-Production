@@ -4,6 +4,8 @@ import { CreateOrderInput, Order } from "@/types";
 export interface UpdateDraftOrderInput {
   notes?: string;
   planned_order_date?: string | null;
+  department?: string | null;
+  project?: string | null;
   items?: { product_id: number; quantity: number }[];
 }
 
@@ -24,6 +26,23 @@ export interface SupplierHistoryForecastProduct {
   unit_conversion_issues: number;
 }
 
+export interface OrderBudgetImpactItem {
+  budget_id: number; scope_type: "department" | "project"; scope_value: string;
+  period_type: "weekly" | "monthly"; period_start: string; period_end: string;
+  currency: string; budget_amount: number; committed_before: number; order_amount: number;
+  projected_total: number; remaining_after: number; over_budget: boolean; enforcement_mode: "warn" | "block";
+}
+export interface OrderBudgetImpact {
+  order_id: number; order_number: string; department?: string | null; project?: string | null;
+  currency: string; budget_date: string; impacts: OrderBudgetImpactItem[];
+  over_budget: boolean; assignment_required: boolean; missing_scopes: Array<"department" | "project">; blocked: boolean; warnings: OrderBudgetImpactItem[]; blocks: OrderBudgetImpactItem[];
+}
+export interface ProcurementBudget {
+  id: number; scope_type: "department" | "project"; scope_value: string;
+  period_type: "weekly" | "monthly"; period_start: string; amount: number;
+  currency: string; enforcement_mode: "warn" | "block"; active: boolean;
+  spent_amount: number; remaining_amount: number; created_at: string; updated_at: string;
+}
 export interface SupplierHistoryForecast {
   supplier_id: number;
   period: { start_date: string; end_date: string };
@@ -81,8 +100,13 @@ export const orderService = {
     return data;
   },
 
-  submitOrder: async (id: number) => {
-    const { data } = await apiClient.post<{ success: boolean; order: Order }>(`/api/orders/${id}/submit`);
+  getBudgetImpact: async (id: number) => {
+    const { data } = await apiClient.get<{ success: boolean; budget_impact: OrderBudgetImpact }>(`/api/procurement-budgets/orders/${id}/impact`);
+    return data.budget_impact;
+  },
+
+  submitOrder: async (id: number, budgetOverrideReason?: string) => {
+    const { data } = await apiClient.post<{ success: boolean; order: Order }>(`/api/orders/${id}/submit`, { budget_override_reason: budgetOverrideReason });
     return data.order;
   },
 

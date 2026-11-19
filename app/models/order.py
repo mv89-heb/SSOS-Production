@@ -35,6 +35,8 @@ class Order(db.Model):
     google_calendar_event_id = db.Column(db.String(255), nullable=True, index=True)
     google_calendar_event_url = db.Column(db.Text, nullable=True)
     planned_order_date = db.Column(db.Date, nullable=True, index=True)
+    department = db.Column(db.String(120), nullable=True, index=True)
+    project = db.Column(db.String(120), nullable=True, index=True)
     subtotal = db.Column(db.Numeric(12, 2), default=0)
     discount_total = db.Column(db.Numeric(12, 2), default=0)
     tax_total = db.Column(db.Numeric(12, 2), default=0)
@@ -70,6 +72,8 @@ class Order(db.Model):
             "google_calendar_event_id": self.google_calendar_event_id,
             "google_calendar_event_url": self.google_calendar_event_url,
             "planned_order_date": self.planned_order_date.isoformat() if self.planned_order_date else None,
+            "department": self.department,
+            "project": self.project,
             "subtotal": float(self.subtotal) if self.subtotal is not None else 0.0,
             "discount_total": float(self.discount_total) if self.discount_total is not None else 0.0,
             "tax_total": float(self.tax_total) if self.tax_total is not None else 0.0,

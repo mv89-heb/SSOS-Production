@@ -1,3 +1,60 @@
+def test_order_currency_is_derived_from_product_when_not_supplied(
+    logged_in_client_a, make_order, db
+):
+    from app.models.product import Product
+
+    _, supplier_id, product_id = make_order(logged_in_client_a, price=12.5)
+    product = db.session.get(Product, product_id)
+    product.currency = "USD"
+    db.session.commit()
+
+    response = logged_in_client_a.post("/api/orders", json={
+        "supplier_id": supplier_id,
+        "items": [{"product_id": product_id, "quantity": 2}],
+    })
+
+    assert response.status_code == 201, response.get_json()
+    assert response.get_json()["order"]["currency"] == "USD"
+
+
+def test_order_rejects_mixed_or_mismatched_product_currencies(
+    logged_in_client_a, make_order, db
+):
+    from app.models.product import Product
+
+    _, supplier_id, first_product_id = make_order(logged_in_client_a, price=10)
+    first = db.session.get(Product, first_product_id)
+    first.currency = "USD"
+    db.session.flush()
+
+    second_response = logged_in_client_a.post("/api/catalog/products", json={
+        "supplier_id": supplier_id,
+        "name": "ILS Product",
+        "sku": "ILS-CURRENCY-TEST",
+        "current_price": 10,
+        "currency": "ILS",
+    })
+    assert second_response.status_code == 201, second_response.get_json()
+    second_product_id = second_response.get_json()["product"]["id"]
+    db.session.commit()
+
+    mixed = logged_in_client_a.post("/api/orders", json={
+        "supplier_id": supplier_id,
+        "items": [
+            {"product_id": first_product_id, "quantity": 1},
+            {"product_id": second_product_id, "quantity": 1},
+        ],
+    })
+    assert mixed.status_code == 400
+
+    mismatched = logged_in_client_a.post("/api/orders", json={
+        "supplier_id": supplier_id,
+        "currency": "ILS",
+        "items": [{"product_id": first_product_id, "quantity": 1}],
+    })
+    assert mismatched.status_code == 400
+
+
 def test_create_order_computes_totals(logged_in_client_a, make_order):
     resp, _, _ = make_order(logged_in_client_a, quantity=100, price=0.15)
     assert resp.status_code == 201
