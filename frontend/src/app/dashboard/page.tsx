@@ -9,6 +9,7 @@ import {
 import { orderService } from "@/services/order-service";
 import { priceIntelligenceService } from "@/services/price-intelligence-service";
 import { catalogService } from "@/services/catalog-service";
+import { reminderService } from "@/services/reminder-service";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import type { Order } from "@/types";
 
@@ -78,6 +79,7 @@ export default function DashboardPage() {
   const ordersQuery = useQuery({ queryKey: ["orders"], queryFn: () => orderService.getOrders(), staleTime: 30000 });
   const suppliersQuery = useQuery({ queryKey: ["dashboard", "active-suppliers"], queryFn: () => catalogService.listSuppliers(true), staleTime: 60000 });
   const productsQuery = useQuery({ queryKey: ["dashboard", "active-products"], queryFn: () => catalogService.listProducts(undefined, true), staleTime: 60000 });
+  const remindersQuery = useQuery({ queryKey: ["order-reminders"], queryFn: () => reminderService.getOpen(), staleTime: 30000, refetchInterval: 60000, refetchOnWindowFocus: true });
   const inventoryQuery = useQuery({
     queryKey: ["dashboard", "inventory-recommendations"],
     queryFn: () => priceIntelligenceService.getInventoryRecommendations({ lookback_days: 60, safety_days: 2, limit: 500 }),
@@ -99,11 +101,9 @@ export default function DashboardPage() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const pendingApprovals = orders.filter((order) => order.status === "submitted");
   const openOrders = orders.filter((order) => ["draft", "submitted", "approved", "sent"].includes(order.status));
-  const overdueReminders = orders.filter((order) => {
-    if (order.status === "completed" || order.status === "cancelled" || order.reminder_state === "complete") return false;
-    if (order.reminder_state === "due" || order.reminder_state === "critical") return true;
-    if (!order.next_reminder_at) return false;
-    const dueAt = new Date(order.next_reminder_at);
+  const overdueReminders = (remindersQuery.data ?? []).filter((reminder) => {
+    if (!reminder.next_reminder_at) return false;
+    const dueAt = new Date(reminder.next_reminder_at);
     return !Number.isNaN(dueAt.getTime()) && dueAt.getTime() <= now.getTime();
   });
   const monthOrders = orders.filter((order) => {
@@ -125,7 +125,7 @@ export default function DashboardPage() {
   const recentOrders = [...orders].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 7);
   const recentSuppliers = [...activeSuppliers].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5);
   const opportunities = portfolioQuery.data?.top_opportunities ?? [];
-  const operationalLoading = ordersQuery.isLoading || inventoryQuery.isLoading;
+  const operationalLoading = ordersQuery.isLoading || inventoryQuery.isLoading || remindersQuery.isLoading;
   const attentionItems = [
     { key: "approval", count: pendingApprovals.length, label: "הזמנות ממתינות לאישור", href: "/dashboard/orders", tone: "amber" as const },
     { key: "reminder", count: overdueReminders.length, label: "תזכורות שדורשות טיפול", href: "/dashboard/reminders", tone: "red" as const },
@@ -140,16 +140,16 @@ export default function DashboardPage() {
         <div className="flex w-full flex-wrap gap-2 lg:w-auto">
           <Link href="/dashboard/procurement-intelligence" className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-700 dark:text-slate-200 sm:flex-none"><Sparkles size={16} /> תמונת מצב רכש</Link>
           <Link href="/dashboard/orders/new" className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-indigo-700 sm:flex-none"><Plus size={17} /> הזמנה חדשה</Link>
-          <button type="button" onClick={() => { void ordersQuery.refetch(); void inventoryQuery.refetch(); void portfolioQuery.refetch(); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300" aria-label="רענון נתונים"><RefreshCw size={16} className={operationalLoading ? "animate-spin" : ""} /><span className="sm:hidden">רענון</span></button>
+          <button type="button" onClick={() => { void ordersQuery.refetch(); void inventoryQuery.refetch(); void portfolioQuery.refetch(); void remindersQuery.refetch(); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300" aria-label="רענון נתונים"><RefreshCw size={16} className={operationalLoading ? "animate-spin" : ""} /><span className="sm:hidden">רענון</span></button>
         </div>
       </header>
 
-      {(ordersQuery.isError || inventoryQuery.isError || portfolioQuery.isError) && <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"><AlertTriangle size={18} className="mt-0.5 shrink-0" /><div><strong>חלק מהנתונים לא נטענו.</strong><p className="mt-1 text-xs">הנתונים הזמינים מוצגים כרגיל. אין לפרש נתון חסר כאפס; אפשר לרענן ולנסות שוב.</p></div></div>}
+      {(ordersQuery.isError || inventoryQuery.isError || portfolioQuery.isError || remindersQuery.isError) && <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"><AlertTriangle size={18} className="mt-0.5 shrink-0" /><div><strong>חלק מהנתונים לא נטענו.</strong><p className="mt-1 text-xs">הנתונים הזמינים מוצגים כרגיל. אין לפרש נתון חסר כאפס; אפשר לרענן ולנסות שוב.</p></div></div>}
 
       <section className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-4 sm:gap-4">
         <MetricCard label="הזמנות פתוחות" value={ordersQuery.isLoading ? "…" : openOrders.length} hint="טיוטה, ממתינה, מאושרת או נשלחה" href="/dashboard/orders" icon={ShoppingBag} tone="indigo" />
         <MetricCard label="ממתינות לאישור" value={ordersQuery.isLoading ? "…" : pendingApprovals.length} hint="הזמנות שהוגשו לאישור" href="/dashboard/orders" icon={Clock3} tone={pendingApprovals.length ? "amber" : "emerald"} />
-        <MetricCard label="תזכורות באיחור" value={ordersQuery.isLoading ? "…" : overdueReminders.length} hint="לפי מצב התזכורת ומועד היעד" href="/dashboard/reminders" icon={Bell} tone={overdueReminders.length ? "red" : "emerald"} />
+        <MetricCard label="תזכורות באיחור" value={remindersQuery.isLoading ? "…" : remindersQuery.isError ? "לא זמין" : overdueReminders.length} hint="לפי רשימת התזכורות הפעילות ומועד היעד" href="/dashboard/reminders" icon={Bell} tone={overdueReminders.length ? "red" : "emerald"} />
         <MetricCard label="סיכון מלאי דחוף" value={inventoryQuery.isLoading ? "…" : inventoryQuery.isError ? "לא זמין" : urgentStock.length} hint="לפי המלצות מלאי מבוססות נתונים" href="/dashboard/procurement-intelligence" icon={Package} tone={urgentStock.length ? "red" : "emerald"} />
       </section>
 
