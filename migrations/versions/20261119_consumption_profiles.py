@@ -53,6 +53,8 @@ def upgrade():
         sa.Column("safety_stock", sa.Numeric(12, 3), nullable=False, server_default="0"),
         sa.Column("order_status", sa.String(20), nullable=False, server_default="healthy"),
         sa.Column("active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column("created_by", sa.Integer(), sa.ForeignKey("users.id"), nullable=True),
+        sa.Column("updated_by", sa.Integer(), sa.ForeignKey("users.id"), nullable=True),
         sa.Column("source_note", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
