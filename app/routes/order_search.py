@@ -96,7 +96,12 @@ def _active_search_filters(query_text, status, supplier_id, start_date, end_date
     if query_text:
         active.append({"key": "q", "label": "חיפוש", "value": query_text})
     if status:
-        active.append({"key": "status", "label": "סטטוס", "value": status})
+        status_labels = {
+            "draft": "טיוטה", "submitted": "ממתינה לאישור",
+            "approved": "אושרה", "sent": "נשלחה לספק",
+            "completed": "הושלמה", "cancelled": "בוטלה",
+        }
+        active.append({"key": "status", "label": "סטטוס", "value": status_labels.get(status, status)})
     if supplier_id is not None:
         active.append({"key": "supplier_id", "label": "מזהה ספק", "value": str(supplier_id)})
     if start_date:
