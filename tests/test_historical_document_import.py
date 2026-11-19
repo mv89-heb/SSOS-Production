@@ -255,7 +255,7 @@ def test_manual_historical_import_accepts_explicit_tenant_scoped_catalog_mapping
     product = Product(
         tenant_id=tenant_id, supplier_id=supplier.id,
         name="מגבת 165 TED מ' 1/6 בקרטון יבוא",
-        sku="EXPLICIT-MAP-TOWEL", unit="קרט", units_per_carton=6, active=True,
+        sku="EXPLICIT-MAP-TOWEL", unit="יחידה", units_per_carton=6, active=True,
     )
     db.session.add(product)
     db.session.commit()
