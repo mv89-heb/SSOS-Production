@@ -334,7 +334,10 @@ def test_order_search_explains_incomplete_order_source_data(
     with logged_in_client_a.application.app_context():
         order = db.session.get(Order, order_id)
         order.items = []
-        order.order_items.clear()
+        for item in list(order.order_items):
+            db.session.delete(item)
+        db.session.flush()
+        db.session.expire(order, ["order_items"])
         db.session.commit()
 
     result = logged_in_client_a.get("/api/orders/search?q=ספק+ללא+פריטים")
