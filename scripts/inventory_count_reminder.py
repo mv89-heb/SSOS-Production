@@ -32,7 +32,7 @@ def process_inventory_count_reminders() -> int:
             if exists is not None:
                 continue
             title = "🔔 הגיע הזמן לספירת מלאי"
-            message = f"ספירת המלאי השבועית היא חובה. הושלמו {status['completion_percent']}% מהמוצרים ב-7 הימים האחרונים; יש להשלים ספירה מלאה כדי להמשיך בפעולות במערכת."
+            message = f"ספירת המלאי השבועית היא חובה. הושלמו {status['completion_percent']}% מתוך {status['assigned_products']} המוצרים שהוקצו לשבוע זה. יש להשלים את הקבוצה השבועית כדי להמשיך בפעולות במערכת."
             action_url = current_app.config.get("FRONTEND_PUBLIC_URL", "").rstrip("/") + "/dashboard/inventory/count"
             notification = Notification(
                 tenant_id=tenant.id,
