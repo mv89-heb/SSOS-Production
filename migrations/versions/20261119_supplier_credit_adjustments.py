@@ -1,6 +1,6 @@
 """Add structured, auditable supplier credit adjustments.
 
-Revision ID: 20261119_supplier_credit_adjustments
+Revision ID: 20261119_credit_adjustments
 Revises: 20261119_saved_order_searches
 """
 from alembic import op
