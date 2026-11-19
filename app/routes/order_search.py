@@ -230,7 +230,9 @@ def create_saved_order_search():
         PermissionService.require_permission("orders.view")
         from app.services.saved_order_search_service import SavedOrderSearchService
 
-        data = request.get_json(silent=True) or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            raise BadRequest("Request body must be an object")
         service = SavedOrderSearchService(current_user.tenant_id, current_user.id)
         saved = service.create(data.get("name"), data.get("filters", {}))
         return jsonify({"success": True, "saved_search": saved.to_dict()}), 201
