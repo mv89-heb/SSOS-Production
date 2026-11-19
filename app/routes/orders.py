@@ -180,11 +180,9 @@ def duplicate_order(order_id):
 @orders_bp.route("/<int:order_id>", methods=["DELETE"])
 @login_required
 def delete_order(order_id):
-    """Delete an order according to lifecycle/role rules.
+    """Permanently delete only an unreferenced draft; retain issued order history.
 
-    Drafts can be removed by their creator; managers/admins can remove any
-    order. Google Calendar cleanup is best-effort and never blocks the DB
-    deletion.
+    Google Calendar cleanup is best-effort and never blocks the DB deletion.
     """
     try:
         PermissionService.require_permission("orders.delete")
