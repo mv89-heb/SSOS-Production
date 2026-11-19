@@ -42,6 +42,35 @@ export interface InventoryPlanningPeriod {
   notes: string | null;
 }
 
+
+export interface InventoryConsumptionProfile {
+  id: number;
+  name: string;
+  category: string;
+  supplier_ids: number[];
+  supplier_names: Record<number, string>;
+  product_ids: number[];
+  product_names: Record<number, string>;
+  min_order_quantity: number;
+  max_order_quantity: number;
+  average_order_quantity: number;
+  regular_weekly_consumption: number;
+  reinforced_weekly_consumption: number;
+  reinforcement_cycle_weeks: number;
+  weighted_weekly_consumption: number;
+  monthly_consumption: number;
+  safety_stock: number;
+  order_status: "healthy" | "reorder";
+  active: boolean;
+  source_note: string | null;
+  mapping_status: "mapped" | "pending";
+}
+
+export interface InventoryConsumptionOptions {
+  suppliers: Array<{ id: number; name: string }>;
+  products: Array<{ id: number; name: string; supplier_id: number; unit: string | null }>;
+}
+
 export interface LatestInventoryCount {
   success: boolean;
   has_count: boolean;
@@ -153,6 +182,16 @@ export const inventoryService = {
     (await apiClient.get<{ success: boolean; periods: InventoryPlanningPeriod[] }>("/api/inventory/planning/periods")).data.periods,
   seedHolidayPeriods: async () =>
     (await apiClient.post<{ success: boolean; created_count: number; periods: InventoryPlanningPeriod[] }>("/api/inventory/planning/seed-holidays")).data,
+  getConsumptionProfiles: async () =>
+    (await apiClient.get<{ success: boolean; profiles: InventoryConsumptionProfile[] }>("/api/inventory/planning/profiles")).data.profiles,
+  getConsumptionProfileOptions: async () =>
+    (await apiClient.get<{ success: boolean } & InventoryConsumptionOptions>("/api/inventory/planning/profiles/options")).data,
+  createConsumptionProfile: async (input: Partial<InventoryConsumptionProfile>) =>
+    (await apiClient.post<{ success: boolean; profile: InventoryConsumptionProfile }>("/api/inventory/planning/profiles", input)).data.profile,
+  updateConsumptionProfile: async (id: number, input: Partial<InventoryConsumptionProfile>) =>
+    (await apiClient.put<{ success: boolean; profile: InventoryConsumptionProfile }>(`/api/inventory/planning/profiles/${id}`, input)).data.profile,
+  archiveConsumptionProfile: async (id: number) =>
+    (await apiClient.delete<{ success: boolean }>(`/api/inventory/planning/profiles/${id}`)).data,
   getLatestCount: async () => (await apiClient.get<LatestInventoryCount>("/api/inventory/count/latest")).data,
   getCountHistory: async (days = 30) => (await apiClient.get<{ success: boolean; days: number; history: LatestInventoryCount[] }>("/api/inventory/count/history", { params: { days } })).data.history,
   getCountStatus: async () =>
