@@ -92,3 +92,94 @@ def test_order_search_matches_product_name_and_sku(
     assert [item["id"] for item in by_sku.get_json()["orders"]] == [
         response.get_json()["order"]["id"]
     ]
+
+
+def test_order_search_csv_export_preserves_hebrew_and_applies_filters(
+    logged_in_client_a, make_order
+):
+    supplier_name = "מאפיית ירושלים"
+    response, _, _ = make_order(
+        logged_in_client_a,
+        supplier_name=supplier_name,
+        product_name="לחם אחיד",
+        sku="BREAD-001",
+    )
+    assert response.status_code == 201, response.get_json()
+    order_id = response.get_json()["order"]["id"]
+
+    updated = logged_in_client_a.put(
+        f"/api/orders/{order_id}",
+        json={"department": "=SUM(1,1)"},
+    )
+    assert updated.status_code == 200, updated.get_json()
+
+    exported = logged_in_client_a.get("/api/orders/search?format=csv&q=לחם+אחיד")
+    assert exported.status_code == 200
+    assert exported.mimetype == "text/csv"
+    assert exported.headers["X-Export-Row-Count"] == "1"
+
+    import csv
+    import io
+
+    body = exported.get_data(as_text=True)
+    assert body.startswith("\ufeff")
+    rows = list(csv.reader(io.StringIO(body.lstrip("\ufeff"))))
+    assert rows[0] == [
+        "מספר הזמנה", "ספק", "סטטוס", "מחלקה", "פרויקט",
+        "תאריך יצירה", "תאריך הזמנה מתוכנן", "מטבע", 'סה"כ', "פריטים",
+    ]
+    assert len(rows) == 2
+    assert rows[1][1] == supplier_name
+    assert rows[1][3] == "'=SUM(1,1)"
+    assert "לחם אחיד" in rows[1][9]
+
+
+def test_order_search_csv_export_is_tenant_scoped(
+    logged_in_client_a, logged_in_client_b, make_order
+):
+    response, _, _ = make_order(
+        logged_in_client_a,
+        supplier_name="ספק פרטי לייצוא",
+        product_name="מוצר חסוי",
+        sku="PRIVATE-EXPORT",
+    )
+    assert response.status_code == 201
+
+    exported = logged_in_client_b.get(
+        "/api/orders/search?format=csv&q=מוצר+חסוי"
+    )
+    assert exported.status_code == 200
+    assert exported.headers["X-Export-Row-Count"] == "0"
+
+
+def test_order_search_csv_export_rejects_oversized_result(
+    logged_in_client_a, make_order, monkeypatch
+):
+    first, _, _ = make_order(logged_in_client_a, sku="EXPORT-LIMIT-ONE")
+    second, _, _ = make_order(logged_in_client_a, sku="EXPORT-LIMIT-TWO")
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    monkeypatch.setattr("app.routes.order_search.MAX_EXPORT_ROWS", 1)
+    exported = logged_in_client_a.get("/api/orders/search?format=csv")
+    assert exported.status_code == 413
+    assert exported.get_json()["error"] == "export_too_large"
+
+
+def test_order_search_csv_export_does_not_silently_truncate(
+    logged_in_client_a, make_order
+):
+    first, _, _ = make_order(
+        logged_in_client_a, product_name="לחם אחיד", sku="BREAD-EXPORT-1"
+    )
+    second, _, _ = make_order(
+        logged_in_client_a, product_name="לחם שיפון", sku="BREAD-EXPORT-2"
+    )
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    exported = logged_in_client_a.get(
+        "/api/orders/search?format=csv&limit=1&q=לחם"
+    )
+    assert exported.status_code == 200
+    assert exported.headers["X-Export-Row-Count"] == "2"

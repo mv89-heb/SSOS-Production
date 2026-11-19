@@ -1,6 +1,8 @@
+import csv
+import io
 from datetime import date, datetime, time, timedelta, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import String, and_, cast, func, or_, select
 from werkzeug.exceptions import BadRequest, HTTPException
@@ -18,6 +20,13 @@ DEFAULT_LIMIT = 50
 MAX_LIMIT = 100
 MAX_QUERY_LENGTH = 200
 MAX_RANGE_DAYS = 731
+MAX_EXPORT_ROWS = 5000
+
+
+def _csv_text(value):
+    text = str(value if value is not None else "")
+    formula_candidate = text.lstrip(" \t\r\n")
+    return "'" + text if formula_candidate.startswith(("=", "+", "-", "@")) or text.startswith(("\t", "\r")) else text
 
 
 def _parse_date(value, field):
@@ -50,8 +59,15 @@ def search_orders():
         if status and status not in VALID_STATUSES:
             raise BadRequest("Invalid status filter")
 
+        output_format = (request.args.get("format") or "").strip().lower()
+        if output_format not in ("", "csv"):
+            raise BadRequest("Unsupported export format")
+        csv_export = output_format == "csv"
+        default_limit = MAX_EXPORT_ROWS if csv_export else DEFAULT_LIMIT
+        maximum_limit = MAX_EXPORT_ROWS if csv_export else MAX_LIMIT
+
         try:
-            limit = int(request.args.get("limit", DEFAULT_LIMIT))
+            limit = int(request.args.get("limit", default_limit))
             offset = int(request.args.get("offset", 0))
         except (TypeError, ValueError):
             raise BadRequest("limit and offset must be integers")
@@ -62,7 +78,11 @@ def search_orders():
             raise BadRequest("supplier_id must be an integer")
         if limit < 1 or offset < 0 or (supplier_id is not None and supplier_id < 1):
             raise BadRequest("limit and supplier_id must be positive; offset cannot be negative")
-        limit = min(limit, MAX_LIMIT)
+        limit = min(limit, maximum_limit)
+        if csv_export:
+            if offset != 0:
+                raise BadRequest("CSV export must start at offset 0")
+            limit = MAX_EXPORT_ROWS
 
         start_date = _parse_date(request.args.get("start_date"), "start_date")
         end_date = _parse_date(request.args.get("end_date"), "end_date")
@@ -107,9 +127,57 @@ def search_orders():
 
         count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
         total = db.session.scalar(count_stmt) or 0
+        if csv_export and total > MAX_EXPORT_ROWS:
+            return jsonify({
+                "success": False,
+                "error": "export_too_large",
+                "message": f"CSV export is limited to {MAX_EXPORT_ROWS} orders; narrow the date or status filters.",
+                "total": total,
+                "maximum": MAX_EXPORT_ROWS,
+            }), 413
+
         orders = db.session.scalars(
             stmt.order_by(Order.created_at.desc(), Order.id.desc()).limit(limit).offset(offset)
         ).all()
+
+        if csv_export:
+            output = io.StringIO(newline="")
+            writer = csv.writer(output, lineterminator="\r\n")
+            writer.writerow([
+                "מספר הזמנה", "ספק", "סטטוס", "מחלקה", "פרויקט",
+                "תאריך יצירה", "תאריך הזמנה מתוכנן", "מטבע", 'סה"כ', "פריטים",
+            ])
+            status_labels = {
+                "draft": "טיוטה", "submitted": "ממתינה לאישור",
+                "approved": "אושרה", "sent": "נשלחה לספק",
+                "completed": "הושלמה", "cancelled": "בוטלה",
+            }
+            for order in orders:
+                item_parts = []
+                for index, item in enumerate(order.items or []):
+                    if not isinstance(item, dict):
+                        continue
+                    product_name = item.get("product_name") or item.get("name") or f"פריט {index + 1}"
+                    quantity = item.get("quantity", "")
+                    unit = item.get("unit") or ""
+                    item_parts.append(f"{product_name} × {quantity} {unit}".strip())
+                writer.writerow([
+                    _csv_text(order.order_number),
+                    _csv_text(order.supplier_name),
+                    status_labels.get(order.status, _csv_text(order.status)),
+                    _csv_text(order.department),
+                    _csv_text(order.project),
+                    order.created_at.isoformat() if order.created_at else "",
+                    order.planned_order_date.isoformat() if order.planned_order_date else "",
+                    _csv_text(order.currency),
+                    float(order.final_total or 0),
+                    _csv_text(" | ".join(item_parts)),
+                ])
+            response = Response("\ufeff" + output.getvalue(), mimetype="text/csv; charset=utf-8")
+            response.headers["Content-Disposition"] = 'attachment; filename="orders-export.csv"'
+            response.headers["X-Export-Row-Count"] = str(len(orders))
+            return response
+
         return jsonify({
             "success": True,
             "orders": [order.to_dict() for order in orders],
