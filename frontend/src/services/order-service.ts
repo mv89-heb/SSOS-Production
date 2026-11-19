@@ -64,7 +64,11 @@ export interface SupplierHistoryForecastProduct {
   unit: string;
   units_per_carton: number | null;
   order_count: number;
+  operational_order_count: number;
+  historical_order_count: number;
+  complete_week_order_count: number;
   weeks_with_orders: number;
+  complete_weeks_with_orders: number;
   normal_weekly_average: number;
   boosted_weekly_forecast: number;
   average_weekly_forecast: number;
@@ -97,6 +101,9 @@ export interface SupplierHistoryForecast {
   period: { start_date: string; end_date: string };
   target_date: string;
   source: string;
+  source_counts: { operational_orders: number; historical_orders: number; total_orders: number };
+  complete_weeks_in_period: number;
+  partial_boundary_weeks_excluded: number;
   order_count: number;
   seasonality: {
     cycle_weeks: number;
