@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { orderService } from "@/services/order-service";
 import { OrderStatusBadge } from "@/components/ui/badge";
@@ -133,7 +134,7 @@ export default function OrdersPage() {
     setEndDate(saved.filters.end_date || "");
     setPage(0);
   };
-  const saveCurrentSearch = (event: React.FormEvent<HTMLFormElement>) => {
+  const saveCurrentSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSavedSearchMessage("");
     createSavedSearchMutation.mutate({
