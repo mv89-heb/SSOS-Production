@@ -183,3 +183,128 @@ def test_order_search_csv_export_does_not_silently_truncate(
     )
     assert exported.status_code == 200
     assert exported.headers["X-Export-Row-Count"] == "2"
+
+
+def test_saved_order_search_crud_and_filter_normalization(logged_in_client_a):
+    created = logged_in_client_a.post(
+        "/api/orders/searches",
+        json={
+            "name": "  הזמנות חלב  ",
+            "filters": {
+                "q": "  חלב  ",
+                "status": "submitted",
+                "start_date": "2026-11-01",
+                "end_date": "2026-11-18",
+            },
+        },
+    )
+    assert created.status_code == 201, created.get_json()
+    saved = created.get_json()["saved_search"]
+    assert saved["name"] == "הזמנות חלב"
+    assert saved["filters"] == {
+        "q": "חלב",
+        "status": "submitted",
+        "supplier_id": None,
+        "start_date": "2026-11-01",
+        "end_date": "2026-11-18",
+    }
+
+    listed = logged_in_client_a.get("/api/orders/searches")
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.get_json()["saved_searches"]] == [saved["id"]]
+
+    deleted = logged_in_client_a.delete(f"/api/orders/searches/{saved['id']}")
+    assert deleted.status_code == 200
+    assert logged_in_client_a.get("/api/orders/searches").get_json()["saved_searches"] == []
+
+
+def test_saved_order_search_is_tenant_scoped(
+    logged_in_client_a, logged_in_client_b
+):
+    created = logged_in_client_a.post(
+        "/api/orders/searches",
+        json={"name": "חיפוש פרטי", "filters": {"q": "סודי"}},
+    )
+    assert created.status_code == 201
+    saved_id = created.get_json()["saved_search"]["id"]
+
+    assert logged_in_client_b.get("/api/orders/searches").get_json()["saved_searches"] == []
+    forbidden_delete = logged_in_client_b.delete(f"/api/orders/searches/{saved_id}")
+    assert forbidden_delete.status_code == 404
+
+
+def test_saved_order_search_rejects_invalid_filters_and_duplicate_names(
+    logged_in_client_a
+):
+    valid_payload = {"name": "חיפוש תקין", "filters": {"q": "ספק"}}
+    assert logged_in_client_a.post("/api/orders/searches", json=valid_payload).status_code == 201
+
+    duplicate = logged_in_client_a.post(
+        "/api/orders/searches",
+        json={"name": "  חיפוש תקין  ", "filters": {}},
+    )
+    assert duplicate.status_code == 409
+
+    invalid_payloads = [
+        {"name": "ארוך", "filters": {"q": "א" * 201}},
+        {"name": "סטטוס", "filters": {"status": "unknown"}},
+        {"name": "מפתח", "filters": {"raw_sql": "select * from orders"}},
+        {"name": "תאריכים", "filters": {"start_date": "2026-11-20", "end_date": "2026-11-01"}},
+        {"name": "טווח", "filters": {"start_date": "2020-01-01", "end_date": "2026-11-01"}},
+    ]
+    for payload in invalid_payloads:
+        response = logged_in_client_a.post("/api/orders/searches", json=payload)
+        assert response.status_code == 400, response.get_json()
+
+
+def test_saved_order_search_limit_is_enforced(logged_in_client_a):
+    for index in range(20):
+        response = logged_in_client_a.post(
+            "/api/orders/searches",
+            json={"name": f"חיפוש {index + 1}", "filters": {}},
+        )
+        assert response.status_code == 201, response.get_json()
+
+    limited = logged_in_client_a.post(
+        "/api/orders/searches",
+        json={"name": "חיפוש 21", "filters": {}},
+    )
+    assert limited.status_code == 409
+
+
+def test_saved_order_search_requires_authentication(client):
+    assert client.get("/api/orders/searches").status_code == 401
+    assert client.post(
+        "/api/orders/searches", json={"name": "לא מחובר", "filters": {}}
+    ).status_code == 401
+
+
+def test_saved_order_search_is_private_to_its_creator(logged_in_client_a, db):
+    from sqlalchemy import select
+    from app.models.user import User, ROLE_ADMIN
+
+    admin = db.session.scalar(select(User).where(User.email == "admin@acme.test"))
+    other_user = User(
+        tenant_id=admin.tenant_id,
+        email="second-admin@acme.test",
+        full_name="Second Admin",
+        role=ROLE_ADMIN,
+        active=True,
+    )
+    other_user.set_password("Passw0rd1")
+    db.session.add(other_user)
+    db.session.commit()
+
+    created = logged_in_client_a.post(
+        "/api/orders/searches",
+        json={"name": "החיפוש שלי", "filters": {"q": "פרטי"}},
+    )
+    assert created.status_code == 201
+
+    other_client = logged_in_client_a.application.test_client()
+    login = other_client.post(
+        "/api/auth/login",
+        json={"email": "second-admin@acme.test", "password": "Passw0rd1"},
+    )
+    assert login.status_code == 200
+    assert other_client.get("/api/orders/searches").get_json()["saved_searches"] == []

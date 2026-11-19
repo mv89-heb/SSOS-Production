@@ -26,11 +26,12 @@ from app.models.inventory_planning_period import InventoryPlanningPeriod
 from app.models.historical_document_import import HistoricalImportBatch, HistoricalPurchaseOrder, HistoricalDocumentRecord
 from app.models.product_code import ProductCode
 from app.models.procurement_budget import ProcurementBudget
+from app.models.saved_order_search import SavedOrderSearch
 
 __all__ = [
     "Tenant", "User", "Supplier", "Product", "SupplierProductOffer",
     "MasterProduct", "SupplierProduct", "PriceHistory", "PriceObservation", "RegulatedEggPrice", "RegulatoryPriceMonitorState",
     "DocumentAnalysis", "ProductClassificationFeedback", "Order", "OrderItem", "Receipt", "ReceiptItem", "SupplierInvoice", "SupplierInvoicePayment", "IdempotencyKey", "AuditLog",
     "Notification", "GoogleCalendarConnection", "InventoryMovement",
-    "InventoryPlanningPeriod", "HistoricalImportBatch", "HistoricalPurchaseOrder", "HistoricalDocumentRecord", "ProductCode", "ProcurementBudget",
+    "InventoryPlanningPeriod", "SavedOrderSearch", "HistoricalImportBatch", "HistoricalPurchaseOrder", "HistoricalDocumentRecord", "ProductCode", "ProcurementBudget",
 ]

@@ -201,3 +201,62 @@ def search_orders():
             "error": exc.name.lower().replace(" ", "_"),
             "message": exc.description,
         }), exc.code
+
+
+@order_search_bp.route("/searches", methods=["GET"])
+@login_required
+def list_saved_order_searches():
+    try:
+        PermissionService.require_permission("orders.view")
+        from app.services.saved_order_search_service import SavedOrderSearchService
+
+        service = SavedOrderSearchService(current_user.tenant_id, current_user.id)
+        return jsonify({
+            "success": True,
+            "saved_searches": [item.to_dict() for item in service.list()],
+        }), 200
+    except HTTPException as exc:
+        return jsonify({
+            "success": False,
+            "error": exc.name.lower().replace(" ", "_"),
+            "message": exc.description,
+        }), exc.code
+
+
+@order_search_bp.route("/searches", methods=["POST"])
+@login_required
+def create_saved_order_search():
+    try:
+        PermissionService.require_permission("orders.view")
+        from app.services.saved_order_search_service import SavedOrderSearchService
+
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            raise BadRequest("Request body must be an object")
+        service = SavedOrderSearchService(current_user.tenant_id, current_user.id)
+        saved = service.create(data.get("name"), data.get("filters", {}))
+        return jsonify({"success": True, "saved_search": saved.to_dict()}), 201
+    except HTTPException as exc:
+        return jsonify({
+            "success": False,
+            "error": exc.name.lower().replace(" ", "_"),
+            "message": exc.description,
+        }), exc.code
+
+
+@order_search_bp.route("/searches/<int:saved_search_id>", methods=["DELETE"])
+@login_required
+def delete_saved_order_search(saved_search_id):
+    try:
+        PermissionService.require_permission("orders.view")
+        from app.services.saved_order_search_service import SavedOrderSearchService
+
+        service = SavedOrderSearchService(current_user.tenant_id, current_user.id)
+        service.delete(saved_search_id)
+        return jsonify({"success": True, "deleted_id": saved_search_id}), 200
+    except HTTPException as exc:
+        return jsonify({
+            "success": False,
+            "error": exc.name.lower().replace(" ", "_"),
+            "message": exc.description,
+        }), exc.code
