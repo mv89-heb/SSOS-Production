@@ -23,6 +23,90 @@ MAX_RANGE_DAYS = 731
 MAX_EXPORT_ROWS = 5000
 
 
+SEARCHED_FIELD_LABELS = [
+    "מספר הזמנה", "ספק", "הערות", "מחלקה", "פרויקט",
+    "שם מוצר", "מק״ט", "ברקוד", "פרטי פריטים היסטוריים",
+]
+
+
+def _contains_query(value, query):
+    return value is not None and query.casefold() in str(value).casefold()
+
+
+def _matched_search_fields(order, query):
+    if not query:
+        return []
+    matched = set()
+    for value, label in (
+        (order.order_number, "מספר הזמנה"),
+        (order.supplier_name, "ספק"),
+        (order.notes, "הערות"),
+        (order.department, "מחלקה"),
+        (order.project, "פרויקט"),
+    ):
+        if _contains_query(value, query):
+            matched.add(label)
+
+    snapshot_match = False
+    for item in order.items or []:
+        if not isinstance(item, dict):
+            continue
+        if _contains_query(item.get("product_name") or item.get("name"), query):
+            matched.add("שם מוצר")
+            snapshot_match = True
+        if any(_contains_query(item.get(key), query) for key in ("sku", "supplier_sku")):
+            matched.add("מק״ט")
+            snapshot_match = True
+        if _contains_query(item.get("barcode"), query):
+            matched.add("ברקוד")
+            snapshot_match = True
+
+    for order_item in order.order_items or []:
+        product = order_item.product
+        if product is None:
+            continue
+        if _contains_query(product.name, query):
+            matched.add("שם מוצר")
+        if any(_contains_query(getattr(product, field, None), query) for field in ("sku", "supplier_sku")):
+            matched.add("מק״ט")
+        if _contains_query(getattr(product, "barcode", None), query):
+            matched.add("ברקוד")
+
+    if snapshot_match and not ({"שם מוצר", "מק״ט", "ברקוד"} & matched):
+        matched.add("פרטי פריטים היסטוריים")
+    return [label for label in SEARCHED_FIELD_LABELS if label in matched]
+
+
+def _missing_order_fields(order):
+    missing = []
+    if not order.order_number:
+        missing.append("מספר הזמנה")
+    if not order.supplier_name:
+        missing.append("שם ספק")
+    has_items = bool(order.items) or bool(order.order_items)
+    if not has_items:
+        missing.append("פירוט פריטים")
+    if not order.created_at:
+        missing.append("תאריך יצירה")
+    return missing
+
+
+def _active_search_filters(query_text, status, supplier_id, start_date, end_date):
+    active = []
+    if query_text:
+        active.append({"key": "q", "label": "חיפוש", "value": query_text})
+    if status:
+        active.append({"key": "status", "label": "סטטוס", "value": status})
+    if supplier_id is not None:
+        active.append({"key": "supplier_id", "label": "מזהה ספק", "value": str(supplier_id)})
+    if start_date:
+        active.append({"key": "start_date", "label": "מתאריך", "value": start_date.isoformat()})
+    if end_date:
+        active.append({"key": "end_date", "label": "עד תאריך", "value": end_date.isoformat()})
+    return active
+
+
+
 def _csv_text(value):
     text = str(value if value is not None else "")
     formula_candidate = text.lstrip(" \t\r\n")
@@ -178,9 +262,22 @@ def search_orders():
             response.headers["X-Export-Row-Count"] = str(len(orders))
             return response
 
+        order_payloads = []
+        incomplete_order_count = 0
+        for order in orders:
+            payload = order.to_dict()
+            missing_fields = _missing_order_fields(order)
+            if missing_fields:
+                incomplete_order_count += 1
+            payload["search_provenance"] = {
+                "matched_fields": _matched_search_fields(order, query_text),
+                "missing_fields": missing_fields,
+            }
+            order_payloads.append(payload)
+
         return jsonify({
             "success": True,
-            "orders": [order.to_dict() for order in orders],
+            "orders": order_payloads,
             "pagination": {
                 "total": total,
                 "limit": limit,
@@ -193,6 +290,17 @@ def search_orders():
                 "supplier_id": supplier_id,
                 "start_date": start_date.isoformat() if start_date else None,
                 "end_date": end_date.isoformat() if end_date else None,
+            },
+            "search_context": {
+                "searched_fields": SEARCHED_FIELD_LABELS,
+                "active_filters": _active_search_filters(
+                    query_text, status, supplier_id, start_date, end_date
+                ),
+                "data_quality": {
+                    "checked_orders": len(orders),
+                    "incomplete_count": incomplete_order_count,
+                    "scope": "current_page",
+                },
             },
         }), 200
     except HTTPException as exc:
