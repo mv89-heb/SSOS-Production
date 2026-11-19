@@ -155,10 +155,12 @@ def test_order_search_csv_export_is_tenant_scoped(
 def test_order_search_csv_export_rejects_oversized_result(
     logged_in_client_a, make_order, monkeypatch
 ):
-    response, _, _ = make_order(logged_in_client_a)
-    assert response.status_code == 201
+    first, _, _ = make_order(logged_in_client_a, sku="EXPORT-LIMIT-ONE")
+    second, _, _ = make_order(logged_in_client_a, sku="EXPORT-LIMIT-TWO")
+    assert first.status_code == 201
+    assert second.status_code == 201
 
-    monkeypatch.setattr("app.routes.order_search.MAX_EXPORT_ROWS", 0)
+    monkeypatch.setattr("app.routes.order_search.MAX_EXPORT_ROWS", 1)
     exported = logged_in_client_a.get("/api/orders/search?format=csv")
     assert exported.status_code == 413
     assert exported.get_json()["error"] == "export_too_large"
