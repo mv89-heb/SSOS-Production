@@ -202,8 +202,6 @@ class OrderHistoryForecastService:
         ).all()
         for historical_order in historical_orders:
             week = self._week_start(historical_order.order_date)
-            # Negative IDs keep historical records distinct from operational order IDs.
-            historical_order_key = -int(historical_order.id)
             for line in historical_order.items or []:
                 if not isinstance(line, dict):
                     continue
