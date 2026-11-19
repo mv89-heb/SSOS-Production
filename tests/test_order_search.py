@@ -68,3 +68,27 @@ def test_order_search_validates_filters_and_limits(
 def test_order_search_requires_authentication(client):
     response = client.get("/api/orders/search?q=test")
     assert response.status_code == 401
+
+
+def test_order_search_matches_product_name_and_sku(
+    logged_in_client_a, make_order
+):
+    response, _, _ = make_order(
+        logged_in_client_a,
+        supplier_name="ספק מוצר",
+        product_name="גבינה לבנה 5%",
+        sku="DAIRY-005",
+    )
+    assert response.status_code == 201, response.get_json()
+
+    by_name = logged_in_client_a.get("/api/orders/search?q=גבינה+לבנה")
+    assert by_name.status_code == 200, by_name.get_json()
+    assert [item["id"] for item in by_name.get_json()["orders"]] == [
+        response.get_json()["order"]["id"]
+    ]
+
+    by_sku = logged_in_client_a.get("/api/orders/search?q=DAIRY-005")
+    assert by_sku.status_code == 200, by_sku.get_json()
+    assert [item["id"] for item in by_sku.get_json()["orders"]] == [
+        response.get_json()["order"]["id"]
+    ]
