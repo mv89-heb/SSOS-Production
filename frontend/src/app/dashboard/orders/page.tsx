@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { orderService } from "@/services/order-service";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AlertCircle, ArrowLeft, Bell, CheckCircle2, Clock3, Download, PackageCheck, Plus, Search, Send, ShoppingCart, XCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, Bell, BookmarkPlus, CheckCircle2, Clock3, Download, PackageCheck, Plus, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
 
 const STATUS_FILTERS = [
   { value: "all", label: "הכול" },
@@ -63,13 +63,22 @@ function StatusSummary({ label, value, icon: Icon, tone, active, onClick }: Stat
 }
 
 export default function OrdersPage() {
+  const queryClient = useQueryClient();
   const { data: orders } = useQuery({ queryKey: ["orders"], queryFn: () => orderService.getOrders() });
+  const { data: savedSearches = [] } = useQuery({
+    queryKey: ["orders", "saved-searches"],
+    queryFn: () => orderService.getSavedSearches(),
+  });
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [selectedSavedSearchId, setSelectedSavedSearchId] = useState("");
+  const [showSaveSearch, setShowSaveSearch] = useState(false);
+  const [saveSearchName, setSaveSearchName] = useState("");
+  const [savedSearchMessage, setSavedSearchMessage] = useState("");
   const [page, setPage] = useState(0);
   const deferredSearch = useDeferredValue(search.trim());
   const pageSize = 50;
@@ -85,14 +94,58 @@ export default function OrdersPage() {
     }),
     placeholderData: (previousData) => previousData,
   });
+  const createSavedSearchMutation = useMutation({
+    mutationFn: (payload: { name: string; filters: { q: string; status: string; start_date: string; end_date: string } }) =>
+      orderService.createSavedSearch(payload),
+    onSuccess: async (saved) => {
+      await queryClient.invalidateQueries({ queryKey: ["orders", "saved-searches"] });
+      setSelectedSavedSearchId(String(saved.id));
+      setShowSaveSearch(false);
+      setSaveSearchName("");
+      setSavedSearchMessage("החיפוש נשמר.");
+    },
+    onError: () => setSavedSearchMessage("לא ניתן לשמור את החיפוש. בדוק שהשם אינו קיים ושלא נשמרו כבר 20 חיפושים."),
+  });
+  const deleteSavedSearchMutation = useMutation({
+    mutationFn: (id: number) => orderService.deleteSavedSearch(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["orders", "saved-searches"] });
+      setSelectedSavedSearchId("");
+      setSavedSearchMessage("החיפוש השמור נמחק.");
+    },
+    onError: () => setSavedSearchMessage("מחיקת החיפוש נכשלה."),
+  });
   const filteredOrders = useMemo(() => searchResult?.orders ?? [], [searchResult]);
   const count = (value: string) => (orders ?? []).filter((order) => order.status === value).length;
   const hasFilters = Boolean(search.trim()) || status !== "all" || Boolean(startDate) || Boolean(endDate);
   const totalResults = searchResult?.pagination.total ?? 0;
   const hasPreviousPage = page > 0;
   const hasNextPage = Boolean(searchResult?.pagination.has_more);
-  const changeStatus = (value: StatusFilter) => { setStatus(value); setPage(0); };
-  const clearFilters = () => { setSearch(""); setStartDate(""); setEndDate(""); changeStatus("all"); };
+  const changeStatus = (value: StatusFilter) => { setStatus(value); setSelectedSavedSearchId(""); setPage(0); };
+  const clearFilters = () => { setSearch(""); setStartDate(""); setEndDate(""); setSelectedSavedSearchId(""); changeStatus("all"); };
+  const applySavedSearch = (value: string) => {
+    setSelectedSavedSearchId(value);
+    const saved = savedSearches.find((item) => item.id === Number(value));
+    if (!saved) return;
+    setSearch(saved.filters.q || "");
+    setStatus((saved.filters.status || "all") as StatusFilter);
+    setStartDate(saved.filters.start_date || "");
+    setEndDate(saved.filters.end_date || "");
+    setPage(0);
+  };
+  const saveCurrentSearch = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSavedSearchMessage("");
+    createSavedSearchMutation.mutate({
+      name: saveSearchName,
+      filters: {
+        q: search.trim(),
+        status,
+        start_date: startDate,
+        end_date: endDate,
+      },
+    });
+  };
   const handleExport = async () => {
     setIsExporting(true);
     setExportError("");
@@ -144,7 +197,7 @@ export default function OrdersPage() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} placeholder="חיפוש חופשי: הזמנה, ספק, מוצר, מק״ט, הערות, מחלקה או פרויקט..." className="h-10 pr-9" />
+              <Input value={search} onChange={(e) => { setSearch(e.target.value); setSelectedSavedSearchId(""); setPage(0); }} placeholder="חיפוש חופשי: הזמנה, ספק, מוצר, מק״ט, הערות, מחלקה או פרויקט..." className="h-10 pr-9" />
             </div>
             <Button type="button" variant="secondary" onClick={handleExport} disabled={isExporting || totalResults === 0} className="shrink-0">
               <Download size={15} /> {isExporting ? "מייצא..." : "ייצוא CSV"}
@@ -156,13 +209,43 @@ export default function OrdersPage() {
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-md">
             <label className="flex flex-col gap-1 text-xs font-bold text-slate-500">
               מתאריך
-              <input type="date" value={startDate} max={endDate || undefined} onChange={(event) => { setStartDate(event.target.value); setPage(0); }} className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-indigo-950" />
+              <input type="date" value={startDate} max={endDate || undefined} onChange={(event) => { setStartDate(event.target.value); setSelectedSavedSearchId(""); setPage(0); }} className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-indigo-950" />
             </label>
             <label className="flex flex-col gap-1 text-xs font-bold text-slate-500">
               עד תאריך
-              <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => { setEndDate(event.target.value); setPage(0); }} className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-indigo-950" />
+              <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => { setEndDate(event.target.value); setSelectedSavedSearchId(""); setPage(0); }} className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-indigo-950" />
             </label>
           </div>
+          <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 dark:border-slate-800 sm:flex-row sm:items-end">
+            <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-bold text-slate-500">
+              חיפושים שמורים ({savedSearches.length}/20)
+              <select value={selectedSavedSearchId} onChange={(event) => applySavedSearch(event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                <option value="">בחירת חיפוש שמור...</option>
+                {savedSearches.map((saved) => <option key={saved.id} value={saved.id}>{saved.name}</option>)}
+              </select>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={() => { setShowSaveSearch((value) => !value); setSavedSearchMessage(""); }}>
+                <BookmarkPlus size={15} /> שמור חיפוש נוכחי
+              </Button>
+              {selectedSavedSearchId && <Button type="button" variant="danger" onClick={() => deleteSavedSearchMutation.mutate(Number(selectedSavedSearchId))} disabled={deleteSavedSearchMutation.isPending}>
+                <Trash2 size={15} /> מחק שמור
+              </Button>}
+            </div>
+          </div>
+          {showSaveSearch && (
+            <form onSubmit={saveCurrentSearch} className="mt-2 flex flex-col gap-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60 sm:flex-row sm:items-end">
+              <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-bold text-slate-500">
+                שם לחיפוש
+                <input required maxLength={80} value={saveSearchName} onChange={(event) => setSaveSearchName(event.target.value)} placeholder="לדוגמה: הזמנות חלב לשבת" className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" />
+              </label>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={createSavedSearchMutation.isPending || savedSearches.length >= 20}>{createSavedSearchMutation.isPending ? "שומר..." : "שמור"}</Button>
+                <Button type="button" variant="ghost" onClick={() => setShowSaveSearch(false)}>ביטול</Button>
+              </div>
+            </form>
+          )}
+          {savedSearchMessage && <p role="status" className="mt-2 px-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{savedSearchMessage}</p>}
           {hasFilters && <div className="mt-2 flex items-center justify-between px-1 text-xs"><span className="text-slate-400">נמצאו {totalResults.toLocaleString("he-IL")} הזמנות</span><button type="button" onClick={clearFilters} className="font-bold text-indigo-600 hover:underline">נקה סינון</button></div>}
           {exportError && <p role="alert" className="mt-2 px-1 text-xs font-semibold text-red-600">{exportError}</p>}
         </div>
