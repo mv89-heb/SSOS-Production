@@ -324,10 +324,30 @@ export default function OrdersPage() {
                 <FileSpreadsheet size={15} /> {isExportingExcel ? "מייצא..." : "Excel"}
               </Button>
             </div>
+            <Button type="button" variant="secondary" onClick={() => setShowColumnSettings((value) => !value)} className="shrink-0">
+              <Columns3 size={15} /> עמודות
+            </Button>
             <div className="flex gap-1.5 overflow-x-auto pb-1">
               {STATUS_FILTERS.map((filter) => <button key={filter.value} type="button" onClick={() => changeStatus(filter.value)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition ${status === filter.value ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300"}`}>{filter.label}</button>)}
             </div>
           </div>
+          {showColumnSettings && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/60">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs font-extrabold text-slate-600 dark:text-slate-200">עמודות בטבלת ההזמנות</p>
+                <button type="button" onClick={() => setVisibleColumns(DEFAULT_ORDER_COLUMNS)} className="text-xs font-bold text-indigo-600 hover:underline dark:text-indigo-300">איפוס לברירת מחדל</button>
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {ORDER_COLUMNS.map((column) => (
+                  <label key={column.id} className="inline-flex min-h-8 items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    <input type="checkbox" checked={visibleColumns.includes(column.id)} onChange={(event) => toggleColumn(column.id, event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    {column.label}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-slate-400">הבחירה נשמרת בדפדפן הזה. לפחות עמודה אחת חייבת להישאר מוצגת.</p>
+            </div>
+          )}
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-md">
             <label className="flex flex-col gap-1 text-xs font-bold text-slate-500">
               מתאריך
@@ -368,6 +388,21 @@ export default function OrdersPage() {
             </form>
           )}
           {savedSearchMessage && <p role="status" className="mt-2 px-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{savedSearchMessage}</p>}
+          {selectedOrderIds.length > 0 && (
+            <div className="mt-3 flex flex-col gap-2 rounded-xl border border-indigo-200 bg-indigo-50/70 p-3 dark:border-indigo-900 dark:bg-indigo-950/30 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
+                נבחרו {selectedOrderIds.length} הזמנות בעמוד הנוכחי
+                {!canBulkMarkSent && <p className="mt-1 font-medium text-amber-700 dark:text-amber-300">כדי לסמן כנשלח, כל ההזמנות שנבחרו חייבות להיות במצב "אושרה".</p>}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={() => setShowBulkConfirm(true)} disabled={!canBulkMarkSent || bulkMarkSentMutation.isPending}>
+                  <Send size={15} /> סמן כנשלח לספק
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setSelectedOrderIds([])}>נקה בחירה</Button>
+              </div>
+            </div>
+          )}
+          {bulkActionMessage && <p role="status" className="mt-2 px-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{bulkActionMessage}</p>}
           {searchResult?.search_context && (
             <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-xs dark:border-slate-800 dark:bg-slate-900/50">
               <p className="font-bold text-slate-600 dark:text-slate-300">שדות שנבדקים בחיפוש: <span className="font-medium">{searchResult.search_context.searched_fields.join(" · ")}</span></p>
