@@ -184,6 +184,56 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-slate-500">רישום ידני של נתוני החשבונית</span><Button onClick={() => { setMessage(null); createInvoice.mutate(); }} disabled={createInvoice.isPending || !invoiceNumber.trim() || !(Number(invoiceAmount) > 0)}><FileText size={15} /> {createInvoice.isPending ? "שומר..." : "רישום חשבונית"}</Button></div>
         {message && <p role="status" className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800">{message}</p>}
+        <section className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/40 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
+          <div>
+            <h3 className="font-extrabold text-sm">זיכויים והתאמות ספק</h3>
+            <p className="mt-1 text-xs leading-5 text-slate-500">רישום אנליטי מקושר להזמנה ולחשבונית. הרישום אינו משנה את סכום החשבונית, יתרת התשלום, המלאי או ההזמנה. קובץ המקור אינו נשמר.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-xs font-bold"><span>מספר אסמכתת זיכוי *</span><input value={creditReference} onChange={(event) => setCreditReference(event.target.value)} maxLength={120} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" /></label>
+            <label className="space-y-1 text-xs font-bold"><span>סוג התאמה</span><select value={creditType} onChange={(event) => setCreditType(event.target.value as CreditAdjustment["adjustment_type"])} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"><option value="credit_note">תעודת זיכוי</option><option value="price_adjustment">התאמת מחיר</option><option value="goods_return">החזרת סחורה</option></select></label>
+            <label className="space-y-1 text-xs font-bold"><span>תאריך מסמך *</span><input type="date" value={creditDate} onChange={(event) => setCreditDate(event.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" /></label>
+            <label className="space-y-1 text-xs font-bold"><span>סכום זיכוי ({creditInvoiceId ? (query.data ?? []).find((invoice) => invoice.id === Number(creditInvoiceId))?.currency ?? order.currency : order.currency}) *</span><input type="number" min="0.01" step="0.01" value={creditAmount} onChange={(event) => setCreditAmount(event.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" /></label>
+            <label className="space-y-1 text-xs font-bold sm:col-span-2"><span>שיוך לחשבונית (אופציונלי)</span><select value={creditInvoiceId} onChange={(event) => setCreditInvoiceId(event.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"><option value="">ללא חשבונית משויכת</option>{(query.data ?? []).map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.invoice_number} · {invoice.amount.toLocaleString("he-IL", { minimumFractionDigits: 2 })} {invoice.currency}</option>)}</select></label>
+            <label className="space-y-1 text-xs font-bold sm:col-span-2"><span>סיבת הזיכוי / הערה</span><textarea rows={2} maxLength={2000} value={creditReason} onChange={(event) => setCreditReason(event.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" /></label>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] text-slate-500">האסמכתה חייבת להיות ייחודית אצל אותו ספק.</span>
+            <Button type="button" onClick={() => createCreditAdjustment.mutate()} disabled={createCreditAdjustment.isPending || !creditReference.trim() || !(Number(creditAmount) > 0) || !creditDate}>
+              {createCreditAdjustment.isPending ? "שומר..." : "רישום זיכוי / התאמה"}
+            </Button>
+          </div>
+          {creditQuery.isLoading && <p className="text-xs text-slate-500">טוען זיכויים...</p>}
+          {creditQuery.isError && <p role="alert" className="text-xs text-red-600">טעינת הזיכויים נכשלה.</p>}
+          {(creditQuery.data ?? []).length === 0 && !creditQuery.isLoading && <p className="rounded-lg border border-dashed border-amber-200 p-3 text-xs text-slate-500 dark:border-amber-900">לא נרשמו זיכויים או התאמות להזמנה זו.</p>}
+          {(creditQuery.data ?? []).map((adjustment) => (
+            <div key={adjustment.id} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <div className="font-bold text-sm">{adjustment.reference_number} · {CREDIT_ADJUSTMENT_LABELS[adjustment.adjustment_type]}</div>
+                  <div className="mt-1 text-xs text-slate-500">{adjustment.adjustment_date}{adjustment.invoice_id ? " · מקושר לחשבונית" : " · ללא חשבונית משויכת"}</div>
+                  {adjustment.reason && <p className="mt-1 whitespace-pre-wrap text-xs text-slate-500">{adjustment.reason}</p>}
+                  {adjustment.status === "voided" && <p className="mt-1 text-xs font-semibold text-red-700">בוטל: {adjustment.void_reason}</p>}
+                </div>
+                <div className="text-left">
+                  <div className="font-extrabold">{adjustment.amount.toLocaleString("he-IL", { minimumFractionDigits: 2 })} {adjustment.currency}</div>
+                  <div className={adjustment.status === "active" ? "text-xs font-bold text-emerald-700" : "text-xs font-bold text-red-700"}>{adjustment.status === "active" ? "פעיל במדד" : "בוטל"}</div>
+                </div>
+              </div>
+              {adjustment.status === "active" && (
+                <div className="mt-2">
+                  {voidingCreditId === adjustment.id ? (
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input value={voidReason} onChange={(event) => setVoidReason(event.target.value)} maxLength={1000} placeholder="סיבת ביטול (חובה)" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950" />
+                      <Button type="button" variant="danger" size="sm" disabled={voidCreditAdjustment.isPending || voidReason.trim().length < 3} onClick={() => voidCreditAdjustment.mutate({ id: adjustment.id, reason: voidReason.trim() })}>אשר ביטול</Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => { setVoidingCreditId(null); setVoidReason(""); }}>סגור</Button>
+                    </div>
+                  ) : <Button type="button" variant="ghost" size="sm" onClick={() => { setVoidingCreditId(adjustment.id); setVoidReason(""); }}>ביטול רישום (למנהל)</Button>}
+                </div>
+              )}
+            </div>
+          ))}
+        </section>
         {query.isLoading && <p className="text-sm text-slate-500">טוען חשבוניות...</p>}
         {query.isError && <p className="text-sm text-red-600">טעינת החשבוניות נכשלה. נסה לרענן את המסך.</p>}
         {(query.data ?? []).length === 0 && !query.isLoading && <p className="rounded-xl border border-dashed p-4 text-sm text-slate-500">עדיין לא נרשמו חשבוניות להזמנה זו.</p>}
