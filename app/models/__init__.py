@@ -24,6 +24,7 @@ from app.models.notification import Notification
 from app.models.google_calendar import GoogleCalendarConnection
 from app.models.inventory_movement import InventoryMovement
 from app.models.inventory_planning_period import InventoryPlanningPeriod
+from app.models.inventory_consumption_profile import InventoryConsumptionProfile
 from app.models.historical_document_import import HistoricalImportBatch, HistoricalPurchaseOrder, HistoricalDocumentRecord
 from app.models.product_code import ProductCode
 from app.models.procurement_budget import ProcurementBudget
@@ -34,5 +35,5 @@ __all__ = [
     "MasterProduct", "SupplierProduct", "PriceHistory", "PriceObservation", "RegulatedEggPrice", "RegulatoryPriceMonitorState",
     "DocumentAnalysis", "ProductClassificationFeedback", "Order", "OrderItem", "Receipt", "ReceiptItem", "SupplierInvoice", "SupplierInvoicePayment", "SupplierCreditAdjustment", "IdempotencyKey", "AuditLog",
     "Notification", "GoogleCalendarConnection", "InventoryMovement",
-    "InventoryPlanningPeriod", "SavedOrderSearch", "HistoricalImportBatch", "HistoricalPurchaseOrder", "HistoricalDocumentRecord", "ProductCode", "ProcurementBudget",
+    "InventoryPlanningPeriod", "InventoryConsumptionProfile", "SavedOrderSearch", "HistoricalImportBatch", "HistoricalPurchaseOrder", "HistoricalDocumentRecord", "ProductCode", "ProcurementBudget",
 ]
