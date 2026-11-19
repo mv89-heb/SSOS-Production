@@ -7,7 +7,7 @@ import { orderService } from "@/services/order-service";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AlertCircle, ArrowLeft, Bell, CheckCircle2, Clock3, PackageCheck, Plus, Search, Send, ShoppingCart, XCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, Bell, CheckCircle2, Clock3, Download, PackageCheck, Plus, Search, Send, ShoppingCart, XCircle } from "lucide-react";
 
 const STATUS_FILTERS = [
   { value: "all", label: "הכול" },
@@ -68,6 +68,8 @@ export default function OrdersPage() {
   const [status, setStatus] = useState<StatusFilter>("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
   const [page, setPage] = useState(0);
   const deferredSearch = useDeferredValue(search.trim());
   const pageSize = 50;
@@ -91,6 +93,30 @@ export default function OrdersPage() {
   const hasNextPage = Boolean(searchResult?.pagination.has_more);
   const changeStatus = (value: StatusFilter) => { setStatus(value); setPage(0); };
   const clearFilters = () => { setSearch(""); setStartDate(""); setEndDate(""); changeStatus("all"); };
+  const handleExport = async () => {
+    setIsExporting(true);
+    setExportError("");
+    try {
+      const blob = await orderService.exportOrders({
+        q: search.trim() || undefined,
+        status: status === "all" ? undefined : status,
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+      });
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setExportError("הייצוא נכשל. אם יש יותר מ־5,000 הזמנות, צמצם את החיפוש או את טווח התאריכים.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -120,6 +146,9 @@ export default function OrdersPage() {
               <Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} placeholder="חיפוש חופשי: הזמנה, ספק, מוצר, מק״ט, הערות, מחלקה או פרויקט..." className="h-10 pr-9" />
             </div>
+            <Button type="button" variant="secondary" onClick={handleExport} disabled={isExporting || totalResults === 0} loading={isExporting} className="shrink-0">
+              <Download size={15} /> ייצוא CSV
+            </Button>
             <div className="flex gap-1.5 overflow-x-auto pb-1">
               {STATUS_FILTERS.map((filter) => <button key={filter.value} type="button" onClick={() => changeStatus(filter.value)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition ${status === filter.value ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300"}`}>{filter.label}</button>)}
             </div>
@@ -135,6 +164,7 @@ export default function OrdersPage() {
             </label>
           </div>
           {hasFilters && <div className="mt-2 flex items-center justify-between px-1 text-xs"><span className="text-slate-400">נמצאו {totalResults.toLocaleString("he-IL")} הזמנות</span><button type="button" onClick={clearFilters} className="font-bold text-indigo-600 hover:underline">נקה סינון</button></div>}
+          {exportError && <p role="alert" className="mt-2 px-1 text-xs font-semibold text-red-600">{exportError}</p>}
         </div>
 
         {isError ? (
