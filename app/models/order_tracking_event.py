@@ -13,7 +13,7 @@ class OrderTrackingEvent(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
-    order_id = db.Column(db.Integer, db.ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False, index=True)
     event_type = db.Column(db.String(40), nullable=False)
     summary = db.Column(db.String(500), nullable=False)
     details = db.Column(db.Text, nullable=True)
