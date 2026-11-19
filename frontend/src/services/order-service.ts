@@ -204,6 +204,14 @@ export const orderService = {
     return data.order;
   },
 
+  markOrdersSent: async (orderIds: number[]) => {
+    const { data } = await apiClient.post<{ success: boolean; updated_count: number; orders: Order[] }>(
+      "/api/orders/bulk/sent",
+      { order_ids: orderIds },
+    );
+    return data;
+  },
+
   markCompleted: async (id: number) => {
     const { data } = await apiClient.post<{ success: boolean; order: Order }>(`/api/orders/${id}/complete`);
     return data.order;

@@ -427,3 +427,108 @@ def test_order_search_xlsx_export_rejects_oversized_result(
     exported = logged_in_client_a.get("/api/orders/search?format=xlsx")
     assert exported.status_code == 413
     assert exported.get_json()["error"] == "export_too_large"
+
+
+def test_bulk_mark_sent_updates_orders_atomically_and_audits_each_order(
+    logged_in_client_a, make_order, db
+):
+    from app.models.audit import AuditLog
+    from app.models.order import Order
+    from sqlalchemy import select
+
+    order_ids = []
+    for sku in ("BULK-SENT-ONE", "BULK-SENT-TWO"):
+        created, _, _ = make_order(logged_in_client_a, sku=sku)
+        assert created.status_code == 201
+        order_ids.append(created.get_json()["order"]["id"])
+
+    with logged_in_client_a.application.app_context():
+        for order_id in order_ids:
+            order = db.session.get(Order, order_id)
+            order.status = "approved"
+        db.session.commit()
+
+    response = logged_in_client_a.post(
+        "/api/orders/bulk/sent", json={"order_ids": order_ids}
+    )
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["updated_count"] == 2
+    assert {order["id"] for order in response.get_json()["orders"]} == set(order_ids)
+    assert all(order["status"] == "sent" for order in response.get_json()["orders"])
+
+    with logged_in_client_a.application.app_context():
+        assert all(db.session.get(Order, order_id).status == "sent" for order_id in order_ids)
+        tenant_id = db.session.get(Order, order_ids[0]).tenant_id
+        audit_events = db.session.scalars(
+            select(AuditLog).where(
+                AuditLog.action == "order.sent",
+                AuditLog.tenant_id == tenant_id,
+            )
+        ).all()
+        assert {event.metadata_json.get("order_id") for event in audit_events} == set(order_ids)
+
+
+def test_bulk_mark_sent_rolls_back_all_orders_when_one_is_not_approved(
+    logged_in_client_a, make_order, db
+):
+    from app.models.audit import AuditLog
+    from app.models.order import Order
+    from sqlalchemy import select
+
+    first, _, _ = make_order(logged_in_client_a, sku="BULK-ATOMIC-APPROVED")
+    second, _, _ = make_order(logged_in_client_a, sku="BULK-ATOMIC-DRAFT")
+    assert first.status_code == second.status_code == 201
+    first_id = first.get_json()["order"]["id"]
+    second_id = second.get_json()["order"]["id"]
+
+    with logged_in_client_a.application.app_context():
+        db.session.get(Order, first_id).status = "approved"
+        db.session.commit()
+
+    response = logged_in_client_a.post(
+        "/api/orders/bulk/sent", json={"order_ids": [first_id, second_id]}
+    )
+    assert response.status_code == 409
+
+    with logged_in_client_a.application.app_context():
+        assert db.session.get(Order, first_id).status == "approved"
+        assert db.session.get(Order, second_id).status == "draft"
+        tenant_id = db.session.get(Order, first_id).tenant_id
+        sent_events = db.session.scalars(
+            select(AuditLog).where(
+                AuditLog.action == "order.sent",
+                AuditLog.tenant_id == tenant_id,
+            )
+        ).all()
+        assert not any(event.metadata_json.get("order_id") == first_id for event in sent_events)
+
+
+def test_bulk_mark_sent_rejects_foreign_tenant_and_invalid_ids(
+    logged_in_client_a, logged_in_client_b, make_order, db
+):
+    from app.models.order import Order
+
+    created, _, _ = make_order(logged_in_client_a, sku="BULK-TENANT-PRIVATE")
+    assert created.status_code == 201
+    order_id = created.get_json()["order"]["id"]
+    with logged_in_client_a.application.app_context():
+        db.session.get(Order, order_id).status = "approved"
+        db.session.commit()
+
+    foreign = logged_in_client_b.post(
+        "/api/orders/bulk/sent", json={"order_ids": [order_id]}
+    )
+    assert foreign.status_code == 404
+
+    for payload in (
+        {"order_ids": []},
+        {"order_ids": [order_id, order_id]},
+        {"order_ids": [True]},
+        {"order_ids": [0]},
+        {"order_ids": list(range(1, 52))},
+    ):
+        invalid = logged_in_client_a.post("/api/orders/bulk/sent", json=payload)
+        assert invalid.status_code == 400
+
+    with logged_in_client_a.application.app_context():
+        assert db.session.get(Order, order_id).status == "approved"

@@ -274,6 +274,42 @@ def reject_order(order_id):
     db.session.commit()
     return jsonify({"success": True, "order": order.to_dict()})
 
+@orders_bp.route("/bulk/sent", methods=["POST"])
+@login_required
+def bulk_mark_orders_sent():
+    try:
+        PermissionService.require_permission("orders.mark_sent")
+    except HTTPException as exc:
+        return _handle(exc)
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return _handle(BadRequest("A JSON object is required"))
+    order_ids = payload.get("order_ids")
+    if not isinstance(order_ids, list) or not order_ids or len(order_ids) > 50:
+        return _handle(BadRequest("order_ids must contain between 1 and 50 order IDs"))
+    if any(type(order_id) is not int or order_id < 1 for order_id in order_ids):
+        return _handle(BadRequest("Every order ID must be a positive integer"))
+    if len(set(order_ids)) != len(order_ids):
+        return _handle(BadRequest("Duplicate order IDs are not allowed"))
+
+    service = OrderService(tenant_id=current_user.tenant_id)
+    try:
+        updated_orders = [
+            service.mark_sent(current_user, order_id) for order_id in order_ids
+        ]
+        db.session.commit()
+    except HTTPException as exc:
+        db.session.rollback()
+        return _handle(exc)
+
+    return jsonify({
+        "success": True,
+        "updated_count": len(updated_orders),
+        "orders": [order.to_dict() for order in updated_orders],
+    })
+
+
 @orders_bp.route("/<int:order_id>/sent", methods=["POST"])
 @login_required
 def mark_order_sent(order_id):

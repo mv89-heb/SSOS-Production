@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useDeferredValue, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+import type { Order } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { orderService } from "@/services/order-service";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AlertCircle, ArrowLeft, Bell, BookmarkPlus, CheckCircle2, Clock3, Download, FileSpreadsheet, PackageCheck, Plus, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, Bell, BookmarkPlus, CheckCircle2, Clock3, Download, FileSpreadsheet, Columns3, PackageCheck, Plus, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
 
 const STATUS_FILTERS = [
   { value: "all", label: "הכול" },
@@ -52,6 +53,47 @@ function formatReminder(value: string | null) {
   return new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
+
+type OrderColumnKey = "order_number" | "supplier" | "status" | "department" | "project" | "planned_order_date" | "reminder" | "total" | "created_at";
+const ORDER_COLUMNS: { id: OrderColumnKey; label: string }[] = [
+  { id: "order_number", label: "מספר הזמנה" },
+  { id: "supplier", label: "ספק" },
+  { id: "status", label: "סטטוס" },
+  { id: "department", label: "מחלקה" },
+  { id: "project", label: "פרויקט" },
+  { id: "planned_order_date", label: "תאריך מתוכנן" },
+  { id: "reminder", label: "תזכורת" },
+  { id: "total", label: "סה״כ" },
+  { id: "created_at", label: "נוצר בתאריך" },
+];
+const DEFAULT_ORDER_COLUMNS: OrderColumnKey[] = [
+  "order_number", "supplier", "status", "reminder", "total", "created_at",
+];
+
+type SearchableOrder = Order & { search_provenance?: { matched_fields: string[]; missing_fields: string[] } };
+
+function renderOrderColumn(order: SearchableOrder, column: OrderColumnKey, reminderAt: string | null, reminderDue: boolean): ReactNode {
+  switch (column) {
+    case "order_number":
+      return <>
+        <Link href={`/dashboard/orders/${order.id}`} className="font-extrabold text-indigo-600 hover:text-indigo-700 hover:underline dark:text-indigo-400">{order.order_number}</Link>
+        {!!order.search_provenance?.matched_fields.length && <p className="mt-1 max-w-56 text-[11px] text-indigo-600 dark:text-indigo-300">התאמה: {order.search_provenance.matched_fields.join(" · ")}</p>}
+        {!!order.search_provenance?.missing_fields.length && <p className="mt-1 max-w-56 text-[11px] font-semibold text-amber-700 dark:text-amber-300">חסר: {order.search_provenance.missing_fields.join(" · ")}</p>}
+      </>;
+    case "supplier": return <span className="font-medium text-slate-700 dark:text-slate-200">{order.supplier_name}</span>;
+    case "status": return <OrderStatusBadge status={order.status} />;
+    case "department": return <span>{order.department || "—"}</span>;
+    case "project": return <span>{order.project || "—"}</span>;
+    case "planned_order_date": return <span>{order.planned_order_date ? formatDate(order.planned_order_date) : "—"}</span>;
+    case "reminder":
+      return order.reminder_state !== "complete" && reminderAt
+        ? <Link href={`/dashboard/orders/${order.id}`} className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold ${reminderDue ? "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300" : "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"}`}><Bell size={13} /> {reminderDue ? "דורשת טיפול" : reminderAt}</Link>
+        : <span className="text-xs text-slate-400">אין תזכורת</span>;
+    case "total": return <span className="font-bold text-slate-800 dark:text-slate-100">{order.currency} {order.final_total.toLocaleString("he-IL")}</span>;
+    case "created_at": return <span className="text-sm text-slate-500">{formatDate(order.created_at)}</span>;
+  }
+}
+
 function StatusSummary({ label, value, icon: Icon, tone, active, onClick }: StatusSummaryProps) {
   return (
     <button type="button" onClick={onClick} className={`text-right rounded-2xl border p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${active ? "border-indigo-300 ring-2 ring-indigo-100 dark:border-indigo-700 dark:ring-indigo-950" : "border-slate-200/80 dark:border-slate-800"} bg-white dark:bg-slate-900`}>
@@ -82,7 +124,47 @@ export default function OrdersPage() {
   const [saveSearchName, setSaveSearchName] = useState("");
   const [savedSearchMessage, setSavedSearchMessage] = useState("");
   const [page, setPage] = useState(0);
+  const [visibleColumns, setVisibleColumns] = useState<OrderColumnKey[]>(DEFAULT_ORDER_COLUMNS);
+  const [columnsLoaded, setColumnsLoaded] = useState(false);
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<number[]>([]);
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+  const [bulkActionMessage, setBulkActionMessage] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("ssos.orders.visible-columns.v1");
+      if (stored) {
+        const parsed: unknown = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter((value): value is OrderColumnKey =>
+            ORDER_COLUMNS.some((column) => column.id === value)
+          );
+          if (valid.length > 0) setVisibleColumns(valid);
+        }
+      }
+    } catch {
+      // Invalid or unavailable local preferences fall back to the full default set.
+    } finally {
+      setColumnsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (columnsLoaded) {
+      try {
+        window.localStorage.setItem("ssos.orders.visible-columns.v1", JSON.stringify(visibleColumns));
+      } catch {
+        // The table remains usable when browser storage is unavailable.
+      }
+    }
+  }, [columnsLoaded, visibleColumns]);
+
+  useEffect(() => {
+    setSelectedOrderIds([]);
+    setShowBulkConfirm(false);
+  }, [deferredSearch, status, startDate, endDate, page]);
   const pageSize = 50;
   const { data: searchResult, isLoading, isError, refetch } = useQuery({
     queryKey: ["orders", "search", deferredSearch, status, startDate, endDate, page],
@@ -108,6 +190,19 @@ export default function OrdersPage() {
     },
     onError: () => setSavedSearchMessage("לא ניתן לשמור את החיפוש. בדוק שהשם אינו קיים ושלא נשמרו כבר 20 חיפושים."),
   });
+  const bulkMarkSentMutation = useMutation({
+    mutationFn: (ids: number[]) => orderService.markOrdersSent(ids),
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ["orders"] });
+      setSelectedOrderIds([]);
+      setShowBulkConfirm(false);
+      setBulkActionMessage(`עודכנו ${result.updated_count} הזמנות לסטטוס "נשלחה לספק". הפעולה נרשמה ביומן הביקורת.`);
+    },
+    onError: () => {
+      setShowBulkConfirm(false);
+      setBulkActionMessage("הפעולה לא בוצעה. ייתכן שאחת ההזמנות כבר אינה מאושרת; לא בוצע עדכון חלקי.");
+    },
+  });
   const deleteSavedSearchMutation = useMutation({
     mutationFn: (id: number) => orderService.deleteSavedSearch(id),
     onSuccess: async () => {
@@ -118,6 +213,28 @@ export default function OrdersPage() {
     onError: () => setSavedSearchMessage("מחיקת החיפוש נכשלה."),
   });
   const filteredOrders = useMemo(() => searchResult?.orders ?? [], [searchResult]);
+  const selectedOrders = filteredOrders.filter((order) => selectedOrderIds.includes(order.id));
+  const allPageOrdersSelected = filteredOrders.length > 0 && filteredOrders.every((order) => selectedOrderIds.includes(order.id));
+  const canBulkMarkSent = selectedOrderIds.length > 0
+    && selectedOrders.length === selectedOrderIds.length
+    && selectedOrders.every((order) => order.status === "approved");
+  const toggleOrderSelection = (orderId: number, checked: boolean) => {
+    setSelectedOrderIds((current) => checked
+      ? (current.includes(orderId) ? current : [...current, orderId])
+      : current.filter((id) => id !== orderId));
+    setBulkActionMessage("");
+  };
+  const togglePageSelection = (checked: boolean) => {
+    setSelectedOrderIds(checked ? filteredOrders.map((order) => order.id) : []);
+    setBulkActionMessage("");
+  };
+  const toggleColumn = (columnId: OrderColumnKey, checked: boolean) => {
+    setVisibleColumns((current) => {
+      if (checked) return current.includes(columnId) ? current : [...current, columnId];
+      if (current.length <= 1) return current;
+      return current.filter((column) => column !== columnId);
+    });
+  };
   const count = (value: string) => (orders ?? []).filter((order) => order.status === value).length;
   const hasFilters = Boolean(search.trim()) || status !== "all" || Boolean(startDate) || Boolean(endDate);
   const totalResults = searchResult?.pagination.total ?? 0;
@@ -211,10 +328,30 @@ export default function OrdersPage() {
                 <FileSpreadsheet size={15} /> {isExportingExcel ? "מייצא..." : "Excel"}
               </Button>
             </div>
+            <Button type="button" variant="secondary" onClick={() => setShowColumnSettings((value) => !value)} className="shrink-0">
+              <Columns3 size={15} /> עמודות
+            </Button>
             <div className="flex gap-1.5 overflow-x-auto pb-1">
               {STATUS_FILTERS.map((filter) => <button key={filter.value} type="button" onClick={() => changeStatus(filter.value)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition ${status === filter.value ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300"}`}>{filter.label}</button>)}
             </div>
           </div>
+          {showColumnSettings && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/60">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs font-extrabold text-slate-600 dark:text-slate-200">עמודות בטבלת ההזמנות</p>
+                <button type="button" onClick={() => setVisibleColumns(DEFAULT_ORDER_COLUMNS)} className="text-xs font-bold text-indigo-600 hover:underline dark:text-indigo-300">איפוס לברירת מחדל</button>
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {ORDER_COLUMNS.map((column) => (
+                  <label key={column.id} className="inline-flex min-h-8 items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    <input type="checkbox" checked={visibleColumns.includes(column.id)} onChange={(event) => toggleColumn(column.id, event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    {column.label}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-slate-400">הבחירה נשמרת בדפדפן הזה. לפחות עמודה אחת חייבת להישאר מוצגת.</p>
+            </div>
+          )}
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-md">
             <label className="flex flex-col gap-1 text-xs font-bold text-slate-500">
               מתאריך
@@ -225,6 +362,13 @@ export default function OrdersPage() {
               <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => { setEndDate(event.target.value); setSelectedSavedSearchId(""); setPage(0); }} className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-indigo-950" />
             </label>
           </div>
+          {filteredOrders.length > 0 && (
+            <div className="mt-2 flex justify-end">
+              <button type="button" onClick={() => togglePageSelection(!allPageOrdersSelected)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-indigo-600 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40">
+                {allPageOrdersSelected ? "בטל בחירת העמוד" : "בחר את כל ההזמנות בעמוד"}
+              </button>
+            </div>
+          )}
           <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 dark:border-slate-800 sm:flex-row sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-bold text-slate-500">
               חיפושים שמורים ({savedSearches.length}/20)
@@ -255,6 +399,21 @@ export default function OrdersPage() {
             </form>
           )}
           {savedSearchMessage && <p role="status" className="mt-2 px-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{savedSearchMessage}</p>}
+          {selectedOrderIds.length > 0 && (
+            <div className="mt-3 flex flex-col gap-2 rounded-xl border border-indigo-200 bg-indigo-50/70 p-3 dark:border-indigo-900 dark:bg-indigo-950/30 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
+                נבחרו {selectedOrderIds.length} הזמנות בעמוד הנוכחי
+                {!canBulkMarkSent && <p className="mt-1 font-medium text-amber-700 dark:text-amber-300">כדי לסמן כנשלח, כל ההזמנות שנבחרו חייבות להיות במצב "אושרה".</p>}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={() => setShowBulkConfirm(true)} disabled={!canBulkMarkSent || bulkMarkSentMutation.isPending}>
+                  <Send size={15} /> סמן כנשלח לספק
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setSelectedOrderIds([])}>נקה בחירה</Button>
+              </div>
+            </div>
+          )}
+          {bulkActionMessage && <p role="status" className="mt-2 px-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{bulkActionMessage}</p>}
           {searchResult?.search_context && (
             <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-xs dark:border-slate-800 dark:bg-slate-900/50">
               <p className="font-bold text-slate-600 dark:text-slate-300">שדות שנבדקים בחיפוש: <span className="font-medium">{searchResult.search_context.searched_fields.join(" · ")}</span></p>
@@ -291,11 +450,14 @@ export default function OrdersPage() {
                 return (
                   <article key={order.id} className="min-w-0 rounded-xl border border-slate-200 p-4 shadow-sm dark:border-slate-800">
                     <div className="flex min-w-0 items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <Link href={`/dashboard/orders/${order.id}`} className="break-words font-extrabold text-indigo-600 hover:underline dark:text-indigo-400">{order.order_number}</Link>
+                      <div className="flex min-w-0 items-start gap-2">
+                        <input type="checkbox" aria-label={`בחירת הזמנה ${order.order_number}`} checked={selectedOrderIds.includes(order.id)} onChange={(event) => toggleOrderSelection(order.id, event.target.checked)} className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                        <div className="min-w-0">
+                          <Link href={`/dashboard/orders/${order.id}`} className="break-words font-extrabold text-indigo-600 hover:underline dark:text-indigo-400">{order.order_number}</Link>
                         <p className="mt-1 break-words text-sm font-semibold text-slate-700 dark:text-slate-200">{order.supplier_name}</p>
                         {!!order.search_provenance?.matched_fields.length && <p className="mt-1 break-words text-[11px] text-indigo-600 dark:text-indigo-300">התאמה לפי: {order.search_provenance.matched_fields.join(" · ")}</p>}
-                        {!!order.search_provenance?.missing_fields.length && <p className="mt-1 flex items-start gap-1 break-words text-[11px] font-semibold text-amber-700 dark:text-amber-300"><AlertCircle size={12} className="mt-0.5 shrink-0" /> מידע חסר: {order.search_provenance.missing_fields.join(" · ")}</p>}
+                          {!!order.search_provenance?.missing_fields.length && <p className="mt-1 flex items-start gap-1 break-words text-[11px] font-semibold text-amber-700 dark:text-amber-300"><AlertCircle size={12} className="mt-0.5 shrink-0" /> מידע חסר: {order.search_provenance.missing_fields.join(" · ")}</p>}
+                        </div>
                       </div>
                       <div className="shrink-0"><OrderStatusBadge status={order.status} /></div>
                     </div>
@@ -311,34 +473,36 @@ export default function OrdersPage() {
             </div>
             <div dir="rtl" className="hidden w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain md:block">
               <table dir="rtl" className="w-max min-w-[950px] text-right text-sm">
-              <thead className="border-b border-slate-100 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/40"><tr>{["מס' הזמנה", "ספק", "סטטוס", "תזכורת", "סה\"כ", "נוצר בתאריך", ""].map((heading, index) => <th key={heading || index} className="px-5 py-3 text-xs font-extrabold text-slate-500">{heading}</th>)}</tr></thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredOrders.map((order) => {
-                  const reminderAt = formatReminder(order.next_reminder_at);
-                  const reminderDue = !!order.next_reminder_at && new Date(order.next_reminder_at).getTime() <= Date.now() && order.reminder_state !== "complete";
-                  return (
-                    <tr key={order.id} className="group transition-colors hover:bg-indigo-50/40 dark:hover:bg-slate-800/60">
-                      <td className="px-5 py-4">
-                        <Link href={`/dashboard/orders/${order.id}`} className="font-extrabold text-indigo-600 hover:text-indigo-700 hover:underline dark:text-indigo-400">{order.order_number}</Link>
-                        {!!order.search_provenance?.matched_fields.length && <p className="mt-1 max-w-56 text-[11px] text-indigo-600 dark:text-indigo-300">התאמה: {order.search_provenance.matched_fields.join(" · ")}</p>}
-                        {!!order.search_provenance?.missing_fields.length && <p className="mt-1 max-w-56 text-[11px] font-semibold text-amber-700 dark:text-amber-300">חסר: {order.search_provenance.missing_fields.join(" · ")}</p>}
-                      </td>
-                      <td className="px-5 py-4 font-medium text-slate-700 dark:text-slate-200">{order.supplier_name}</td>
-                      <td className="px-5 py-4"><OrderStatusBadge status={order.status} /></td>
-                      <td className="px-5 py-4">
-                        {order.reminder_state !== "complete" && reminderAt ? (
-                          <Link href={`/dashboard/orders/${order.id}`} className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold ${reminderDue ? "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300" : "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"}`}>
-                            <Bell size={13} /> {reminderDue ? "דורשת טיפול" : reminderAt}
-                          </Link>
-                        ) : <span className="text-xs text-slate-400">אין תזכורת</span>}
-                      </td>
-                      <td className="px-5 py-4 font-bold text-slate-800 dark:text-slate-100">{order.currency} {order.final_total.toLocaleString("he-IL")}</td>
-                      <td className="px-5 py-4 text-sm text-slate-500">{formatDate(order.created_at)}</td>
-                      <td className="px-5 py-4"><Link href={`/dashboard/orders/${order.id}`} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-500 opacity-70 transition hover:bg-white hover:text-indigo-600 hover:opacity-100 dark:hover:bg-slate-900">פרטים <ArrowLeft size={13} /></Link></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+                <thead className="border-b border-slate-100 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/40">
+                  <tr>
+                    <th className="px-4 py-3">
+                      <input type="checkbox" aria-label="בחירת כל ההזמנות בעמוד" checked={allPageOrdersSelected} onChange={(event) => togglePageSelection(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    </th>
+                    {visibleColumns.map((column) => <th key={column} className="whitespace-nowrap px-5 py-3 text-xs font-extrabold text-slate-500">{ORDER_COLUMNS.find((item) => item.id === column)?.label}</th>)}
+                    <th className="px-5 py-3 text-xs font-extrabold text-slate-500">פעולות</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredOrders.map((order) => {
+                    const reminderAt = formatReminder(order.next_reminder_at);
+                    const reminderDue = !!order.next_reminder_at && new Date(order.next_reminder_at).getTime() <= Date.now() && order.reminder_state !== "complete";
+                    return (
+                      <tr key={order.id} className="group transition-colors hover:bg-indigo-50/40 dark:hover:bg-slate-800/60">
+                        <td className="px-4 py-4">
+                          <input type="checkbox" aria-label={`בחירת הזמנה ${order.order_number}`} checked={selectedOrderIds.includes(order.id)} onChange={(event) => toggleOrderSelection(order.id, event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                        </td>
+                        {visibleColumns.map((column) => (
+                          <td key={column} className="max-w-64 px-5 py-4 align-top">
+                            {renderOrderColumn(order, column, reminderAt, reminderDue)}
+                          </td>
+                        ))}
+                        <td className="px-5 py-4">
+                          <Link href={`/dashboard/orders/${order.id}`} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-500 opacity-70 transition hover:bg-white hover:text-indigo-600 hover:opacity-100 dark:hover:bg-slate-900">פרטים <ArrowLeft size={13} /></Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
               </table>
             </div>
             {searchResult && (
@@ -356,6 +520,24 @@ export default function OrdersPage() {
           </>
         )}
       </section>
+      {showBulkConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onClick={(event) => { if (event.target === event.currentTarget) setShowBulkConfirm(false); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="bulk-send-title" className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <h2 id="bulk-send-title" className="text-lg font-extrabold text-slate-900 dark:text-white">אישור סימון הזמנות כנשלחו</h2>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">הפעולה תעביר את {selectedOrders.length} ההזמנות הבאות ממצב "אושרה" למצב "נשלחה לספק". כל ההזמנות יעודכנו יחד או שאף אחת לא תעודכן.</p>
+            <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800/70">
+              {selectedOrders.map((order) => <li key={order.id} className="flex justify-between gap-3"><span className="font-bold">{order.order_number}</span><span className="truncate text-slate-500">{order.supplier_name}</span></li>)}
+            </ul>
+            <p className="mt-3 text-xs text-slate-500">לכל הזמנה יירשם אירוע נפרד ביומן הביקורת. לא נשלחת הודעה לספק מתוך פעולה זו.</p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setShowBulkConfirm(false)} disabled={bulkMarkSentMutation.isPending}>ביטול</Button>
+              <Button type="button" onClick={() => bulkMarkSentMutation.mutate(selectedOrderIds)} disabled={bulkMarkSentMutation.isPending || !canBulkMarkSent}>
+                {bulkMarkSentMutation.isPending ? "מעדכן..." : "אשר וסמן כנשלח"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
