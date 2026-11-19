@@ -162,6 +162,7 @@ export default function NewOrderPage() {
     }
     createMutation.mutate({
       supplier_id: supplierId,
+      currency: selectedCurrencies[0] ?? "ILS",
       notes: notes || undefined,
       planned_order_date: plannedOrderDate || undefined,
       department: department.trim() || undefined,
