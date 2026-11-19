@@ -636,3 +636,41 @@ def test_delete_product_with_supplier_offer_is_blocked(logged_in_client_a):
     assert response.status_code == 409
     assert "Deactivate the product instead" in response.get_json()["message"]
     assert logged_in_client_a.get(f"/api/catalog/products/{product_id}").status_code == 200
+
+
+
+def test_delete_product_with_price_history_and_observations_is_blocked(
+    logged_in_client_a, db
+):
+    from app.models.price_history import PriceHistory
+    from app.models.price_observation import PriceObservation
+
+    supplier_id, product_id = _make_product(logged_in_client_a)
+    from app.models.product import Product
+
+    tenant_id = db.session.get(Product, product_id).tenant_id
+    history = PriceHistory(
+        tenant_id=tenant_id,
+        product_id=product_id,
+        supplier_id=supplier_id,
+        new_price=12.5,
+        currency="ILS",
+    )
+    observation = PriceObservation(
+        tenant_id=tenant_id,
+        product_id=product_id,
+        supplier_id=supplier_id,
+        observed_price=11.75,
+        currency="ILS",
+        source_type="INVOICE",
+    )
+    db.session.add_all([history, observation])
+    db.session.commit()
+
+    response = logged_in_client_a.delete(f"/api/catalog/products/{product_id}")
+
+    assert response.status_code == 409
+    assert "price history record(s)" in response.get_json()["message"]
+    assert logged_in_client_a.get(f"/api/catalog/products/{product_id}").status_code == 200
+    assert db.session.get(PriceHistory, history.id) is not None
+    assert db.session.get(PriceObservation, observation.id) is not None
