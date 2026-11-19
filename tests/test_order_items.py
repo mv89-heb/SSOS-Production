@@ -78,3 +78,39 @@ def test_create_order_rejects_invalid_planned_order_date(logged_in_client_a, mak
 def test_create_order_rejects_noncanonical_planned_order_date(logged_in_client_a, make_order):
     response, _, _ = make_order(logged_in_client_a, planned_order_date="20261105")
     assert response.status_code == 400, response.get_json()
+
+
+def test_update_draft_order_lines_is_blocked_when_invoice_is_linked(
+    logged_in_client_a, make_order, db
+):
+    from app.models.order import Order
+    from app.models.supplier_invoice import SupplierInvoice
+
+    response, supplier_id, product_id = make_order(
+        logged_in_client_a, quantity=2, price=10.0
+    )
+    order_id = response.get_json()["order"]["id"]
+    tenant_id = response.get_json()["order"]["tenant_id"]
+    invoice = SupplierInvoice(
+        tenant_id=tenant_id,
+        order_id=order_id,
+        supplier_id=supplier_id,
+        invoice_number="INV-LINKED-DRAFT-001",
+        amount=20,
+        currency="ILS",
+    )
+    db.session.add(invoice)
+    db.session.commit()
+
+    updated = logged_in_client_a.put(
+        f"/api/orders/{order_id}",
+        json={"items": [{"product_id": product_id, "quantity": 7}]},
+    )
+
+    assert updated.status_code == 409
+    assert "Order lines cannot be changed" in updated.get_json()["message"]
+    order = db.session.get(Order, order_id)
+    assert order is not None
+    assert len(order.order_items) == 1
+    assert float(order.order_items[0].quantity) == 2.0
+    assert db.session.get(SupplierInvoice, invoice.id) is not None

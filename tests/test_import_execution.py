@@ -256,3 +256,60 @@ def test_commit_normalizes_vat_inclusive_import_to_net_price(logged_in_client_a)
     assert response.status_code == 201, response.get_json()
     product = logged_in_client_a.get("/api/catalog/products").get_json()["products"][0]
     assert product["current_price"] == 100.0
+
+
+def test_rollback_preserves_supplier_when_historical_prices_reference_it(
+    logged_in_client_a, db
+):
+    from app.models.price_history import PriceHistory
+    from app.models.price_observation import PriceObservation
+    from app.models.import_execution import ImportExecution
+    from app.models.product import Product
+
+    existing_supplier_id = logged_in_client_a.post(
+        "/api/catalog/suppliers", json={"name": "Existing supplier"}
+    ).get_json()["supplier"]["id"]
+    existing_product_id = logged_in_client_a.post(
+        "/api/catalog/products",
+        json={"supplier_id": existing_supplier_id, "name": "Existing product", "current_price": 5},
+    ).get_json()["product"]["id"]
+
+    session_id = _ready_to_commit(
+        logged_in_client_a,
+        _xlsx_bytes([[None, "Imported supplier"], ["מוצר", 'לפני מע"מ'], ["Imported product", "10"]], merges=["A1:A1"]),
+    )
+    commit_response = logged_in_client_a.post(f"/api/imports/{session_id}/commit")
+    assert commit_response.status_code == 201, commit_response.get_json()
+    execution_id = commit_response.get_json()["execution"]["id"]
+    execution = db.session.get(ImportExecution, execution_id)
+    created_supplier_id = execution.created_supplier_ids[0]
+    created_product_id = execution.created_product_ids[0]
+    tenant_id = db.session.get(Product, existing_product_id).tenant_id
+
+    history = PriceHistory(
+        tenant_id=tenant_id,
+        product_id=existing_product_id,
+        supplier_id=created_supplier_id,
+        new_price=8.5,
+        currency="ILS",
+    )
+    observation = PriceObservation(
+        tenant_id=tenant_id,
+        product_id=existing_product_id,
+        supplier_id=created_supplier_id,
+        observed_price=8.25,
+        currency="ILS",
+    )
+    db.session.add_all([history, observation])
+    db.session.commit()
+
+    rollback = logged_in_client_a.post(
+        f"/api/imports/executions/{execution_id}/rollback"
+    )
+
+    assert rollback.status_code == 422
+    assert "historical price records exist" in rollback.get_json()["message"]
+    assert db.session.get(ImportExecution, execution_id).status == "COMMITTED"
+    assert db.session.get(Product, created_product_id) is not None
+    assert db.session.get(PriceHistory, history.id) is not None
+    assert db.session.get(PriceObservation, observation.id) is not None

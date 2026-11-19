@@ -20,7 +20,7 @@ class OrderItem(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
-    order_id = db.Column(db.Integer, db.ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False, index=True)
     product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False, index=True)
     supplier_offer_id = db.Column(db.Integer, db.ForeignKey("supplier_product_offers.id"), nullable=True, index=True)
     quantity = db.Column(db.Numeric(12, 3), nullable=False)

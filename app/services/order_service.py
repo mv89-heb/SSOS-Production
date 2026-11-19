@@ -1,7 +1,7 @@
 from datetime import date
 
 from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 
 from app.extensions import db
 from app.models.user import ROLE_ADMIN, ROLE_MANAGER
@@ -17,6 +17,10 @@ from app.models.order import (
     REMINDER_COMPLETE,
 )
 from app.models.order_item import OrderItem
+from app.models.receipt import Receipt
+from app.models.supplier_invoice import SupplierInvoice
+from app.models.supplier_credit_adjustment import SupplierCreditAdjustment
+from app.models.order_tracking_event import OrderTrackingEvent
 from app.models.supplier_offer import SupplierProductOffer
 from app.repositories.order_repository import OrderRepository
 from app.repositories.product_repository import ProductRepository
@@ -125,6 +129,27 @@ class OrderService:
         if "project" in payload:
             order.project = self._normalize_order_scope(payload.get("project"), "project")
         if "items" in payload:
+            linked_records = (
+                ("receipt", db.session.scalar(select(Receipt.id).where(
+                    Receipt.tenant_id == self.tenant_id, Receipt.order_id == order.id
+                ).limit(1))),
+                ("supplier invoice", db.session.scalar(select(SupplierInvoice.id).where(
+                    SupplierInvoice.tenant_id == self.tenant_id, SupplierInvoice.order_id == order.id
+                ).limit(1))),
+                ("supplier credit adjustment", db.session.scalar(select(SupplierCreditAdjustment.id).where(
+                    SupplierCreditAdjustment.tenant_id == self.tenant_id, SupplierCreditAdjustment.order_id == order.id
+                ).limit(1))),
+                ("order tracking event", db.session.scalar(select(OrderTrackingEvent.id).where(
+                    OrderTrackingEvent.tenant_id == self.tenant_id, OrderTrackingEvent.order_id == order.id
+                ).limit(1))),
+            )
+            linked_labels = [label for label, record_id in linked_records if record_id is not None]
+            if linked_labels:
+                raise Conflict(
+                    "Order lines cannot be changed while linked operational records exist: "
+                    + ", ".join(linked_labels)
+                    + ". Preserve the original order history."
+                )
             input_items = payload.get("items")
             if not isinstance(input_items, list) or not input_items:
                 raise BadRequest("Order must have items")
@@ -153,10 +178,43 @@ class OrderService:
         order = self.repo.get_by_id_for_update(order_id)
         if order is None:
             raise NotFound("Order not found")
-        if order.status != STATUS_DRAFT and user.role not in (ROLE_MANAGER, ROLE_ADMIN):
-            raise Forbidden("Only a manager or administrator can delete an order after submission")
-        if order.status == STATUS_DRAFT and user.role not in (ROLE_MANAGER, ROLE_ADMIN) and order.user_id != user.id:
+        if order.status != STATUS_DRAFT:
+            raise Conflict(
+                "Only draft orders can be permanently deleted. Submitted, approved, sent, "
+                "completed, or cancelled orders must remain in procurement history."
+            )
+        if user.role not in (ROLE_MANAGER, ROLE_ADMIN) and order.user_id != user.id:
             raise Forbidden("Only the order creator or a manager can delete this draft")
+
+        linked_records = (
+            ("receipt", db.session.scalar(select(Receipt.id).where(
+                Receipt.tenant_id == self.tenant_id, Receipt.order_id == order.id
+            ).limit(1))),
+            ("supplier invoice", db.session.scalar(select(SupplierInvoice.id).where(
+                SupplierInvoice.tenant_id == self.tenant_id, SupplierInvoice.order_id == order.id
+            ).limit(1))),
+            ("supplier credit adjustment", db.session.scalar(select(SupplierCreditAdjustment.id).where(
+                SupplierCreditAdjustment.tenant_id == self.tenant_id, SupplierCreditAdjustment.order_id == order.id
+            ).limit(1))),
+            ("order tracking event", db.session.scalar(select(OrderTrackingEvent.id).where(
+                OrderTrackingEvent.tenant_id == self.tenant_id, OrderTrackingEvent.order_id == order.id
+            ).limit(1))),
+        )
+        linked_labels = [label for label, record_id in linked_records if record_id is not None]
+        if linked_labels:
+            raise Conflict(
+                "This draft has linked operational records ("
+                + ", ".join(linked_labels)
+                + "). It cannot be permanently deleted; preserve the linked history."
+            )
+
+        # Draft lines are the only order children that may be removed. Delete
+        # them explicitly before deleting the parent; the FK is RESTRICT so
+        # accidental direct parent deletion cannot erase submitted order lines.
+        for order_item in list(order.order_items):
+            db.session.delete(order_item)
+        db.session.flush()
+        db.session.expire(order, ["order_items"])
 
         status = order.status
         number = order.order_number
@@ -171,7 +229,7 @@ class OrderService:
                 "order_number": number,
                 "previous_status": status,
                 "google_calendar_event_id": calendar_event_id,
-                "administrative_delete": status != STATUS_DRAFT or user.role == ROLE_ADMIN,
+                "administrative_delete": user.role == ROLE_ADMIN,
             },
         )
         self.repo.delete(order)
@@ -179,7 +237,7 @@ class OrderService:
 
     def delete_order_as_admin(self, user, order_id: int) -> None:
         if user.role != ROLE_ADMIN:
-            raise Forbidden("Only a system administrator can permanently delete an existing order")
+            raise Forbidden("Only a system administrator can permanently delete a draft order")
         self.delete_order(user, order_id)
 
     def submit_order(self, user, order_id: int, budget_override_reason: str | None = None) -> Order:
@@ -395,7 +453,13 @@ class OrderService:
         return enriched_items
 
     def _replace_order_items(self, order: Order, enriched_items: list) -> None:
-        order.order_items.clear()
+        for existing_item in list(order.order_items):
+            db.session.delete(existing_item)
+        db.session.flush()
+        # New orders are transient until the repository adds them. Their
+        # collection is already empty, so only expire it for persisted drafts.
+        if inspect(order).persistent:
+            db.session.expire(order, ["order_items"])
         for item in enriched_items:
             order.order_items.append(
                 OrderItem(

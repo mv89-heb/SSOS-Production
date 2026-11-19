@@ -88,7 +88,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const isMutating = updateDraft.isPending || deleteOrder.isPending || submit.isPending || approve.isPending || reject.isPending || markSent.isPending || complete.isPending || duplicateOrder.isPending || activateReminder.isPending || createManualReminder.isPending || completeReminder.isPending || snoozeReminder.isPending;
   const canCreateOrEdit = permissions.canCreateOrders(user);
   const isManagerOrAdmin = permissions.canApproveOrders(user);
-  const canDelete = Boolean(user) && (isManagerOrAdmin || (canCreateOrEdit && order?.status === "draft"));
+  const canDelete = Boolean(user) && order?.status === "draft" && (isManagerOrAdmin || canCreateOrEdit);
   const reminderActive = order?.reminder_state && order.reminder_state !== "complete";
 
   if (isLoading) return <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="animate-spin" size={16} /> טוען הזמנה...</div>;

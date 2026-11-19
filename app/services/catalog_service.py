@@ -5,6 +5,10 @@ from app.extensions import db
 from app.models.inventory_movement import InventoryMovement
 from app.models.order_item import OrderItem
 from app.models.supplier_offer import SupplierProductOffer
+from app.models.price_history import PriceHistory
+from app.models.price_observation import PriceObservation
+from app.models.product_code import ProductCode
+from app.models.product_classification_feedback import ProductClassificationFeedback
 
 from werkzeug.exceptions import Conflict, BadRequest, NotFound
 
@@ -236,11 +240,41 @@ class CatalogService:
                 SupplierProductOffer.supplier_id != product.supplier_id,
             )
         ) or 0)
-        if order_item_count or movement_count or alternate_offer_count:
+        price_history_count = int(db.session.scalar(
+            select(func.count(PriceHistory.id)).where(
+                PriceHistory.tenant_id == self.tenant_id,
+                PriceHistory.product_id == product.id,
+            )
+        ) or 0)
+        price_observation_count = int(db.session.scalar(
+            select(func.count(PriceObservation.id)).where(
+                PriceObservation.tenant_id == self.tenant_id,
+                PriceObservation.product_id == product.id,
+            )
+        ) or 0)
+        product_code_count = int(db.session.scalar(
+            select(func.count(ProductCode.id)).where(
+                ProductCode.tenant_id == self.tenant_id,
+                ProductCode.product_id == product.id,
+            )
+        ) or 0)
+        classification_feedback_count = int(db.session.scalar(
+            select(func.count(ProductClassificationFeedback.id)).where(
+                ProductClassificationFeedback.tenant_id == self.tenant_id,
+                ProductClassificationFeedback.product_id == product.id,
+            )
+        ) or 0)
+        if (
+            order_item_count or movement_count or alternate_offer_count
+            or price_history_count or price_observation_count
+            or product_code_count or classification_feedback_count
+        ):
             raise Conflict(
                 f"Product is referenced by {order_item_count} order line(s), "
-                f"{movement_count} inventory movement(s), and {alternate_offer_count} alternate supplier offer(s). "
-                "Deactivate the product instead to preserve procurement, inventory, and price-comparison history."
+                f"{movement_count} inventory movement(s), {alternate_offer_count} alternate supplier offer(s), "
+                f"{price_history_count} price history record(s), {price_observation_count} price observation(s), "
+                f"{product_code_count} product code(s), and {classification_feedback_count} classification feedback record(s). "
+                "Deactivate the product instead to preserve procurement, inventory, price, and catalog history."
             )
         AuditService.log_event(
             self.tenant_id,
