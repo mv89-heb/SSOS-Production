@@ -25,6 +25,8 @@ def test_order_search_filters_supplier_scope_and_returns_pagination(
         "total": 1, "limit": 1, "offset": 0, "has_more": False
     }
     assert [order["id"] for order in payload["orders"]] == [first_order["id"]]
+    assert payload["orders"][0]["search_provenance"]["matched_fields"] == ["ספק"]
+    assert {"key": "status", "label": "סטטוס", "value": "טיוטה"} in payload["search_context"]["active_filters"]
 
     project_search = logged_in_client_a.get("/api/orders/search?q=שבת")
     assert project_search.status_code == 200
@@ -83,15 +85,23 @@ def test_order_search_matches_product_name_and_sku(
 
     by_name = logged_in_client_a.get("/api/orders/search?q=גבינה+לבנה")
     assert by_name.status_code == 200, by_name.get_json()
-    assert [item["id"] for item in by_name.get_json()["orders"]] == [
+    name_payload = by_name.get_json()
+    assert [item["id"] for item in name_payload["orders"]] == [
         response.get_json()["order"]["id"]
+    ]
+    assert "שם מוצר" in name_payload["orders"][0]["search_provenance"]["matched_fields"]
+    assert "שם מוצר" in name_payload["search_context"]["searched_fields"]
+    assert name_payload["search_context"]["active_filters"] == [
+        {"key": "q", "label": "חיפוש", "value": "גבינה לבנה"}
     ]
 
     by_sku = logged_in_client_a.get("/api/orders/search?q=DAIRY-005")
     assert by_sku.status_code == 200, by_sku.get_json()
-    assert [item["id"] for item in by_sku.get_json()["orders"]] == [
+    sku_payload = by_sku.get_json()
+    assert [item["id"] for item in sku_payload["orders"]] == [
         response.get_json()["order"]["id"]
     ]
+    assert "מק״ט" in sku_payload["orders"][0]["search_provenance"]["matched_fields"]
 
 
 def test_order_search_csv_export_preserves_hebrew_and_applies_filters(
@@ -308,3 +318,31 @@ def test_saved_order_search_is_private_to_its_creator(logged_in_client_a, db):
     )
     assert login.status_code == 200
     assert other_client.get("/api/orders/searches").get_json()["saved_searches"] == []
+
+
+def test_order_search_explains_incomplete_order_source_data(
+    logged_in_client_a, make_order, db
+):
+    from app.models.order import Order
+
+    response, _, _ = make_order(
+        logged_in_client_a, supplier_name="ספק ללא פריטים", sku="NO-ITEMS"
+    )
+    assert response.status_code == 201
+    order_id = response.get_json()["order"]["id"]
+
+    with logged_in_client_a.application.app_context():
+        order = db.session.get(Order, order_id)
+        order.items = []
+        order.order_items.clear()
+        db.session.commit()
+
+    result = logged_in_client_a.get("/api/orders/search?q=ספק+ללא+פריטים")
+    assert result.status_code == 200
+    payload = result.get_json()
+    assert payload["search_context"]["data_quality"] == {
+        "checked_orders": 1,
+        "incomplete_count": 1,
+        "scope": "current_page",
+    }
+    assert payload["orders"][0]["search_provenance"]["missing_fields"] == ["פירוט פריטים"]

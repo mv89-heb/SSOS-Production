@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from flask import Blueprint, Response, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import String, and_, cast, func, or_, select
+from sqlalchemy.orm import selectinload
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.extensions import db
@@ -21,6 +22,97 @@ MAX_LIMIT = 100
 MAX_QUERY_LENGTH = 200
 MAX_RANGE_DAYS = 731
 MAX_EXPORT_ROWS = 5000
+
+
+SEARCHED_FIELD_LABELS = [
+    "מספר הזמנה", "ספק", "הערות", "מחלקה", "פרויקט",
+    "שם מוצר", "מק״ט", "ברקוד", "פרטי פריטים היסטוריים",
+]
+
+
+def _contains_query(value, query):
+    return value is not None and query.casefold() in str(value).casefold()
+
+
+def _matched_search_fields(order, query, tenant_id):
+    if not query:
+        return []
+    matched = set()
+    for value, label in (
+        (order.order_number, "מספר הזמנה"),
+        (order.supplier_name, "ספק"),
+        (order.notes, "הערות"),
+        (order.department, "מחלקה"),
+        (order.project, "פרויקט"),
+    ):
+        if _contains_query(value, query):
+            matched.add(label)
+
+    snapshot_match = False
+    for item in order.items or []:
+        if not isinstance(item, dict):
+            continue
+        snapshot_match = snapshot_match or _contains_query(item, query)
+        if _contains_query(item.get("product_name") or item.get("name"), query):
+            matched.add("שם מוצר")
+        if any(_contains_query(item.get(key), query) for key in ("sku", "supplier_sku")):
+            matched.add("מק״ט")
+        if _contains_query(item.get("barcode"), query):
+            matched.add("ברקוד")
+
+    for order_item in order.order_items or []:
+        if order_item.tenant_id != tenant_id:
+            continue
+        product = order_item.product
+        if product is None or product.tenant_id != tenant_id:
+            continue
+        if _contains_query(product.name, query):
+            matched.add("שם מוצר")
+        if any(_contains_query(getattr(product, field, None), query) for field in ("sku", "supplier_sku")):
+            matched.add("מק״ט")
+        if _contains_query(getattr(product, "barcode", None), query):
+            matched.add("ברקוד")
+
+    if snapshot_match and not ({"שם מוצר", "מק״ט", "ברקוד"} & matched):
+        matched.add("פרטי פריטים היסטוריים")
+    return [label for label in SEARCHED_FIELD_LABELS if label in matched]
+
+
+def _missing_order_fields(order, tenant_id):
+    missing = []
+    if not order.order_number:
+        missing.append("מספר הזמנה")
+    if not order.supplier_name:
+        missing.append("שם ספק")
+    has_items = bool(order.items) or any(
+        item.tenant_id == tenant_id for item in (order.order_items or [])
+    )
+    if not has_items:
+        missing.append("פירוט פריטים")
+    if not order.created_at:
+        missing.append("תאריך יצירה")
+    return missing
+
+
+def _active_search_filters(query_text, status, supplier_id, start_date, end_date):
+    active = []
+    if query_text:
+        active.append({"key": "q", "label": "חיפוש", "value": query_text})
+    if status:
+        status_labels = {
+            "draft": "טיוטה", "submitted": "ממתינה לאישור",
+            "approved": "אושרה", "sent": "נשלחה לספק",
+            "completed": "הושלמה", "cancelled": "בוטלה",
+        }
+        active.append({"key": "status", "label": "סטטוס", "value": status_labels.get(status, status)})
+    if supplier_id is not None:
+        active.append({"key": "supplier_id", "label": "מזהה ספק", "value": str(supplier_id)})
+    if start_date:
+        active.append({"key": "start_date", "label": "מתאריך", "value": start_date.isoformat()})
+    if end_date:
+        active.append({"key": "end_date", "label": "עד תאריך", "value": end_date.isoformat()})
+    return active
+
 
 
 def _csv_text(value):
@@ -137,7 +229,9 @@ def search_orders():
             }), 413
 
         orders = db.session.scalars(
-            stmt.order_by(Order.created_at.desc(), Order.id.desc()).limit(limit).offset(offset)
+            stmt.order_by(Order.created_at.desc(), Order.id.desc())
+            .options(selectinload(Order.order_items).selectinload(OrderItem.product))
+            .limit(limit).offset(offset)
         ).all()
 
         if csv_export:
@@ -178,9 +272,22 @@ def search_orders():
             response.headers["X-Export-Row-Count"] = str(len(orders))
             return response
 
+        order_payloads = []
+        incomplete_order_count = 0
+        for order in orders:
+            payload = order.to_dict()
+            missing_fields = _missing_order_fields(order, current_user.tenant_id)
+            if missing_fields:
+                incomplete_order_count += 1
+            payload["search_provenance"] = {
+                "matched_fields": _matched_search_fields(order, query_text, current_user.tenant_id),
+                "missing_fields": missing_fields,
+            }
+            order_payloads.append(payload)
+
         return jsonify({
             "success": True,
-            "orders": [order.to_dict() for order in orders],
+            "orders": order_payloads,
             "pagination": {
                 "total": total,
                 "limit": limit,
@@ -193,6 +300,17 @@ def search_orders():
                 "supplier_id": supplier_id,
                 "start_date": start_date.isoformat() if start_date else None,
                 "end_date": end_date.isoformat() if end_date else None,
+            },
+            "search_context": {
+                "searched_fields": SEARCHED_FIELD_LABELS,
+                "active_filters": _active_search_filters(
+                    query_text, status, supplier_id, start_date, end_date
+                ),
+                "data_quality": {
+                    "checked_orders": len(orders),
+                    "incomplete_count": incomplete_order_count,
+                    "scope": "current_page",
+                },
             },
         }), 200
     except HTTPException as exc:
