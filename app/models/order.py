@@ -52,7 +52,7 @@ class Order(db.Model):
     tenant = db.relationship("Tenant", back_populates="orders")
     user = db.relationship("User")
     supplier = db.relationship("Supplier")
-    order_items = db.relationship("OrderItem", back_populates="order", cascade="all, delete-orphan", passive_deletes=True, order_by="OrderItem.id")
+    order_items = db.relationship("OrderItem", back_populates="order", passive_deletes=True, order_by="OrderItem.id")
     receipts = db.relationship("Receipt", back_populates="order", passive_deletes=True, order_by="Receipt.id")
 
     def to_dict(self):
