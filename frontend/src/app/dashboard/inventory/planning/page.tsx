@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, CalendarDays, Plus, Save, Trash2 } from "lucide-react";
 import { inventoryService, type InventoryPlanningPeriod } from "@/services/inventory-service";
 import { apiClient } from "@/services/api-client";
+import InventoryConsumptionProfilesPanel from "@/components/inventory/inventory-consumption-profiles-panel";
 
 const emptyForm = { name: "", start_date: "", end_date: "", consumption_multiplier: "1.25", order_days: "", delivery_days: "", order_cutoff_time: "", notes: "" };
 
@@ -35,6 +36,7 @@ export default function InventoryPlanningPage() {
       <a href="/dashboard/inventory" className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600"><ArrowRight size={17}/> חזרה למלאי</a>
       <div className="mt-4 flex items-center gap-3"><CalendarDays className="text-indigo-600"/><div><h1 className="text-3xl font-black">תקופות מיוחדות ותכנון חגים</h1><p className="mt-1 text-sm text-slate-500">הגדר מכפיל צריכה ואת ימי ההזמנה/אספקה כאשר החג משנה את ההתנהלות הרגילה.</p></div></div>
     </header>
+    <InventoryConsumptionProfilesPanel />
     {message && <div className="rounded-2xl bg-indigo-50 p-4 text-sm font-black text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300">{message}</div>}
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
       <div className="flex items-center justify-between"><h2 className="text-xl font-black">{editingId ? "עריכת תקופה" : "הוספת תקופה"}</h2>{editingId ? <button onClick={reset} className="text-sm font-bold text-slate-500">ביטול</button> : null}</div>
