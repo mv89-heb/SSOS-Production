@@ -78,8 +78,10 @@ def search_orders():
         if limit < 1 or offset < 0 or (supplier_id is not None and supplier_id < 1):
             raise BadRequest("limit and supplier_id must be positive; offset cannot be negative")
         limit = min(limit, maximum_limit)
-        if csv_export and offset != 0:
-            raise BadRequest("CSV export must start at offset 0")
+        if csv_export:
+            if offset != 0:
+                raise BadRequest("CSV export must start at offset 0")
+            limit = MAX_EXPORT_ROWS
 
         start_date = _parse_date(request.args.get("start_date"), "start_date")
         end_date = _parse_date(request.args.get("end_date"), "end_date")
