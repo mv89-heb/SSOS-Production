@@ -125,7 +125,7 @@ export default function InventoryConsumptionProfilesPanel() {
 
     {profiles.isLoading ? <div className="p-8 text-center text-sm text-slate-500">טוען פרופילי צריכה…</div> : profiles.isError ? <div className="p-5 text-sm text-red-600">לא ניתן לטעון את פרופילי הצריכה.</div> : <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
       <table className="w-full min-w-[1050px] text-right text-sm">
-        <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr>{["מוצר","ספקים","מינ׳ / מקס׳ / ממוצע","שבוע רגיל","שבת מתוגברת","קצב שבועי","קצב חודשי","ביטחון","שיוך לקטלוג","פעולות"].map(x=><th key={x} className="whitespace-nowrap px-3 py-3 font-black">{x}</th>)}</tr></thead>
+        <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr>{["מוצר","ספקים","מינ׳ / מקס׳ / ממוצע","שבוע רגיל","שבת מתוגברת","מחזור","קצב שבועי","קצב חודשי","ביטחון","סטטוס","שיוך לקטלוג","פעולות"].map(x=><th key={x} className="whitespace-nowrap px-3 py-3 font-black">{x}</th>)}</tr></thead>
         <tbody>{(profiles.data??[]).map(p=><tr key={p.id} className="border-t border-slate-100 dark:border-slate-800">
           <td className="px-3 py-3"><div className="font-black">{p.name}</div><div className="text-xs text-slate-500">{p.category}</div></td>
           <td className="px-3 py-3 text-xs">{p.supplier_ids.map(id=>p.supplier_names[id]??id).join(" / ")||"לא הוגדר"}</td>
