@@ -17,6 +17,7 @@ from app.models.order_tracking_event import OrderTrackingEvent
 from app.models.receipt import Receipt
 from app.models.receipt_item import ReceiptItem
 from app.models.supplier_invoice import SupplierInvoice, SupplierInvoicePayment
+from app.models.supplier_credit_adjustment import SupplierCreditAdjustment
 from app.models.idempotency_key import IdempotencyKey
 from app.models.audit import AuditLog
 from app.models.notification import Notification
@@ -31,7 +32,7 @@ from app.models.saved_order_search import SavedOrderSearch
 __all__ = [
     "Tenant", "User", "Supplier", "Product", "SupplierProductOffer",
     "MasterProduct", "SupplierProduct", "PriceHistory", "PriceObservation", "RegulatedEggPrice", "RegulatoryPriceMonitorState",
-    "DocumentAnalysis", "ProductClassificationFeedback", "Order", "OrderItem", "Receipt", "ReceiptItem", "SupplierInvoice", "SupplierInvoicePayment", "IdempotencyKey", "AuditLog",
+    "DocumentAnalysis", "ProductClassificationFeedback", "Order", "OrderItem", "Receipt", "ReceiptItem", "SupplierInvoice", "SupplierInvoicePayment", "SupplierCreditAdjustment", "IdempotencyKey", "AuditLog",
     "Notification", "GoogleCalendarConnection", "InventoryMovement",
     "InventoryPlanningPeriod", "SavedOrderSearch", "HistoricalImportBatch", "HistoricalPurchaseOrder", "HistoricalDocumentRecord", "ProductCode", "ProcurementBudget",
 ]
