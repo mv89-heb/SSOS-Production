@@ -546,6 +546,7 @@ def preview_manual_orders():
                 if quantity is not None and explicit_unit == "carton" and matched is not None and not matched.units_per_carton:
                     summary["cartons_missing_pack_size"] += 1
                 preview_lines.append({
+                    "line_index": line_index,
                     "description": description,
                     "quantity": float(quantity) if quantity is not None else None,
                     "unit": declared_unit,
