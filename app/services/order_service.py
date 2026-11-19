@@ -1,7 +1,7 @@
 from datetime import date
 
 from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 
 from app.extensions import db
 from app.models.user import ROLE_ADMIN, ROLE_MANAGER
@@ -456,7 +456,10 @@ class OrderService:
         for existing_item in list(order.order_items):
             db.session.delete(existing_item)
         db.session.flush()
-        db.session.expire(order, ["order_items"])
+        # New orders are transient until the repository adds them. Their
+        # collection is already empty, so only expire it for persisted drafts.
+        if inspect(order).persistent:
+            db.session.expire(order, ["order_items"])
         for item in enriched_items:
             order.order_items.append(
                 OrderItem(
