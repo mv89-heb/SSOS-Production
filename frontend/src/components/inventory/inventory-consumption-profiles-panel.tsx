@@ -26,7 +26,7 @@ const fromProfile = (p: InventoryConsumptionProfile): ProfileForm => ({
   order_status: p.order_status,
 });
 const number = (v: string) => Number(v || 0);
-const qty = (v: number) => new Intl.NumberFormat("he-IL", { maximumFractionDigits: 3 }).format(v);
+const qty = (v: number) => new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 }).format(Math.ceil(Math.max(0, Number(v) || 0)));
 
 export default function InventoryConsumptionProfilesPanel() {
   const qc = useQueryClient();

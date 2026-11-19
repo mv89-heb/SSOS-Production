@@ -43,6 +43,8 @@ const dateMonthsAgo = (months: number) => {
 const today = () => localDate(new Date());
 const number = (value: number | null | undefined) =>
   new Intl.NumberFormat("he-IL", { maximumFractionDigits: 1 }).format(Number(value ?? 0));
+const wholeQuantity = (value: number | null | undefined) =>
+  new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 }).format(Math.ceil(Math.max(0, Number(value ?? 0))));
 const money = (value: number, currency: string) => {
   try { return new Intl.NumberFormat("he-IL", { style: "currency", currency, maximumFractionDigits: 0 }).format(value); }
   catch { return `${number(value)} ${currency}`; }
@@ -168,6 +170,22 @@ export default function AnalyticsCenterPage() {
   const readiness = useQuery({ queryKey: ["analytics-center", "data-readiness"], queryFn: () => priceIntelligenceService.getDataReadiness(), retry: 1 });
   const reminders = useQuery({ queryKey: ["analytics-center", "open-reminders"], queryFn: () => reminderService.getOpen(), retry: 1, refetchInterval: 60_000 });
 
+  const budgets = useQuery({
+    queryKey: ["analytics-center", "budgets"],
+    queryFn: async () => (await apiClient.get<{ success: boolean; budgets: Array<{ id: number; scope_type: string; scope_value: string; period_type: string; period_start: string; amount: number; currency: string; spent_amount: number; remaining_amount: number; active: boolean }> }>("/api/procurement-budgets")).data.budgets,
+    retry: 1,
+  });
+  const documents = useQuery({
+    queryKey: ["analytics-center", "documents"],
+    queryFn: async () => (await apiClient.get<{ success: boolean; analyses: Array<{ id: number; filename: string; document_type: string | null; status: string; created_at: string }> }>("/api/document-intelligence", { params: { limit: 200 } })).data.analyses,
+    retry: 1,
+  });
+  const audit = useQuery({
+    queryKey: ["analytics-center", "audit"],
+    queryFn: async () => (await apiClient.get<{ success: boolean; logs: Array<{ id: number; action: string; title: string | null; created_at: string }> }>("/api/audit", { params: { limit: 500, offset: 0 } })).data.logs,
+    retry: 1,
+  });
+
   const orderRows = orders.data?.orders ?? [];
   const productRows = catalog.data ?? [];
   const supplierRows = suppliers.data ?? [];
@@ -222,11 +240,26 @@ export default function AnalyticsCenterPage() {
   const orderCurrencies = Object.entries(spendData?.ordered.totals_by_currency ?? {});
   const profileRows = (profiles.data ?? []).filter((row) => row.active).slice(0, 10);
   const readinessData = readiness.data;
-  const loadedCount = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders].filter((query) => query.isSuccess).length;
-  const failedCount = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders].filter((query) => query.isError).length;
-  const loading = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders].some((query) => query.isLoading);
+  const budgetRows = budgets.data ?? [];
+  const budgetCurrencies = Array.from(new Set(budgetRows.map((row) => row.currency))).sort();
+  const documentStatusRows = useMemo(() => {
+    const labels: Record<string, string> = { UPLOADED: "הועלה", PROCESSING: "בעיבוד", ANALYZED: "נותח", PARTIALLY_APPLIED: "יושם חלקית", AI_UNAVAILABLE: "AI לא זמין", FAILED: "נכשל", APPLIED: "יושם" };
+    const counts = new Map<string, number>();
+    for (const row of documents.data ?? []) counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
+    return Array.from(counts, ([key, value]) => ({ label: labels[key] ?? key, value, id: key }));
+  }, [documents.data]);
+  const auditActionRows = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of audit.data ?? []) counts.set(row.action || "ללא סוג פעולה", (counts.get(row.action || "ללא סוג פעולה") ?? 0) + 1);
+    return Array.from(counts, ([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8);
+  }, [audit.data]);
+  const extraQueries = [budgets, documents, audit];
+  const baseQueries = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders];
+  const loadedCount = [...baseQueries, ...extraQueries].filter((query) => query.isSuccess).length;
+  const failedCount = [...baseQueries, ...extraQueries].filter((query) => query.isError).length;
+  const loading = [...baseQueries, ...extraQueries].some((query) => query.isLoading);
 
-  const refresh = () => [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders].forEach((query) => void query.refetch());
+  const refresh = () => [...baseQueries, ...extraQueries].forEach((query) => void query.refetch());
 
   return (
     <div dir="rtl" className="min-w-0 space-y-6 pb-10">
@@ -284,7 +317,7 @@ export default function AnalyticsCenterPage() {
 
       {detailTab === "inventory" && <section className="grid min-w-0 gap-4 xl:grid-cols-2">
         <Panel title="מצב מלאי ותחזית" subtitle="המלצות מבוססות היסטוריית ספירות; חסר מידע מוצג בנפרד.">{recommendations.isError?<Empty text="נתוני תכנון המלאי לא זמינים."/>:<Donut rows={riskRows}/>}<div className="mt-3 text-left"><Link href="/dashboard/inventory" className="text-xs font-bold text-indigo-600 hover:underline">למסך המלאי <ChevronLeft className="inline" size={14}/></Link></div></Panel>
-        <Panel title="פרופילי צריכה ותגבור" subtitle="הצריכה השבועית המשוקללת מחושבת מפרופילים פעילים.">{profiles.isError?<Empty text="פרופילי הצריכה לא זמינים."/>:profileRows.length?<div className="space-y-3">{profileRows.map((row)=><div key={row.id} className="rounded-xl border p-3 dark:border-slate-800"><div className="flex flex-wrap justify-between gap-2"><b>{row.name}</b><span className="text-xs text-slate-500">{row.mapping_status==="mapped"?"מקושר למוצרים":"ממתין לקישור"}</span></div><div className="mt-2 grid grid-cols-3 gap-2 text-xs"><div><span className="block text-slate-500">רגיל</span><b>{number(row.regular_weekly_consumption)}</b></div><div><span className="block text-slate-500">תגבור</span><b>{number(row.reinforced_weekly_consumption)}</b></div><div><span className="block text-slate-500">משוקלל</span><b>{number(row.weighted_weekly_consumption)}</b></div></div></div>)}</div>:<Empty text="לא הוגדרו פרופילי צריכה פעילים."/>}<div className="mt-3 text-left"><Link href="/dashboard/inventory" className="text-xs font-bold text-indigo-600 hover:underline">לניהול מלאי וצריכה <ChevronLeft className="inline" size={14}/></Link></div></Panel>
+        <Panel title="פרופילי צריכה ותגבור" subtitle="הצריכה השבועית המשוקללת מחושבת מפרופילים פעילים.">{profiles.isError?<Empty text="פרופילי הצריכה לא זמינים."/>:profileRows.length?<div className="space-y-3">{profileRows.map((row)=><div key={row.id} className="rounded-xl border p-3 dark:border-slate-800"><div className="flex flex-wrap justify-between gap-2"><b>{row.name}</b><span className="text-xs text-slate-500">{row.mapping_status==="mapped"?"מקושר למוצרים":"ממתין לקישור"}</span></div><div className="mt-2 grid grid-cols-3 gap-2 text-xs"><div><span className="block text-slate-500">רגיל</span><b>{wholeQuantity(row.regular_weekly_consumption)}</b></div><div><span className="block text-slate-500">תגבור</span><b>{wholeQuantity(row.reinforced_weekly_consumption)}</b></div><div><span className="block text-slate-500">משוקלל</span><b>{wholeQuantity(row.weighted_weekly_consumption)}</b></div></div></div>)}</div>:<Empty text="לא הוגדרו פרופילי צריכה פעילים."/>}<div className="mt-3 text-left"><Link href="/dashboard/inventory" className="text-xs font-bold text-indigo-600 hover:underline">לניהול מלאי וצריכה <ChevronLeft className="inline" size={14}/></Link></div></Panel>
         <Panel title="קטגוריות מוצרים" subtitle="מספר מוצרים בכל קטגוריה.">{catalog.isError?<Empty text="נתוני הקטלוג לא זמינים כרגע."/>:<Bars rows={categoryRows}/>}</Panel>
         <Panel title="איכות נתוני מלאי" subtitle="מדדי כיסוי וזמינות מתוך שירות מוכנות הנתונים.">{readiness.isError?<Empty text="מדדי איכות הנתונים לא זמינים."/>:<div className="space-y-3 text-sm">{[["מוצרים עם מחיר",readinessData?.products.priced,readinessData?.products.active],["מוצרים עם קטגוריה",readinessData?.products.categorized,readinessData?.products.active],["מוצרים עם כללי מלאי",readinessData?.products.with_stock_rules,readinessData?.products.active],["מוצרים מכוסים בהצעות ספק",readinessData?.supplier_offers.products_covered,readinessData?.products.active]].map(([label,value,total])=><div key={String(label)}><div className="mb-1 flex justify-between gap-2 text-xs"><span>{String(label)}</span><b>{number(Number(value??0))}/{number(Number(total??0))}</b></div><div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-sky-600" style={{width:`${Number(total)>0?Number(value??0)/Number(total)*100:0}%`}}/></div></div>)}</div>}</Panel>
       </section>}
@@ -295,6 +328,21 @@ export default function AnalyticsCenterPage() {
         <Panel title="אמינות ספקים" subtitle="איחורים וחוסרים לפי מדגם קבלות בפועל.">{spend.isError?<Empty text="מקור נתוני אמינות הספקים לא זמין כרגע."/>:spendData?.supplier_reliability?.length?<Bars rows={spendData.supplier_reliability.filter((row)=>row.late_rate_percent!=null).map((row)=>({label:row.supplier_name,value:Number(row.late_rate_percent),hint:`${number(row.late_rate_percent)}% איחורים · מדגם ${row.delivery_sample_size}`}))}/>:<Empty text="אין מדגם מספק לחישוב אמינות ספקים."/>}</Panel>
         <Panel title="שלמות נתוני ספקים ומחירים" subtitle="המדדים משקפים את הרשומות הקיימות בלבד.">{readiness.isError?<Empty text="מדדי שלמות הנתונים לא זמינים."/>:<div className="grid grid-cols-2 gap-3 text-sm"><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><span className="text-xs text-slate-500">הצעות ספק פעילות</span><b className="mt-1 block text-xl">{number(readinessData?.supplier_offers.active)}</b></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><span className="text-xs text-slate-500">ספקים עם הצעות</span><b className="mt-1 block text-xl">{number(readinessData?.supplier_offers.suppliers_covered)}</b></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><span className="text-xs text-slate-500">היסטוריית מחירים</span><b className="mt-1 block text-xl">{number(readinessData?.price_intelligence.history_rows)}</b></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><span className="text-xs text-slate-500">תצפיות מחיר</span><b className="mt-1 block text-xl">{number(readinessData?.price_intelligence.observation_rows)}</b></div></div>}</Panel>
       </section>}
+
+      <section className="grid min-w-0 gap-4 xl:grid-cols-3">
+        <Panel title="ביצוע תקציבי רכש" subtitle="התחייבויות מהזמנות שהוגשו, אושרו, נשלחו או הושלמו. אין חיבור בין מטבעות.">
+          {budgets.isError ? <Empty text="נתוני התקציבים אינם זמינים בהרשאות המשתמש או כרגע."/> : budgetCurrencies.length ? <div className="space-y-5">{budgetCurrencies.map((code) => <div key={code}><h3 className="mb-2 text-xs font-black text-slate-500">{code} · התחייבות מתוך תקציב</h3><Bars rows={budgetRows.filter((row) => row.currency === code).map((row) => ({ label: `${row.scope_type === "department" ? "מחלקה" : "פרויקט"} · ${row.scope_value}`, value: Math.max(0, Number(row.spent_amount ?? 0)), hint: `${money(Number(row.spent_amount ?? 0), code)} / ${money(Number(row.amount ?? 0), code)}` }))}/></div>)}</div> : <Empty text="לא הוגדרו תקציבים פעילים."/>}
+          <div className="mt-3 text-left"><Link href="/dashboard/settings/procurement-budgets" className="text-xs font-bold text-indigo-600 hover:underline">לניהול תקציבים <ChevronLeft className="inline" size={14}/></Link></div>
+        </Panel>
+        <Panel title="מסמכים וקליטה" subtitle="מספר מסמכים לפי סטטוס עיבוד מתוך 200 הרשומות האחרונות.">
+          {documents.isError ? <Empty text="נתוני המסמכים אינם זמינים בהרשאות המשתמש או כרגע."/> : <Donut rows={documentStatusRows}/>}
+          <div className="mt-3 text-left"><Link href="/dashboard/document-intelligence" className="text-xs font-bold text-indigo-600 hover:underline">למסמכים וקליטה <ChevronLeft className="inline" size={14}/></Link></div>
+        </Panel>
+        <Panel title="פעילות מערכת וביקורת" subtitle="התפלגות סוגי פעולות מתוך עד 500 אירועי הביקורת האחרונים.">
+          {audit.isError ? <Empty text="נתוני הביקורת אינם זמינים בהרשאות המשתמש או כרגע."/> : <Bars rows={auditActionRows}/>}
+          <div className="mt-3 text-left"><Link href="/dashboard/audit" className="text-xs font-bold text-indigo-600 hover:underline">להיסטוריית פעולות <ChevronLeft className="inline" size={14}/></Link></div>
+        </Panel>
+      </section>
 
       <Panel title="כניסה לניתוח מודולים" subtitle="מעבר מהתמונה הכוללת למסכי העבודה והנתונים המפורטים.">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -323,7 +371,7 @@ export default function AnalyticsCenterPage() {
               {statusRows.map((row)=><tr key={`status-${row.id}`}><td className="px-3 py-2">הזמנות</td><td className="px-3 py-2 font-semibold">{row.label}</td><td className="px-3 py-2 tabular-nums">{number(row.value)}</td><td className="px-3 py-2">הזמנות</td></tr>)}
               {categoryRows.map((row)=><tr key={`category-${row.label}`}><td className="px-3 py-2">קטלוג</td><td className="px-3 py-2 font-semibold">{row.label}</td><td className="px-3 py-2 tabular-nums">{number(row.value)}</td><td className="px-3 py-2">מוצרים</td></tr>)}
               {riskRows.map((row)=><tr key={`risk-${row.id}`}><td className="px-3 py-2">מלאי</td><td className="px-3 py-2 font-semibold">{row.label}</td><td className="px-3 py-2 tabular-nums">{number(row.value)}</td><td className="px-3 py-2">מוצרים</td></tr>)}
-              {profileRows.map((row)=><tr key={`profile-${row.id}`}><td className="px-3 py-2">צריכה</td><td className="px-3 py-2 font-semibold">{row.name}</td><td className="px-3 py-2 tabular-nums">{number(row.weighted_weekly_consumption)}</td><td className="px-3 py-2">צריכה שבועית משוקללת</td></tr>)}
+              {profileRows.map((row)=><tr key={`profile-${row.id}`}><td className="px-3 py-2">צריכה</td><td className="px-3 py-2 font-semibold">{row.name}</td><td className="px-3 py-2 tabular-nums">{wholeQuantity(row.weighted_weekly_consumption)}</td><td className="px-3 py-2">צריכה שבועית משוקללת</td></tr>)}
             </tbody>
           </table>
         </div>
@@ -331,7 +379,7 @@ export default function AnalyticsCenterPage() {
 
       <footer className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950">
         <span><CalendarDays className="ml-1 inline" size={14}/> תקופת הוצאות: {applied.start} עד {applied.end}</span>
-        <span>{loadedCount}/11 מקורות נטענו בהצלחה · {failedCount? "חלק מהמדדים אינם זמינים":"המקורות הזמינים נטענו"}</span>
+        <span>{loadedCount}/14 מקורות נטענו בהצלחה · {failedCount? "חלק מהמדדים אינם זמינים":"המקורות הזמינים נטענו"}</span>
       </footer>
     </div>
   );
