@@ -217,13 +217,55 @@ def test_delete_draft_order_succeeds(logged_in_client_a, make_order):
     assert logged_in_client_a.get(f"/api/orders/{order_id}").status_code == 404
 
 
-def test_delete_submitted_order_succeeds_for_admin(logged_in_client_a, make_order):
+def test_delete_submitted_order_is_blocked_for_admin(logged_in_client_a, make_order):
     resp, _, _ = make_order(logged_in_client_a)
     order_id = resp.get_json()["order"]["id"]
-    logged_in_client_a.post(f"/api/orders/{order_id}/submit")
+    submitted = logged_in_client_a.post(f"/api/orders/{order_id}/submit")
+    assert submitted.status_code == 200
+
     deleted = logged_in_client_a.delete(f"/api/orders/{order_id}")
-    assert deleted.status_code == 200
-    assert logged_in_client_a.get(f"/api/orders/{order_id}").status_code == 404
+
+    assert deleted.status_code == 409
+    assert "must remain in procurement history" in deleted.get_json()["message"]
+    retained = logged_in_client_a.get(f"/api/orders/{order_id}")
+    assert retained.status_code == 200
+    assert retained.get_json()["order"]["status"] == "submitted"
+
+
+def test_delete_draft_with_invoice_and_payment_is_blocked(
+    logged_in_client_a, make_order, db
+):
+    from datetime import date
+    from app.models.supplier_invoice import SupplierInvoice, SupplierInvoicePayment
+
+    response, supplier_id, _ = make_order(logged_in_client_a)
+    order_id = response.get_json()["order"]["id"]
+    tenant_id = response.get_json()["order"]["tenant_id"]
+    invoice = SupplierInvoice(
+        tenant_id=tenant_id,
+        order_id=order_id,
+        supplier_id=supplier_id,
+        invoice_number="INV-KEEP-001",
+        amount=100,
+        currency="ILS",
+    )
+    db.session.add(invoice)
+    db.session.flush()
+    payment = SupplierInvoicePayment(
+        tenant_id=tenant_id,
+        invoice_id=invoice.id,
+        amount=25,
+        payment_date=date.today(),
+    )
+    db.session.add(payment)
+    db.session.commit()
+
+    deleted = logged_in_client_a.delete(f"/api/orders/{order_id}")
+
+    assert deleted.status_code == 409
+    assert logged_in_client_a.get(f"/api/orders/{order_id}").status_code == 200
+    assert db.session.get(SupplierInvoice, invoice.id) is not None
+    assert db.session.get(SupplierInvoicePayment, payment.id) is not None
 
 
 def test_order_with_unknown_product_404(logged_in_client_a):
