@@ -5,8 +5,8 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, CalendarDays, Pencil, Plus, ShieldAlert, Trash2, Wallet } from "lucide-react";
-import { apiClient } from "@/lib/api-client";
-import { useAuth } from "@/hooks/use-auth";
+import { apiClient } from "@/services/api-client";
+import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -152,10 +152,10 @@ export default function ProcurementBudgetsPage() {
         {budgetsQuery.isLoading ? <p className="py-8 text-center text-sm text-slate-500">טוען תקציבים...</p> :
           budgetsQuery.isError ? <p role="alert" className="py-8 text-center text-sm text-red-600">טעינת התקציבים נכשלה</p> :
           budgets.length === 0 ? <div className="py-10 text-center"><CalendarDays className="mx-auto mb-3 h-8 w-8 text-slate-400" /><p className="font-bold">עדיין לא הוגדרו תקציבים</p><p className="mt-1 text-sm text-slate-500">לאחר הגדרת תקציב, המערכת תחשב התחייבויות קיימות לפני הגשת הזמנה.</p></div> :
-          <div className="grid gap-3 md:grid-cols-2">{budgets.map((budget) => <div key={budget.id} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+          <div className="grid gap-3 md:grid-cols-2">{budgets.map((budget: Budget) => <div key={budget.id} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
             <div className="flex items-start justify-between gap-3"><div><p className="font-bold">{budget.scope_type === "department" ? "מחלקה" : "פרויקט"}: {budget.scope_value}</p><p className="mt-1 text-xs text-slate-500">{budget.period_type === "weekly" ? "שבועי" : "חודשי"} · מתחיל {budget.period_start} · {budget.currency}</p></div><span className={budget.enforcement_mode === "block" ? "rounded-full bg-red-50 px-2 py-1 text-[11px] font-bold text-red-700 dark:bg-red-950/40 dark:text-red-300" : "rounded-full bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"}>{budget.enforcement_mode === "block" ? "חסימה" : "אזהרה"}</span></div>
             <div className="mt-4 grid grid-cols-3 gap-2 text-sm"><div><p className="text-xs text-slate-500">תקציב</p><p className="font-black">{money(budget.currency, budget.amount)}</p></div><div><p className="text-xs text-slate-500">התחייבויות</p><p className="font-bold">{money(budget.currency, budget.spent_amount)}</p></div><div><p className="text-xs text-slate-500">יתרה</p><p className={budget.remaining_amount < 0 ? "font-black text-red-700" : "font-bold"}>{money(budget.currency, budget.remaining_amount)}</p></div></div>
-            <div className="mt-4 flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => editBudget(budget)}><Pencil className="ml-1 h-3.5 w-3.5" />עריכה</Button><Button type="button" size="sm" variant="ghost" className="text-red-600" disabled={deactivateMutation.isPending} onClick={() => { if (window.confirm("להשבית את התקציב? ההזמנות שכבר הוגשו לא ישתנו.")) deactivateMutation.mutate(budget.id); }}><Trash2 className="ml-1 h-3.5 w-3.5" />השבתה</Button></div>
+            <div className="mt-4 flex gap-2"><Button type="button" variant="outline" onClick={() => editBudget(budget)}><Pencil className="ml-1 h-3.5 w-3.5" />עריכה</Button><Button type="button" variant="ghost" className="text-red-600" disabled={deactivateMutation.isPending} onClick={() => { if (window.confirm("להשבית את התקציב? ההזמנות שכבר הוגשו לא ישתנו.")) deactivateMutation.mutate(budget.id); }}><Trash2 className="ml-1 h-3.5 w-3.5" />השבתה</Button></div>
           </div>)}</div>}
       </CardContent>
     </Card>
