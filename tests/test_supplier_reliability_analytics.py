@@ -4,6 +4,7 @@ from app.models.order import Order, STATUS_COMPLETED
 from app.models.order_item import OrderItem
 from app.models.receipt import Receipt, RECEIPT_POSTED
 from app.models.receipt_item import ReceiptItem
+from app.models.supplier_credit_adjustment import SupplierCreditAdjustment, CREDIT_ADJUSTMENT_ACTIVE, CREDIT_ADJUSTMENT_VOIDED
 
 
 def test_supplier_reliability_reports_late_delivery_shortage_and_sample_size_without_cross_tenant_data(
@@ -37,6 +38,29 @@ def test_supplier_reliability_reports_late_delivery_shortage_and_sample_size_wit
         damaged_quantity=1,
         damage_notes="מוצר סדוק",
     ))
+    db.session.add(SupplierCreditAdjustment(
+        tenant_id=order.tenant_id,
+        order_id=order.id,
+        supplier_id=order.supplier_id,
+        reference_number="RELIABILITY-CREDIT-ACTIVE",
+        adjustment_type="credit_note",
+        adjustment_date=date(2026, 11, 12),
+        amount=10,
+        currency="ILS",
+        status=CREDIT_ADJUSTMENT_ACTIVE,
+    ))
+    db.session.add(SupplierCreditAdjustment(
+        tenant_id=order.tenant_id,
+        order_id=order.id,
+        supplier_id=order.supplier_id,
+        reference_number="RELIABILITY-CREDIT-VOIDED",
+        adjustment_type="credit_note",
+        adjustment_date=date(2026, 11, 13),
+        amount=5,
+        currency="ILS",
+        status=CREDIT_ADJUSTMENT_VOIDED,
+        void_reason="בדיקת החרגה",
+    ))
 
     other_response, _, _ = make_order(
         logged_in_client_b, quantity=5, price=10.0,
@@ -64,5 +88,7 @@ def test_supplier_reliability_reports_late_delivery_shortage_and_sample_size_wit
     assert metric["shortage_sample_size"] == 1
     assert metric["short_orders"] == 1
     assert metric["shortage_rate_percent"] == 100.0
-    assert metric["credit_adjustment_data_available"] is False
-    assert metric["credit_adjustment_frequency"] is None
+    assert metric["credit_adjustment_data_available"] is True
+    assert metric["credit_adjustment_frequency"] == 100.0
+    assert metric["credit_adjustment_count"] == 1
+    assert metric["orders_with_credit_adjustments"] == 1
