@@ -439,11 +439,14 @@ export default function OrdersPage() {
                 return (
                   <article key={order.id} className="min-w-0 rounded-xl border border-slate-200 p-4 shadow-sm dark:border-slate-800">
                     <div className="flex min-w-0 items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <Link href={`/dashboard/orders/${order.id}`} className="break-words font-extrabold text-indigo-600 hover:underline dark:text-indigo-400">{order.order_number}</Link>
+                      <div className="flex min-w-0 items-start gap-2">
+                        <input type="checkbox" aria-label={`בחירת הזמנה ${order.order_number}`} checked={selectedOrderIds.includes(order.id)} onChange={(event) => toggleOrderSelection(order.id, event.target.checked)} className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                        <div className="min-w-0">
+                          <Link href={`/dashboard/orders/${order.id}`} className="break-words font-extrabold text-indigo-600 hover:underline dark:text-indigo-400">{order.order_number}</Link>
                         <p className="mt-1 break-words text-sm font-semibold text-slate-700 dark:text-slate-200">{order.supplier_name}</p>
                         {!!order.search_provenance?.matched_fields.length && <p className="mt-1 break-words text-[11px] text-indigo-600 dark:text-indigo-300">התאמה לפי: {order.search_provenance.matched_fields.join(" · ")}</p>}
-                        {!!order.search_provenance?.missing_fields.length && <p className="mt-1 flex items-start gap-1 break-words text-[11px] font-semibold text-amber-700 dark:text-amber-300"><AlertCircle size={12} className="mt-0.5 shrink-0" /> מידע חסר: {order.search_provenance.missing_fields.join(" · ")}</p>}
+                          {!!order.search_provenance?.missing_fields.length && <p className="mt-1 flex items-start gap-1 break-words text-[11px] font-semibold text-amber-700 dark:text-amber-300"><AlertCircle size={12} className="mt-0.5 shrink-0" /> מידע חסר: {order.search_provenance.missing_fields.join(" · ")}</p>}
+                        </div>
                       </div>
                       <div className="shrink-0"><OrderStatusBadge status={order.status} /></div>
                     </div>
