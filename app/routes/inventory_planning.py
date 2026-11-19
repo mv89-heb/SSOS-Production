@@ -316,6 +316,7 @@ def create_consumption_profile():
             safety_stock=_profile_decimal(payload, "safety_stock"),
             order_status=str(payload.get("order_status") or "healthy"),
             source_note=str(payload.get("source_note") or "").strip() or None,
+            created_by=current_user.id, updated_by=current_user.id,
             active=True,
         )
         if profile.order_status not in ("healthy", "reorder"):
@@ -389,6 +390,7 @@ def update_consumption_profile(profile_id):
             profile.order_status = status
         if "source_note" in payload:
             profile.source_note = str(payload.get("source_note") or "").strip() or None
+        profile.updated_by = current_user.id
         db.session.commit()
         return jsonify({"success": True, "profile": _serialize_profile(profile)})
     except (ValueError, TypeError) as exc:
