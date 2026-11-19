@@ -338,3 +338,24 @@ def test_carton_order_requires_pack_size(logged_in_client_a):
 
     assert response.status_code == 400
     assert "units_per_carton" in response.get_json()["message"]
+
+
+def test_database_restricts_direct_delete_of_submitted_order_lines(
+    logged_in_client_a, make_order, db
+):
+    import pytest
+    from sqlalchemy.exc import IntegrityError
+    from app.models.order import Order
+
+    response, _, _ = make_order(logged_in_client_a)
+    order_id = response.get_json()["order"]["id"]
+    assert logged_in_client_a.post(f"/api/orders/{order_id}/submit").status_code == 200
+
+    order = db.session.get(Order, order_id)
+    assert order is not None and order.order_items
+    db.session.delete(order)
+    with pytest.raises(IntegrityError):
+        db.session.commit()
+    db.session.rollback()
+
+    assert db.session.get(Order, order_id) is not None
