@@ -124,7 +124,43 @@ export default function OrdersPage() {
   const [saveSearchName, setSaveSearchName] = useState("");
   const [savedSearchMessage, setSavedSearchMessage] = useState("");
   const [page, setPage] = useState(0);
+  const [visibleColumns, setVisibleColumns] = useState<OrderColumnKey[]>(DEFAULT_ORDER_COLUMNS);
+  const [columnsLoaded, setColumnsLoaded] = useState(false);
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<number[]>([]);
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+  const [bulkActionMessage, setBulkActionMessage] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("ssos.orders.visible-columns.v1");
+      if (stored) {
+        const parsed: unknown = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter((value): value is OrderColumnKey =>
+            ORDER_COLUMNS.some((column) => column.id === value)
+          );
+          if (valid.length > 0) setVisibleColumns(valid);
+        }
+      }
+    } catch {
+      // Invalid or unavailable local preferences fall back to the full default set.
+    } finally {
+      setColumnsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (columnsLoaded) {
+      window.localStorage.setItem("ssos.orders.visible-columns.v1", JSON.stringify(visibleColumns));
+    }
+  }, [columnsLoaded, visibleColumns]);
+
+  useEffect(() => {
+    setSelectedOrderIds([]);
+    setShowBulkConfirm(false);
+  }, [deferredSearch, status, startDate, endDate, page]);
   const pageSize = 50;
   const { data: searchResult, isLoading, isError, refetch } = useQuery({
     queryKey: ["orders", "search", deferredSearch, status, startDate, endDate, page],
@@ -150,6 +186,19 @@ export default function OrdersPage() {
     },
     onError: () => setSavedSearchMessage("לא ניתן לשמור את החיפוש. בדוק שהשם אינו קיים ושלא נשמרו כבר 20 חיפושים."),
   });
+  const bulkMarkSentMutation = useMutation({
+    mutationFn: (ids: number[]) => orderService.markOrdersSent(ids),
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ["orders"] });
+      setSelectedOrderIds([]);
+      setShowBulkConfirm(false);
+      setBulkActionMessage(`עודכנו ${result.updated_count} הזמנות לסטטוס "נשלחה לספק". הפעולה נרשמה ביומן הביקורת.`);
+    },
+    onError: () => {
+      setShowBulkConfirm(false);
+      setBulkActionMessage("הפעולה לא בוצעה. ייתכן שאחת ההזמנות כבר אינה מאושרת; לא בוצע עדכון חלקי.");
+    },
+  });
   const deleteSavedSearchMutation = useMutation({
     mutationFn: (id: number) => orderService.deleteSavedSearch(id),
     onSuccess: async () => {
@@ -160,6 +209,28 @@ export default function OrdersPage() {
     onError: () => setSavedSearchMessage("מחיקת החיפוש נכשלה."),
   });
   const filteredOrders = useMemo(() => searchResult?.orders ?? [], [searchResult]);
+  const selectedOrders = filteredOrders.filter((order) => selectedOrderIds.includes(order.id));
+  const allPageOrdersSelected = filteredOrders.length > 0 && filteredOrders.every((order) => selectedOrderIds.includes(order.id));
+  const canBulkMarkSent = selectedOrderIds.length > 0
+    && selectedOrders.length === selectedOrderIds.length
+    && selectedOrders.every((order) => order.status === "approved");
+  const toggleOrderSelection = (orderId: number, checked: boolean) => {
+    setSelectedOrderIds((current) => checked
+      ? (current.includes(orderId) ? current : [...current, orderId])
+      : current.filter((id) => id !== orderId));
+    setBulkActionMessage("");
+  };
+  const togglePageSelection = (checked: boolean) => {
+    setSelectedOrderIds(checked ? filteredOrders.map((order) => order.id) : []);
+    setBulkActionMessage("");
+  };
+  const toggleColumn = (columnId: OrderColumnKey, checked: boolean) => {
+    setVisibleColumns((current) => {
+      if (checked) return current.includes(columnId) ? current : [...current, columnId];
+      if (current.length <= 1) return current;
+      return current.filter((column) => column !== columnId);
+    });
+  };
   const count = (value: string) => (orders ?? []).filter((order) => order.status === value).length;
   const hasFilters = Boolean(search.trim()) || status !== "all" || Boolean(startDate) || Boolean(endDate);
   const totalResults = searchResult?.pagination.total ?? 0;
