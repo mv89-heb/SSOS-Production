@@ -122,8 +122,8 @@ def test_order_search_csv_export_preserves_hebrew_and_applies_filters(
     import io
 
     body = exported.get_data(as_text=True)
-    assert body.startswith("\\ufeff")
-    rows = list(csv.reader(io.StringIO(body.lstrip("\\ufeff"))))
+    assert body.startswith("\ufeff")
+    rows = list(csv.reader(io.StringIO(body.lstrip("\ufeff"))))
     assert rows[0] == [
         "מספר הזמנה", "ספק", "סטטוס", "מחלקה", "פרויקט",
         "תאריך יצירה", "תאריך הזמנה מתוכנן", "מטבע", 'סה"כ', "פריטים",
