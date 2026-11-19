@@ -247,6 +247,23 @@ export default function OrdersPage() {
             </form>
           )}
           {savedSearchMessage && <p role="status" className="mt-2 px-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{savedSearchMessage}</p>}
+          {searchResult?.search_context && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-xs dark:border-slate-800 dark:bg-slate-900/50">
+              <p className="font-bold text-slate-600 dark:text-slate-300">שדות שנבדקים בחיפוש: <span className="font-medium">{searchResult.search_context.searched_fields.join(" · ")}</span></p>
+              {searchResult.search_context.active_filters.length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="font-bold text-slate-500">סינון פעיל:</span>
+                  {searchResult.search_context.active_filters.map((filter) => <span key={filter.key} className="rounded-full bg-white px-2 py-1 font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700">{filter.label}: {filter.value}</span>)}
+                </div>
+              )}
+              {searchResult.search_context.data_quality.incomplete_count > 0 && (
+                <p role="status" className="mt-2 flex items-start gap-1.5 font-semibold text-amber-700 dark:text-amber-300">
+                  <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                  נמצאו {searchResult.search_context.data_quality.incomplete_count} הזמנות בעמוד הנוכחי עם שדות חובה חסרים. מומלץ לפתוח אותן ולבדוק את פרטי המקור.
+                </p>
+              )}
+            </div>
+          )}
           {hasFilters && <div className="mt-2 flex items-center justify-between px-1 text-xs"><span className="text-slate-400">נמצאו {totalResults.toLocaleString("he-IL")} הזמנות</span><button type="button" onClick={clearFilters} className="font-bold text-indigo-600 hover:underline">נקה סינון</button></div>}
           {exportError && <p role="alert" className="mt-2 px-1 text-xs font-semibold text-red-600">{exportError}</p>}
         </div>
@@ -269,6 +286,8 @@ export default function OrdersPage() {
                       <div className="min-w-0">
                         <Link href={`/dashboard/orders/${order.id}`} className="break-words font-extrabold text-indigo-600 hover:underline dark:text-indigo-400">{order.order_number}</Link>
                         <p className="mt-1 break-words text-sm font-semibold text-slate-700 dark:text-slate-200">{order.supplier_name}</p>
+                        {!!order.search_provenance?.matched_fields.length && <p className="mt-1 break-words text-[11px] text-indigo-600 dark:text-indigo-300">התאמה לפי: {order.search_provenance.matched_fields.join(" · ")}</p>}
+                        {!!order.search_provenance?.missing_fields.length && <p className="mt-1 flex items-start gap-1 break-words text-[11px] font-semibold text-amber-700 dark:text-amber-300"><AlertCircle size={12} className="mt-0.5 shrink-0" /> מידע חסר: {order.search_provenance.missing_fields.join(" · ")}</p>}
                       </div>
                       <div className="shrink-0"><OrderStatusBadge status={order.status} /></div>
                     </div>
@@ -291,7 +310,11 @@ export default function OrdersPage() {
                   const reminderDue = !!order.next_reminder_at && new Date(order.next_reminder_at).getTime() <= Date.now() && order.reminder_state !== "complete";
                   return (
                     <tr key={order.id} className="group transition-colors hover:bg-indigo-50/40 dark:hover:bg-slate-800/60">
-                      <td className="px-5 py-4"><Link href={`/dashboard/orders/${order.id}`} className="font-extrabold text-indigo-600 hover:text-indigo-700 hover:underline dark:text-indigo-400">{order.order_number}</Link></td>
+                      <td className="px-5 py-4">
+                        <Link href={`/dashboard/orders/${order.id}`} className="font-extrabold text-indigo-600 hover:text-indigo-700 hover:underline dark:text-indigo-400">{order.order_number}</Link>
+                        {!!order.search_provenance?.matched_fields.length && <p className="mt-1 max-w-56 text-[11px] text-indigo-600 dark:text-indigo-300">התאמה: {order.search_provenance.matched_fields.join(" · ")}</p>}
+                        {!!order.search_provenance?.missing_fields.length && <p className="mt-1 max-w-56 text-[11px] font-semibold text-amber-700 dark:text-amber-300">חסר: {order.search_provenance.missing_fields.join(" · ")}</p>}
+                      </td>
                       <td className="px-5 py-4 font-medium text-slate-700 dark:text-slate-200">{order.supplier_name}</td>
                       <td className="px-5 py-4"><OrderStatusBadge status={order.status} /></td>
                       <td className="px-5 py-4">
