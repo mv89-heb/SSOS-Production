@@ -55,11 +55,14 @@ def _amount(value):
     return cents
 
 
-def _order_for_tenant(order_id):
-    order = db.session.scalar(select(Order).where(
+def _order_for_tenant(order_id, *, for_update=False):
+    stmt = select(Order).where(
         Order.id == order_id,
         Order.tenant_id == current_user.tenant_id,
-    ))
+    )
+    if for_update:
+        stmt = stmt.with_for_update()
+    order = db.session.scalar(stmt)
     if order is None:
         raise NotFound("Order not found")
     return order
@@ -93,7 +96,7 @@ def list_order_credit_adjustments(order_id):
 def create_order_credit_adjustment(order_id):
     try:
         PermissionService.require_role_at_least("employee")
-        order = _order_for_tenant(order_id)
+        order = _order_for_tenant(order_id, for_update=True)
         if not order.supplier_id:
             raise Conflict("Order must be linked to a supplier before recording a credit adjustment")
         data = request.get_json(silent=True)
