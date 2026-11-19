@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useDeferredValue, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+import type { Order } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { orderService } from "@/services/order-service";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AlertCircle, ArrowLeft, Bell, BookmarkPlus, CheckCircle2, Clock3, Download, FileSpreadsheet, PackageCheck, Plus, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, Bell, BookmarkPlus, CheckCircle2, Clock3, Download, FileSpreadsheet, Columns3, PackageCheck, Plus, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
 
 const STATUS_FILTERS = [
   { value: "all", label: "הכול" },
@@ -50,6 +51,45 @@ function formatReminder(value: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+
+type OrderColumnKey = "order_number" | "supplier" | "status" | "department" | "project" | "planned_order_date" | "reminder" | "total" | "created_at";
+const ORDER_COLUMNS: { id: OrderColumnKey; label: string }[] = [
+  { id: "order_number", label: "מספר הזמנה" },
+  { id: "supplier", label: "ספק" },
+  { id: "status", label: "סטטוס" },
+  { id: "department", label: "מחלקה" },
+  { id: "project", label: "פרויקט" },
+  { id: "planned_order_date", label: "תאריך מתוכנן" },
+  { id: "reminder", label: "תזכורת" },
+  { id: "total", label: "סה״כ" },
+  { id: "created_at", label: "נוצר בתאריך" },
+];
+const DEFAULT_ORDER_COLUMNS: OrderColumnKey[] = [
+  "order_number", "supplier", "status", "reminder", "total", "created_at",
+];
+
+function renderOrderColumn(order: Order, column: OrderColumnKey, reminderAt: string | null, reminderDue: boolean): ReactNode {
+  switch (column) {
+    case "order_number":
+      return <>
+        <Link href={`/dashboard/orders/${order.id}`} className="font-extrabold text-indigo-600 hover:text-indigo-700 hover:underline dark:text-indigo-400">{order.order_number}</Link>
+        {!!order.search_provenance?.matched_fields.length && <p className="mt-1 max-w-56 text-[11px] text-indigo-600 dark:text-indigo-300">התאמה: {order.search_provenance.matched_fields.join(" · ")}</p>}
+        {!!order.search_provenance?.missing_fields.length && <p className="mt-1 max-w-56 text-[11px] font-semibold text-amber-700 dark:text-amber-300">חסר: {order.search_provenance.missing_fields.join(" · ")}</p>}
+      </>;
+    case "supplier": return <span className="font-medium text-slate-700 dark:text-slate-200">{order.supplier_name}</span>;
+    case "status": return <OrderStatusBadge status={order.status} />;
+    case "department": return <span>{order.department || "—"}</span>;
+    case "project": return <span>{order.project || "—"}</span>;
+    case "planned_order_date": return <span>{order.planned_order_date ? formatDate(order.planned_order_date) : "—"}</span>;
+    case "reminder":
+      return order.reminder_state !== "complete" && reminderAt
+        ? <Link href={`/dashboard/orders/${order.id}`} className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold ${reminderDue ? "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300" : "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"}`}><Bell size={13} /> {reminderDue ? "דורשת טיפול" : reminderAt}</Link>
+        : <span className="text-xs text-slate-400">אין תזכורת</span>;
+    case "total": return <span className="font-bold text-slate-800 dark:text-slate-100">{order.currency} {order.final_total.toLocaleString("he-IL")}</span>;
+    case "created_at": return <span className="text-sm text-slate-500">{formatDate(order.created_at)}</span>;
+  }
 }
 
 function StatusSummary({ label, value, icon: Icon, tone, active, onClick }: StatusSummaryProps) {
