@@ -123,7 +123,7 @@ def create_order_credit_adjustment(order_id):
 
         order_currency = order.currency or "ILS"
         currency = str(data.get("currency") or (invoice.currency if invoice else order_currency) or "ILS").upper().strip()
-        if len(currency) != 3 or not currency.isalpha():
+        if len(currency) != 3 or any(character < "A" or character > "Z" for character in currency):
             raise BadRequest("currency must be a three-letter code")
         expected_currency = invoice.currency if invoice else order_currency
         if currency != expected_currency:
