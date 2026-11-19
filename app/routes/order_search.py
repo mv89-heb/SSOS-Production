@@ -51,9 +51,13 @@ def search_orders():
         try:
             limit = int(request.args.get("limit", DEFAULT_LIMIT))
             offset = int(request.args.get("offset", 0))
-            supplier_id = request.args.get("supplier_id", type=int)
         except (TypeError, ValueError):
-            raise BadRequest("limit, offset and supplier_id must be integers")
+            raise BadRequest("limit and offset must be integers")
+        supplier_raw = request.args.get("supplier_id")
+        try:
+            supplier_id = int(supplier_raw) if supplier_raw not in (None, "") else None
+        except (TypeError, ValueError):
+            raise BadRequest("supplier_id must be an integer")
         if limit < 1 or offset < 0 or (supplier_id is not None and supplier_id < 1):
             raise BadRequest("limit and supplier_id must be positive; offset cannot be negative")
         limit = min(limit, MAX_LIMIT)
