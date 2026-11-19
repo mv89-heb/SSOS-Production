@@ -153,7 +153,11 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (columnsLoaded) {
-      window.localStorage.setItem("ssos.orders.visible-columns.v1", JSON.stringify(visibleColumns));
+      try {
+        window.localStorage.setItem("ssos.orders.visible-columns.v1", JSON.stringify(visibleColumns));
+      } catch {
+        // The table remains usable when browser storage is unavailable.
+      }
     }
   }, [columnsLoaded, visibleColumns]);
 
@@ -358,6 +362,13 @@ export default function OrdersPage() {
               <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => { setEndDate(event.target.value); setSelectedSavedSearchId(""); setPage(0); }} className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-indigo-950" />
             </label>
           </div>
+          {filteredOrders.length > 0 && (
+            <div className="mt-2 flex justify-end">
+              <button type="button" onClick={() => togglePageSelection(!allPageOrdersSelected)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-indigo-600 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40">
+                {allPageOrdersSelected ? "בטל בחירת העמוד" : "בחר את כל ההזמנות בעמוד"}
+              </button>
+            </div>
+          )}
           <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 dark:border-slate-800 sm:flex-row sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-bold text-slate-500">
               חיפושים שמורים ({savedSearches.length}/20)
