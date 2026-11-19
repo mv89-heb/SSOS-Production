@@ -139,10 +139,10 @@ def search_orders():
 
         if csv_export:
             output = io.StringIO(newline="")
-            writer = csv.writer(output, lineterminator="\\r\\n")
+            writer = csv.writer(output, lineterminator="\r\n")
             writer.writerow([
                 "מספר הזמנה", "ספק", "סטטוס", "מחלקה", "פרויקט",
-                "תאריך יצירה", "תאריך הזמנה מתוכנן", "מטבע", "סה\\"כ", "פריטים",
+                "תאריך יצירה", "תאריך הזמנה מתוכנן", "מטבע", 'סה"כ', "פריטים",
             ])
             status_labels = {
                 "draft": "טיוטה", "submitted": "ממתינה לאישור",
@@ -170,7 +170,7 @@ def search_orders():
                     float(order.final_total or 0),
                     _csv_text(" | ".join(item_parts)),
                 ])
-            response = Response("\\ufeff" + output.getvalue(), mimetype="text/csv; charset=utf-8")
+            response = Response("\ufeff" + output.getvalue(), mimetype="text/csv; charset=utf-8")
             response.headers["Content-Disposition"] = 'attachment; filename="orders-export.csv"'
             response.headers["X-Export-Row-Count"] = str(len(orders))
             return response
