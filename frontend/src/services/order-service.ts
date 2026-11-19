@@ -97,6 +97,14 @@ export const orderService = {
     return data;
   },
 
+  exportOrders: async (params: OrderSearchParams = {}) => {
+    const { data } = await apiClient.get<Blob>("/api/orders/search", {
+      params: { ...params, format: "csv", limit: 5000, offset: 0 },
+      responseType: "blob",
+    });
+    return data;
+  },
+
   getOrderById: async (id: number) => {
     const { data } = await apiClient.get<{ success: boolean; order: Order }>(`/api/orders/${id}`);
     return data.order;
