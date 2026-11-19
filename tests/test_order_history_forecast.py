@@ -314,8 +314,137 @@ def test_supplier_forecast_includes_only_verified_finalized_historical_orders(db
         target_date=date(2020, 1, 27),
     )
     assert result["order_count"] == 2
+    assert result["source"] == "historical_orders"
+    assert result["source_counts"] == {
+        "operational_orders": 0,
+        "historical_orders": 2,
+        "total_orders": 2,
+    }
     forecast = result["products"][0]
     assert forecast["normal_weekly_average"] == 6.667
     assert forecast["recommended_quantity"] == 10
+    assert forecast["operational_order_count"] == 0
+    assert forecast["historical_order_count"] == 2
     assert forecast["data_ready"] is True
 
+
+
+def test_supplier_forecast_reports_operational_and_historical_source_counts(db, tenant_a_admin, monkeypatch):
+    from app.models.historical_document_import import HistoricalImportBatch, HistoricalPurchaseOrder
+
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    user_id = tenant_a_admin[0]["user"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="Combined History Supplier")
+    db.session.add(supplier)
+    db.session.flush()
+    product = Product(
+        tenant_id=tenant_id, supplier_id=supplier.id, name="Combined History Product",
+        sku="COMBINED-FORECAST-001", unit="יחידה", active=True,
+    )
+    db.session.add(product)
+    db.session.flush()
+
+    operational = Order(
+        tenant_id=tenant_id, user_id=user_id, supplier_id=supplier.id,
+        order_number="COMBINED-OP-001", supplier_name=supplier.name,
+        status=STATUS_SENT, planned_order_date=date(2020, 1, 6),
+        created_at=datetime(2020, 1, 6, tzinfo=timezone.utc),
+    )
+    db.session.add(operational)
+    db.session.flush()
+    db.session.add(OrderItem(
+        tenant_id=tenant_id, order_id=operational.id, product_id=product.id,
+        quantity=Decimal("10"), unit_price=Decimal("1"), currency="ILS",
+        product_snapshot={"unit": "יחידה", "stock_unit": "יחידה"},
+    ))
+
+    batch = HistoricalImportBatch(
+        tenant_id=tenant_id, name="Combined historical batch", status="finalized",
+        created_by=user_id, finalized_by=user_id,
+    )
+    db.session.add(batch)
+    db.session.flush()
+    for index, order_date in enumerate((date(2020, 1, 13), date(2020, 1, 20))):
+        db.session.add(HistoricalPurchaseOrder(
+            tenant_id=tenant_id, batch_id=batch.id, supplier_id=supplier.id,
+            supplier_name=supplier.name, order_reference=f"COMBINED-HIST-{index}",
+            order_date=order_date,
+            items=[{
+                "description": product.name, "product_id": product.id,
+                "quantity": 10, "quantity_unit": "piece", "stock_unit": "יחידה",
+            }],
+            created_by=user_id,
+        ))
+    db.session.commit()
+
+    monkeypatch.setenv("SSOS_BOOSTED_CYCLE_WEEKS", "4")
+    monkeypatch.setenv("SSOS_BOOSTED_WEEKS", "1")
+    monkeypatch.setenv("SSOS_BOOSTED_WEEK_MULTIPLIER", "1.4")
+    result = OrderHistoryForecastService(tenant_id).supplier_forecast(
+        supplier.id, start_date=date(2020, 1, 6), end_date=date(2020, 2, 2),
+        target_date=date(2020, 1, 20),
+    )
+
+    assert result["source"] == "operational_and_historical_orders"
+    assert result["source_counts"] == {
+        "operational_orders": 1,
+        "historical_orders": 2,
+        "total_orders": 3,
+    }
+    assert result["order_count"] == 3
+    forecast = result["products"][0]
+    assert forecast["operational_order_count"] == 1
+    assert forecast["historical_order_count"] == 2
+    assert forecast["complete_week_order_count"] == 3
+    assert forecast["normal_weekly_average"] == 10
+    assert forecast["data_ready"] is True
+
+
+def test_supplier_forecast_excludes_partial_boundary_weeks_from_weekly_average(db, tenant_a_admin, monkeypatch):
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="Partial Week Supplier")
+    db.session.add(supplier)
+    db.session.flush()
+    product = Product(
+        tenant_id=tenant_id, supplier_id=supplier.id, name="Partial Week Product",
+        sku="PARTIAL-WEEK-001", unit="יחידה", active=True,
+    )
+    db.session.add(product)
+    db.session.flush()
+
+    # January 6 is a partial boundary week because the requested period starts Wednesday.
+    for index, (order_date, quantity) in enumerate((
+        (date(2020, 1, 6), Decimal("100")),
+        (date(2020, 1, 13), Decimal("10")),
+    )):
+        order = Order(
+            tenant_id=tenant_id, user_id=tenant_a_admin[0]["user"]["id"],
+            supplier_id=supplier.id, order_number=f"PARTIAL-{index}",
+            supplier_name=supplier.name, status=STATUS_SENT,
+            planned_order_date=order_date,
+            created_at=datetime.combine(order_date, datetime.min.time(), tzinfo=timezone.utc),
+        )
+        db.session.add(order)
+        db.session.flush()
+        db.session.add(OrderItem(
+            tenant_id=tenant_id, order_id=order.id, product_id=product.id,
+            quantity=quantity, unit_price=Decimal("1"), currency="ILS",
+            product_snapshot={"unit": "יחידה", "stock_unit": "יחידה"},
+        ))
+    db.session.commit()
+
+    monkeypatch.setenv("SSOS_BOOSTED_CYCLE_WEEKS", "4")
+    monkeypatch.setenv("SSOS_BOOSTED_WEEKS", "1")
+    monkeypatch.setenv("SSOS_BOOSTED_WEEK_MULTIPLIER", "1.4")
+    result = OrderHistoryForecastService(tenant_id).supplier_forecast(
+        supplier.id, start_date=date(2020, 1, 8), end_date=date(2020, 1, 26),
+        target_date=date(2020, 1, 20),
+    )
+
+    assert result["complete_weeks_in_period"] == 2
+    assert result["partial_boundary_weeks_excluded"] == 1
+    forecast = result["products"][0]
+    assert forecast["normal_weekly_average"] == 5
+    assert forecast["complete_week_order_count"] == 1
+    assert forecast["data_ready"] is False
+    assert forecast["recommended_quantity"] == 0
