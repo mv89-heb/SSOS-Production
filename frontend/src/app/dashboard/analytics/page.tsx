@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   Activity, AlertTriangle, BarChart3, Boxes, CalendarDays, CheckCircle2,
-  ChevronLeft, CircleDollarSign, Clock3, Package, RefreshCw, ShoppingCart,
+  ChevronLeft, CircleDollarSign, Clock3, FileText, Package, RefreshCw, ShoppingCart,
   Truck, Wallet,
 } from "lucide-react";
 import { apiClient } from "@/services/api-client";
@@ -254,7 +254,7 @@ export default function AnalyticsCenterPage() {
           <Metric label="הזמנות במערכת" value={orders.isSuccess?number(totalOrders):"—"} note={orders.isSuccess?`${number(openOrders)} פתוחות בתהליכי עבודה${orders.data.complete?"":` · מוצגות ${number(orderRows.length)} מתוך ${number(totalOrders)}`}`:"מקור ההזמנות לא זמין"} icon={ShoppingCart}/>
           <Metric label="מוצרים פעילים" value={catalog.isSuccess?number(productRows.length):"—"} note="מתוך הקטלוג הפעיל" icon={Package}/>
           <Metric label="ספקים פעילים" value={suppliers.isSuccess?number(supplierRows.length):"—"} note="ספקים בארגון הנוכחי" icon={Truck}/>
-          <Metric label="מוצרים במעקב מלאי" value={recommendations.isSuccess?number(inventoryRows.length):"—"} note="תחזית מלאי אינה ספירה פיזית" icon={Boxes}/><Metric label="מוצרים במלאי נמוך" value={inventory.isSuccess?number(inventory.data.stats.low_stock):"—"} note="לפי סיכום המלאי, לא לפי תחזית בלבד" icon={AlertTriangle} state={inventory.isSuccess && inventory.data.stats.low_stock>0?"warning":"normal"}/><Metric label="תנועות מלאי מתועדות" value={inventory.isSuccess?number(inventory.data.stats.movement_count):"—"} note="תנועות שנרשמו במערכת" icon={Activity}/>
+          <Metric label="מוצרים במעקב מלאי" value={recommendations.isSuccess?number(inventoryRows.length):"—"} note="תחזית מלאי אינה ספירה פיזית" icon={Boxes}/><Metric label="מוצרים במלאי נמוך" value={inventory.isSuccess?number(inventory.data.stats.low_stock):"—"} note="לפי סיכום המלאי, לא לפי תחזית בלבד" icon={AlertTriangle} state={inventory.isSuccess && inventory.data.stats.low_stock>0?"warning":"normal"}/><Metric label="תנועות מלאי מתועדות" value={inventory.isSuccess?number(inventory.data.stats.movement_count):"—"} note="תנועות שנרשמו במערכת" icon={Activity}/><Metric label="מסמכים שנותחו" value={readiness.isSuccess?number(readinessData?.documents.analyses):"—"} note="מסמכי רכש שעברו ניתוח במערכת" icon={FileText}/><Metric label="תצפיות מחיר" value={readiness.isSuccess?number(readinessData?.price_intelligence.observation_rows):"—"} note="היסטוריית מחירים שנקלטה בפועל" icon={CircleDollarSign}/>
           {orderCurrencies.map(([code,value])=><Metric key={code} label={`הזמנות שאושרו · ${code}`} value={money(value,code)} note="לפי תאריך יצירת הזמנה" icon={CircleDollarSign}/>)}
           <Metric label="חשבוניות ספק" value={spend.isSuccess?Object.entries(spendData?.invoiced.totals_by_currency??{}).map(([code,value])=>money(value,code)).join(" · ")||"אין נתונים":"—"} note="לא מחובר לסכום ההזמנות" icon={Wallet}/>
           <Metric label="תשלומים שבוצעו" value={spend.isSuccess?Object.entries(spendData?.paid.totals_by_currency??{}).map(([code,value])=>money(value,code)).join(" · ")||"אין נתונים":"—"} note="תשלומים שנרשמו בפועל" icon={CheckCircle2}/>
