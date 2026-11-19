@@ -70,6 +70,7 @@ export function OrderInvoicePanel({ order }: { order: Order }) {
     queryClient.invalidateQueries({ queryKey: ["order-invoices", order.id] }),
     queryClient.invalidateQueries({ queryKey: ["order-credit-adjustments", order.id] }),
     queryClient.invalidateQueries({ queryKey: ["order", order.id] }),
+    queryClient.invalidateQueries({ queryKey: ["procurement-spend"] }),
   ]);
   const createInvoice = useMutation({
     mutationFn: async () => (await apiClient.post<{ success: boolean; invoice: Invoice }>(
