@@ -399,7 +399,6 @@ def _similarity(left, right):
 def _manual_import_catalog(tenant_id):
     suppliers = db.session.scalars(select(Supplier).where(
         Supplier.tenant_id == tenant_id,
-        Supplier.active.is_(True),
     )).all()
     products = db.session.scalars(select(Product).where(
         Product.tenant_id == tenant_id,
