@@ -346,3 +346,84 @@ def test_order_search_explains_incomplete_order_source_data(
         "scope": "current_page",
     }
     assert payload["orders"][0]["search_provenance"]["missing_fields"] == ["פירוט פריטים"]
+
+
+def test_order_search_xlsx_export_preserves_hebrew_filters_and_safe_cells(
+    logged_in_client_a, make_order
+):
+    from io import BytesIO
+    from openpyxl import load_workbook
+
+    supplier_name = "מאפיית ירושלים"
+    created, _, _ = make_order(
+        logged_in_client_a,
+        supplier_name=supplier_name,
+        product_name="לחם אחיד",
+        sku="BREAD-XLSX",
+    )
+    assert created.status_code == 201, created.get_json()
+    order_id = created.get_json()["order"]["id"]
+    updated = logged_in_client_a.put(
+        f"/api/orders/{order_id}",
+        json={"department": "=SUM(1,1)"},
+    )
+    assert updated.status_code == 200, updated.get_json()
+
+    exported = logged_in_client_a.get(
+        "/api/orders/search?format=xlsx&q=לחם+אחיד"
+    )
+    assert exported.status_code == 200
+    assert exported.mimetype == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert exported.headers["X-Export-Row-Count"] == "1"
+    assert exported.headers["Content-Disposition"].endswith('filename="orders-export.xlsx"')
+
+    workbook = load_workbook(BytesIO(exported.data), data_only=False)
+    sheet = workbook["הזמנות"]
+    assert sheet.sheet_view.rightToLeft is True
+    assert sheet.freeze_panes == "A2"
+    assert sheet.auto_filter.ref == "A1:J2"
+    assert sheet.cell(1, 1).value == "מספר הזמנה"
+    assert sheet.cell(2, 2).value == supplier_name
+    assert sheet.cell(2, 4).value == "'=SUM(1,1)"
+    assert sheet.cell(2, 4).data_type == "s"
+    assert sheet.cell(2, 10).value.find("לחם אחיד") >= 0
+    assert sheet.cell(2, 9).data_type == "n"
+    assert "פרטי ייצוא" in workbook.sheetnames
+    info = workbook["פרטי ייצוא"]
+    assert info["A2"].value == "מספר רשומות"
+    assert info["B2"].value == 1
+    assert any(row[0].value == "חיפוש" and row[1].value == "לחם אחיד" for row in info.iter_rows(min_row=3))
+
+
+def test_order_search_xlsx_export_is_tenant_scoped(
+    logged_in_client_a, logged_in_client_b, make_order
+):
+    created, _, _ = make_order(
+        logged_in_client_a,
+        supplier_name="ספק אקסל פרטי",
+        product_name="מוצר חסוי אקסל",
+        sku="PRIVATE-XLSX",
+    )
+    assert created.status_code == 201
+
+    exported = logged_in_client_b.get(
+        "/api/orders/search?format=xlsx&q=מוצר+חסוי+אקסל"
+    )
+    assert exported.status_code == 200
+    assert exported.headers["X-Export-Row-Count"] == "0"
+
+
+def test_order_search_xlsx_export_rejects_oversized_result(
+    logged_in_client_a, make_order, monkeypatch
+):
+    first, _, _ = make_order(logged_in_client_a, sku="XLSX-LIMIT-ONE")
+    second, _, _ = make_order(logged_in_client_a, sku="XLSX-LIMIT-TWO")
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    monkeypatch.setattr("app.routes.order_search.MAX_EXPORT_ROWS", 1)
+    exported = logged_in_client_a.get("/api/orders/search?format=xlsx")
+    assert exported.status_code == 413
+    assert exported.get_json()["error"] == "export_too_large"
