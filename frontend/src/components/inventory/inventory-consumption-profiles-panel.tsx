@@ -38,6 +38,19 @@ export default function InventoryConsumptionProfilesPanel() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const availableProducts = useMemo(() => (options.data?.products ?? []).filter(p => form.supplier_ids.includes(p.supplier_id)), [options.data, form.supplier_ids]);
+  const supplierTotals = useMemo(() => {
+    const totals = new Map<number, { name: string; weekly: number }>();
+    for (const profile of profiles.data ?? []) {
+      for (const supplierId of profile.supplier_ids) {
+        const supplierName = profile.supplier_names[supplierId] ?? String(supplierId);
+        const current = totals.get(supplierId) ?? { name: supplierName, weekly: 0 };
+        current.weekly += profile.weighted_weekly_consumption;
+        totals.set(supplierId, current);
+      }
+    }
+    return Array.from(totals.entries()).map(([id, value]) => ({ id, ...value })).sort((a,b)=>b.weekly-a.weekly);
+  }, [profiles.data]);
+  const maxSupplierWeekly = Math.max(1, ...supplierTotals.map(item => item.weekly));
   const weighted = form.reinforcement_cycle_weeks && number(form.reinforcement_cycle_weeks) >= 1
     ? (number(form.regular_weekly_consumption) * (number(form.reinforcement_cycle_weeks) - 1) + number(form.reinforced_weekly_consumption)) / number(form.reinforcement_cycle_weeks)
     : 0;
@@ -85,6 +98,11 @@ export default function InventoryConsumptionProfilesPanel() {
       <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">המרת חודש תכנון</div><div className="text-2xl font-black">4 שבועות</div></div>
     </div>
 
+    {supplierTotals.length > 0 && <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+      <h3 className="mb-3 font-black">השוואת קצב צריכה משוקלל לפי ספק</h3>
+      <div className="space-y-3">{supplierTotals.map(item=><div key={item.id} className="grid grid-cols-[minmax(90px,150px)_1fr_70px] items-center gap-3 text-sm"><span className="truncate font-bold">{item.name}</span><div className="h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-indigo-500" style={{width:`${Math.max(2,item.weekly/maxSupplierWeekly*100)}%`}}/></div><span className="text-left font-black tabular-nums">{qty(item.weekly)}</span></div>)}</div>
+      <p className="mt-3 text-xs text-slate-500">ההשוואה מסכמת פרופילים המשויכים לכל ספק. בפרופיל עם יותר מספק אחד, הצריכה מוצגת לכל הספקים האפשריים ואינה מחולקת ביניהם.</p>
+    </div>}
     {formOpen && <div className="space-y-3 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 dark:border-indigo-900 dark:bg-indigo-950/20">
       <div className="flex items-center justify-between"><h3 className="font-black">{editingId ? "עריכת פרופיל צריכה" : "הוספת פרופיל צריכה"}</h3><button onClick={reset} aria-label="סגירה" className="rounded-lg p-2"><X size={17}/></button></div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
