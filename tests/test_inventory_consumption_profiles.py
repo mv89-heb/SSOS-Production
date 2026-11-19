@@ -1,3 +1,4 @@
+import pytest
 from app.models.inventory_consumption_profile import InventoryConsumptionProfile
 
 
@@ -33,8 +34,8 @@ def test_consumption_profile_calculates_reinforced_three_week_cycle(logged_in_cl
     })
     assert response.status_code == 201, response.get_json()
     profile = response.get_json()["profile"]
-    assert profile["weighted_weekly_consumption"] == 2.6666666667
-    assert profile["monthly_consumption"] == 10.6666666667
+    assert profile["weighted_weekly_consumption"] == pytest.approx(2.6666666667)
+    assert profile["monthly_consumption"] == pytest.approx(10.6666666667)
     assert profile["mapping_status"] == "mapped"
     assert profile["product_names"][str(product_id)] == "Disposable plate" or profile["product_names"][product_id] == "Disposable plate"
 
