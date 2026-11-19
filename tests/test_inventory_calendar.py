@@ -184,6 +184,8 @@ def test_explicit_inbound_quantities_reduce_recommended_order(db, tenant_a_admin
         },
     )
     monkeypatch.setattr(service, "periods", lambda **kwargs: [])
+    # This test isolates inbound-quantity arithmetic from the date-dependent boosted-week forecast.
+    monkeypatch.setattr(service, "_seasonal_multiplier_for_date", lambda target_date, config: Decimal("1"))
 
     without_inbound = service.recommendation(product.id, safety_days=2)
     with_inbound = service.recommendation(
