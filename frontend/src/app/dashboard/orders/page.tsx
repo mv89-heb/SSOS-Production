@@ -66,14 +66,18 @@ export default function OrdersPage() {
   const { data: orders } = useQuery({ queryKey: ["orders"], queryFn: () => orderService.getOrders() });
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [page, setPage] = useState(0);
   const deferredSearch = useDeferredValue(search.trim());
   const pageSize = 50;
   const { data: searchResult, isLoading, isError, refetch } = useQuery({
-    queryKey: ["orders", "search", deferredSearch, status, page],
+    queryKey: ["orders", "search", deferredSearch, status, startDate, endDate, page],
     queryFn: () => orderService.searchOrders({
       q: deferredSearch || undefined,
       status: status === "all" ? undefined : status,
+      start_date: startDate || undefined,
+      end_date: endDate || undefined,
       limit: pageSize,
       offset: page * pageSize,
     }),
@@ -81,12 +85,12 @@ export default function OrdersPage() {
   });
   const filteredOrders = useMemo(() => searchResult?.orders ?? [], [searchResult]);
   const count = (value: string) => (orders ?? []).filter((order) => order.status === value).length;
-  const hasFilters = Boolean(search.trim()) || status !== "all";
+  const hasFilters = Boolean(search.trim()) || status !== "all" || Boolean(startDate) || Boolean(endDate);
   const totalResults = searchResult?.pagination.total ?? 0;
   const hasPreviousPage = page > 0;
   const hasNextPage = Boolean(searchResult?.pagination.has_more);
   const changeStatus = (value: StatusFilter) => { setStatus(value); setPage(0); };
-  const clearFilters = () => { setSearch(""); changeStatus("all"); };
+  const clearFilters = () => { setSearch(""); setStartDate(""); setEndDate(""); changeStatus("all"); };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -119,6 +123,16 @@ export default function OrdersPage() {
             <div className="flex gap-1.5 overflow-x-auto pb-1">
               {STATUS_FILTERS.map((filter) => <button key={filter.value} type="button" onClick={() => changeStatus(filter.value)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition ${status === filter.value ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300"}`}>{filter.label}</button>)}
             </div>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-md">
+            <label className="flex flex-col gap-1 text-xs font-bold text-slate-500">
+              מתאריך
+              <input type="date" value={startDate} max={endDate || undefined} onChange={(event) => { setStartDate(event.target.value); setPage(0); }} className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-indigo-950" />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-bold text-slate-500">
+              עד תאריך
+              <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => { setEndDate(event.target.value); setPage(0); }} className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-indigo-950" />
+            </label>
           </div>
           {hasFilters && <div className="mt-2 flex items-center justify-between px-1 text-xs"><span className="text-slate-400">נמצאו {totalResults.toLocaleString("he-IL")} הזמנות</span><button type="button" onClick={clearFilters} className="font-bold text-indigo-600 hover:underline">נקה סינון</button></div>}
         </div>
