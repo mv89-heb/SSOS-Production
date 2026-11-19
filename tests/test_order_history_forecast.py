@@ -414,7 +414,7 @@ def test_supplier_forecast_excludes_partial_boundary_weeks_from_weekly_average(d
 
     # January 6 is a partial boundary week because the requested period starts Wednesday.
     for index, (order_date, quantity) in enumerate((
-        (date(2020, 1, 6), Decimal("100")),
+        (date(2020, 1, 9), Decimal("100")),
         (date(2020, 1, 13), Decimal("10")),
     )):
         order = Order(
