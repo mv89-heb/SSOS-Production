@@ -12,6 +12,8 @@ from app.models.import_execution import (
 )
 from app.models.import_mapping import MAPPING_STATUS_APPROVED
 from app.models.import_session import ImportSession
+from app.models.price_history import PriceHistory
+from app.models.price_observation import PriceObservation
 from app.models.import_validation import (
     ACTION_CREATE,
     ACTION_UPDATE,
@@ -296,6 +298,23 @@ class ImportExecutionService:
                 if supplier is None:
                     continue
                 if not self.product_repo.get_by_supplier(supplier_id) and not supplier.offered_products:
+                    price_history_count = int(db.session.scalar(
+                        select(PriceHistory.id).where(
+                            PriceHistory.tenant_id == self.tenant_id,
+                            PriceHistory.supplier_id == supplier_id,
+                        ).limit(1)
+                    ) is not None)
+                    price_observation_count = int(db.session.scalar(
+                        select(PriceObservation.id).where(
+                            PriceObservation.tenant_id == self.tenant_id,
+                            PriceObservation.supplier_id == supplier_id,
+                        ).limit(1)
+                    ) is not None)
+                    if price_history_count or price_observation_count:
+                        raise Conflict(
+                            f"Cannot roll back supplier #{supplier_id}: historical price records exist. "
+                            "The rollback was stopped to preserve price history."
+                        )
                     self.supplier_repo.delete(supplier)
 
             execution.status = EXECUTION_STATUS_ROLLED_BACK
