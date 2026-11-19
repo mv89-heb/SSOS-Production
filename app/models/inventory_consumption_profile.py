@@ -34,6 +34,8 @@ class InventoryConsumptionProfile(db.Model):
     safety_stock = db.Column(db.Numeric(12, 3), nullable=False, default=0)
     order_status = db.Column(db.String(20), nullable=False, default="healthy")
     active = db.Column(db.Boolean, nullable=False, default=True)
+    created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    updated_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     source_note = db.Column(db.Text)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -76,6 +78,10 @@ class InventoryConsumptionProfile(db.Model):
             "safety_stock": self._number(self.safety_stock),
             "order_status": self.order_status,
             "active": self.active,
+            "created_by": self.created_by,
+            "updated_by": self.updated_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "source_note": self.source_note,
             "mapping_status": "mapped" if self.product_ids else "pending",
         }
