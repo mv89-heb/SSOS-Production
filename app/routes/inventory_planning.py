@@ -290,6 +290,12 @@ def create_consumption_profile():
         category = str(payload.get("category") or "").strip()
         if not name or not category:
             raise BadRequest("name and category are required")
+        duplicate = db.session.scalar(select(InventoryConsumptionProfile.id).where(
+            InventoryConsumptionProfile.tenant_id == current_user.tenant_id,
+            InventoryConsumptionProfile.name == name,
+        ))
+        if duplicate:
+            raise BadRequest("A consumption profile with this name already exists")
         supplier_ids = _profile_ids(payload, "supplier_ids", Supplier)
         product_ids = _profile_ids(payload, "product_ids", Product)
         if product_ids:
@@ -345,6 +351,13 @@ def update_consumption_profile(profile_id):
             profile.category = str(payload.get("category") or "").strip()
         if not profile.name or not profile.category:
             raise BadRequest("name and category are required")
+        duplicate = db.session.scalar(select(InventoryConsumptionProfile.id).where(
+            InventoryConsumptionProfile.tenant_id == current_user.tenant_id,
+            InventoryConsumptionProfile.name == profile.name,
+            InventoryConsumptionProfile.id != profile.id,
+        ))
+        if duplicate:
+            raise BadRequest("A consumption profile with this name already exists")
         if "supplier_ids" in payload:
             profile.supplier_ids = _profile_ids(payload, "supplier_ids", Supplier)
         if "product_ids" in payload:
