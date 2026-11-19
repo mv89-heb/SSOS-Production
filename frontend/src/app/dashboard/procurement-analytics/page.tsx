@@ -41,6 +41,8 @@ type ReliabilityMetric = {
   missing_planned_date: number;
   missing_receipt_date: number;
   orders_without_posted_receipt: number;
+  credit_adjustment_count: number;
+  orders_with_credit_adjustments: number;
   credit_adjustment_frequency: number | null;
   credit_adjustment_data_available: boolean;
   credit_adjustment_note: string;
@@ -183,7 +185,7 @@ export default function ProcurementAnalyticsPage() {
                     <div><div className="text-xs text-slate-500">איחורים</div><div className="font-bold">{metric.late_rate_percent === null ? "אין מדגם" : `${metric.late_rate_percent}%`}<span className="mr-1 text-xs font-normal text-slate-500">({metric.late_orders}/{metric.delivery_sample_size})</span></div></div>
                     <div><div className="text-xs text-slate-500">חוסרים</div><div className="font-bold">{metric.shortage_rate_percent === null ? "אין מדגם" : `${metric.shortage_rate_percent}%`}<span className="mr-1 text-xs font-normal text-slate-500">({metric.short_orders}/{metric.shortage_sample_size})</span></div></div>
                     <div><div className="text-xs text-slate-500">תאריכים חסרים</div><div className="font-bold">{metric.missing_planned_date + metric.missing_receipt_date}</div><div className="text-[11px] text-slate-500">תכנון: {metric.missing_planned_date} · קבלה: {metric.missing_receipt_date}</div></div>
-                    <div><div className="text-xs text-slate-500">זיכויים / התאמות</div><div className="font-bold">אין נתונים מובנים</div></div>
+                    <div><div className="text-xs text-slate-500">הזמנות עם זיכוי / התאמה</div><div className="font-bold">{metric.credit_adjustment_data_available ? (metric.credit_adjustment_frequency === null ? "אין מדגם" : `${metric.credit_adjustment_frequency}%`) : "אין נתונים"}</div><div className="text-[11px] text-slate-500">הזמנות: {metric.orders_with_credit_adjustments}/{metric.completed_orders} · מסמכים: {metric.credit_adjustment_count}</div></div>
                   </div>
                   <p className="mt-2 text-[11px] leading-5 text-slate-500">{metric.credit_adjustment_note}</p>
                 </div>
