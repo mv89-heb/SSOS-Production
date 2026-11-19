@@ -25,6 +25,8 @@ def test_order_search_filters_supplier_scope_and_returns_pagination(
         "total": 1, "limit": 1, "offset": 0, "has_more": False
     }
     assert [order["id"] for order in payload["orders"]] == [first_order["id"]]
+    assert payload["orders"][0]["search_provenance"]["matched_fields"] == ["ספק"]
+    assert {"key": "status", "label": "סטטוס", "value": "טיוטה"} in payload["search_context"]["active_filters"]
 
     project_search = logged_in_client_a.get("/api/orders/search?q=שבת")
     assert project_search.status_code == 200
