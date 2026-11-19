@@ -150,6 +150,18 @@ def test_supplier_credit_adjustment_validates_invoice_order_currency_and_tenant(
     )
     assert wrong_currency.status_code == 409
 
+    non_ascii_currency = logged_in_client_a.post(
+        f"/api/orders/{first_order_id}/credit-adjustments",
+        json={
+            "reference_number": "CREDIT-NON-ASCII-CURRENCY",
+            "adjustment_type": "credit_note",
+            "adjustment_date": "2026-11-10",
+            "amount": 5,
+            "currency": "אבג",
+        },
+    )
+    assert non_ascii_currency.status_code == 400
+
     invalid_amount = logged_in_client_a.post(
         f"/api/orders/{first_order_id}/credit-adjustments",
         json={
