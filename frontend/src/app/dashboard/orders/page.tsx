@@ -509,6 +509,24 @@ export default function OrdersPage() {
           </>
         )}
       </section>
+      {showBulkConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onClick={(event) => { if (event.target === event.currentTarget) setShowBulkConfirm(false); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="bulk-send-title" className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <h2 id="bulk-send-title" className="text-lg font-extrabold text-slate-900 dark:text-white">אישור סימון הזמנות כנשלחו</h2>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">הפעולה תעביר את {selectedOrders.length} ההזמנות הבאות ממצב "אושרה" למצב "נשלחה לספק". כל ההזמנות יעודכנו יחד או שאף אחת לא תעודכן.</p>
+            <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800/70">
+              {selectedOrders.map((order) => <li key={order.id} className="flex justify-between gap-3"><span className="font-bold">{order.order_number}</span><span className="truncate text-slate-500">{order.supplier_name}</span></li>)}
+            </ul>
+            <p className="mt-3 text-xs text-slate-500">לכל הזמנה יירשם אירוע נפרד ביומן הביקורת. לא נשלחת הודעה לספק מתוך פעולה זו.</p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setShowBulkConfirm(false)} disabled={bulkMarkSentMutation.isPending}>ביטול</Button>
+              <Button type="button" onClick={() => bulkMarkSentMutation.mutate(selectedOrderIds)} disabled={bulkMarkSentMutation.isPending || !canBulkMarkSent}>
+                {bulkMarkSentMutation.isPending ? "מעדכן..." : "אשר וסמן כנשלח"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
