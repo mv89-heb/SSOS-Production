@@ -1,5 +1,8 @@
 import csv
 import io
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 from datetime import date, datetime, time, timedelta, timezone
 
 from flask import Blueprint, Response, jsonify, request
@@ -121,6 +124,99 @@ def _csv_text(value):
     return "'" + text if formula_candidate.startswith(("=", "+", "-", "@")) or text.startswith(("\t", "\r")) else text
 
 
+def _build_xlsx_export(orders, filters):
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "הזמנות"
+    sheet.sheet_view.rightToLeft = True
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = f"A1:J{len(orders) + 1}"
+    sheet.sheet_properties.pageSetUpPr.fitToPage = True
+    sheet.page_setup.orientation = "landscape"
+    sheet.page_setup.fitToWidth = 1
+    sheet.print_title_rows = "1:1"
+
+    headers = [
+        "מספר הזמנה", "ספק", "סטטוס", "מחלקה", "פרויקט",
+        "תאריך יצירה", "תאריך הזמנה מתוכנן", "מטבע", 'סה"כ', "פריטים",
+    ]
+    sheet.append(headers)
+    header_fill = PatternFill("solid", fgColor="243B63")
+    for cell in sheet[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    sheet.row_dimensions[1].height = 30
+
+    status_labels = {
+        "draft": "טיוטה", "submitted": "ממתינה לאישור",
+        "approved": "אושרה", "sent": "נשלחה לספק",
+        "completed": "הושלמה", "cancelled": "בוטלה",
+    }
+    for order in orders:
+        item_parts = []
+        for index, item in enumerate(order.items or []):
+            if not isinstance(item, dict):
+                continue
+            product_name = item.get("product_name") or item.get("name") or f"פריט {index + 1}"
+            quantity = item.get("quantity", "")
+            unit = item.get("unit") or ""
+            item_parts.append(f"{product_name} × {quantity} {unit}".strip())
+
+        created_at = order.created_at.replace(tzinfo=None) if order.created_at else None
+        planned_at = order.planned_order_date
+        if planned_at and hasattr(planned_at, "replace") and getattr(planned_at, "tzinfo", None):
+            planned_at = planned_at.replace(tzinfo=None)
+        sheet.append([
+            _csv_text(order.order_number),
+            _csv_text(order.supplier_name),
+            status_labels.get(order.status, _csv_text(order.status)),
+            _csv_text(order.department),
+            _csv_text(order.project),
+            created_at,
+            planned_at,
+            _csv_text(order.currency),
+            float(order.final_total or 0),
+            _csv_text(" | ".join(item_parts)),
+        ])
+        row = sheet.max_row
+        sheet.cell(row, 6).number_format = "dd/mm/yyyy hh:mm"
+        sheet.cell(row, 7).number_format = "dd/mm/yyyy"
+        sheet.cell(row, 9).number_format = '#,##0.00'
+        for column in (1, 2, 3, 4, 5, 8, 10):
+            sheet.cell(row, column).data_type = "s"
+        for cell in sheet[row]:
+            cell.alignment = Alignment(vertical="top", wrap_text=cell.column in (2, 4, 5, 10))
+
+    widths = [20, 28, 20, 20, 20, 20, 20, 10, 16, 55]
+    for index, width in enumerate(widths, start=1):
+        sheet.column_dimensions[get_column_letter(index)].width = width
+
+    info = workbook.create_sheet("פרטי ייצוא")
+    info.sheet_view.rightToLeft = True
+    info.append(["פרט", "ערך"])
+    info.append(["מספר רשומות", len(orders)])
+    for key, label in (
+        ("q", "חיפוש"), ("status", "סטטוס"), ("supplier_id", "מזהה ספק"),
+        ("start_date", "מתאריך"), ("end_date", "עד תאריך"),
+    ):
+        value = filters.get(key)
+        if value not in (None, ""):
+            info.append([label, _csv_text(value)])
+    for cell in info[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = header_fill
+    info.column_dimensions["A"].width = 24
+    info.column_dimensions["B"].width = 48
+    for row in info.iter_rows(min_row=2):
+        row[1].data_type = "s"
+
+    output = io.BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return output.getvalue()
+
+
 def _parse_date(value, field):
     if value in (None, ""):
         return None
@@ -152,11 +248,13 @@ def search_orders():
             raise BadRequest("Invalid status filter")
 
         output_format = (request.args.get("format") or "").strip().lower()
-        if output_format not in ("", "csv"):
+        if output_format not in ("", "csv", "xlsx"):
             raise BadRequest("Unsupported export format")
         csv_export = output_format == "csv"
-        default_limit = MAX_EXPORT_ROWS if csv_export else DEFAULT_LIMIT
-        maximum_limit = MAX_EXPORT_ROWS if csv_export else MAX_LIMIT
+        xlsx_export = output_format == "xlsx"
+        export_requested = csv_export or xlsx_export
+        default_limit = MAX_EXPORT_ROWS if export_requested else DEFAULT_LIMIT
+        maximum_limit = MAX_EXPORT_ROWS if export_requested else MAX_LIMIT
 
         try:
             limit = int(request.args.get("limit", default_limit))
@@ -171,9 +269,9 @@ def search_orders():
         if limit < 1 or offset < 0 or (supplier_id is not None and supplier_id < 1):
             raise BadRequest("limit and supplier_id must be positive; offset cannot be negative")
         limit = min(limit, maximum_limit)
-        if csv_export:
+        if export_requested:
             if offset != 0:
-                raise BadRequest("CSV export must start at offset 0")
+                raise BadRequest("Export must start at offset 0")
             limit = MAX_EXPORT_ROWS
 
         start_date = _parse_date(request.args.get("start_date"), "start_date")
@@ -219,7 +317,7 @@ def search_orders():
 
         count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
         total = db.session.scalar(count_stmt) or 0
-        if csv_export and total > MAX_EXPORT_ROWS:
+        if export_requested and total > MAX_EXPORT_ROWS:
             return jsonify({
                 "success": False,
                 "error": "export_too_large",
@@ -269,6 +367,23 @@ def search_orders():
                 ])
             response = Response("\ufeff" + output.getvalue(), mimetype="text/csv; charset=utf-8")
             response.headers["Content-Disposition"] = 'attachment; filename="orders-export.csv"'
+            response.headers["X-Export-Row-Count"] = str(len(orders))
+            return response
+
+        if xlsx_export:
+            filters = {
+                "q": query_text,
+                "status": status or None,
+                "supplier_id": supplier_id,
+                "start_date": start_date.isoformat() if start_date else None,
+                "end_date": end_date.isoformat() if end_date else None,
+            }
+            content = _build_xlsx_export(orders, filters)
+            response = Response(
+                content,
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            response.headers["Content-Disposition"] = 'attachment; filename="orders-export.xlsx"'
             response.headers["X-Export-Row-Count"] = str(len(orders))
             return response
 
