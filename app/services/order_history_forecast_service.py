@@ -60,11 +60,18 @@ class OrderHistoryForecastService:
 
         first_week = self._week_start(start_date)
         last_week = self._week_start(end_date)
-        week_starts = []
+        all_week_starts = []
         cursor = first_week
         while cursor <= last_week:
-            week_starts.append(cursor)
+            all_week_starts.append(cursor)
             cursor += timedelta(days=7)
+        # A partial boundary week must not dilute a weekly average as if seven
+        # complete days had been observed. Use only fully covered Monday-Sunday weeks.
+        week_starts = [
+            week for week in all_week_starts
+            if week >= start_date and week + timedelta(days=6) <= end_date
+        ]
+        complete_week_set = set(week_starts)
 
         normal_week_starts = [
             week for week in week_starts
@@ -99,8 +106,14 @@ class OrderHistoryForecastService:
 
         weekly_quantities: dict[int, dict[date, Decimal]] = {}
         product_meta: dict[int, dict] = {}
-        order_ids: dict[int, set[int]] = {}
+        order_ids: dict[int, set[tuple[str, int]]] = {}
         order_weeks: dict[int, set[date]] = {}
+        complete_week_order_ids: dict[int, set[tuple[str, int]]] = {}
+        complete_week_order_weeks: dict[int, set[date]] = {}
+        operational_order_ids: set[int] = set()
+        historical_order_ids: set[int] = set()
+        operational_order_ids_by_product: dict[int, set[int]] = {}
+        historical_order_ids_by_product: dict[int, set[int]] = {}
         conversion_issues: dict[int, int] = {}
 
         for order, item, product in rows:
@@ -155,11 +168,25 @@ class OrderHistoryForecastService:
             weekly_quantities[product_id][week] = (
                 weekly_quantities[product_id].get(week, Decimal("0")) + quantity
             )
-            order_ids.setdefault(product_id, set()).add(order.id)
+            order_key = ("operational", int(order.id))
+            order_ids.setdefault(product_id, set()).add(order_key)
             order_weeks.setdefault(product_id, set()).add(week)
+            operational_order_ids.add(int(order.id))
+            operational_order_ids_by_product.setdefault(product_id, set()).add(int(order.id))
+            if week in complete_week_set:
+                complete_week_order_ids.setdefault(product_id, set()).add(order_key)
+                complete_week_order_weeks.setdefault(product_id, set()).add(week)
 
         # Include manually imported historical orders only after their batch is finalized.
         # These rows are isolated from operational orders and never affect inventory.
+        historical_products = db.session.scalars(
+            select(Product).where(
+                Product.tenant_id == self.tenant_id,
+                Product.supplier_id == supplier_id,
+            )
+        ).all()
+        historical_products_by_id = {int(product.id): product for product in historical_products}
+
         historical_orders = db.session.scalars(
             select(HistoricalPurchaseOrder)
             .join(HistoricalImportBatch, HistoricalImportBatch.id == HistoricalPurchaseOrder.batch_id)
@@ -183,22 +210,24 @@ class OrderHistoryForecastService:
                 product_id = line.get("product_id")
                 if not isinstance(product_id, int) or isinstance(product_id, bool) or product_id <= 0:
                     continue
-                product = db.session.scalar(select(Product).where(
-                    Product.id == product_id,
-                    Product.tenant_id == self.tenant_id,
-                    Product.supplier_id == supplier_id,
-                ))
+                product = historical_products_by_id.get(product_id)
                 if product is None:
                     continue
+                line_stock_unit = str(
+                    line.get("stock_unit") or product.unit or "יחידה לא הוגדרה"
+                ).strip()
                 if product_id not in product_meta:
                     product_meta[product_id] = {
                         "product_id": product_id,
                         "product_name": product.name,
-                        "unit": str(line.get("stock_unit") or product.unit or "יחידה לא הוגדרה").strip(),
+                        "unit": line_stock_unit,
                         "units_per_carton": product.units_per_carton,
                     }
                     weekly_quantities[product_id] = {}
                     conversion_issues[product_id] = 0
+                elif product_meta[product_id]["unit"] != line_stock_unit:
+                    conversion_issues[product_id] += 1
+                    continue
                 try:
                     quantity = Decimal(str(line.get("quantity")))
                 except (InvalidOperation, TypeError, ValueError):
@@ -227,8 +256,14 @@ class OrderHistoryForecastService:
                 weekly_quantities[product_id][week] = (
                     weekly_quantities[product_id].get(week, Decimal("0")) + quantity
                 )
-                order_ids.setdefault(product_id, set()).add(historical_order_key)
+                order_key = ("historical", int(historical_order.id))
+                order_ids.setdefault(product_id, set()).add(order_key)
                 order_weeks.setdefault(product_id, set()).add(week)
+                historical_order_ids.add(int(historical_order.id))
+                historical_order_ids_by_product.setdefault(product_id, set()).add(int(historical_order.id))
+                if week in complete_week_set:
+                    complete_week_order_ids.setdefault(product_id, set()).add(order_key)
+                    complete_week_order_weeks.setdefault(product_id, set()).add(week)
 
         target_multiplier = InventoryCalendarService._seasonal_multiplier_for_date(
             target_date, config
@@ -245,6 +280,8 @@ class OrderHistoryForecastService:
             )
             observed_orders = len(order_ids.get(product_id, set()))
             observed_weeks = len(order_weeks.get(product_id, set()))
+            complete_week_orders = len(complete_week_order_ids.get(product_id, set()))
+            complete_weeks_with_orders = len(complete_week_order_weeks.get(product_id, set()))
             observed_normal_weeks = sum(
                 1 for week in normal_week_starts
                 if weekly.get(week, Decimal("0")) > 0
@@ -252,8 +289,8 @@ class OrderHistoryForecastService:
             has_unit_issues = conversion_issues.get(product_id, 0) > 0
             enough_history = (
                 not has_unit_issues
-                and observed_orders >= 2
-                and observed_weeks >= 2
+                and complete_week_orders >= 2
+                and complete_weeks_with_orders >= 2
                 and observed_normal_weeks >= 1
             )
             recommended_exact = normal_average * target_multiplier if enough_history else Decimal("0")
@@ -270,7 +307,11 @@ class OrderHistoryForecastService:
             result.append({
                 **product_meta[product_id],
                 "order_count": observed_orders,
+                "operational_order_count": len(operational_order_ids_by_product.get(product_id, set())),
+                "historical_order_count": len(historical_order_ids_by_product.get(product_id, set())),
+                "complete_week_order_count": complete_week_orders,
                 "weeks_with_orders": observed_weeks,
+                "complete_weeks_with_orders": complete_weeks_with_orders,
                 "normal_weeks_with_orders": observed_normal_weeks,
                 "normal_weeks_in_period": len(normal_week_starts),
                 "boosted_weeks_in_period": len(boosted_week_starts),
@@ -303,7 +344,22 @@ class OrderHistoryForecastService:
             "supplier_id": supplier_id,
             "period": {"start_date": start_date.isoformat(), "end_date": end_date.isoformat()},
             "target_date": target_date.isoformat(),
-            "source": "issued_operational_orders",
+            "source": (
+                "operational_and_historical_orders"
+                if operational_order_ids and historical_order_ids
+                else "operational_orders"
+                if operational_order_ids
+                else "historical_orders"
+                if historical_order_ids
+                else "none"
+            ),
+            "source_counts": {
+                "operational_orders": len(operational_order_ids),
+                "historical_orders": len(historical_order_ids),
+                "total_orders": len(operational_order_ids) + len(historical_order_ids),
+            },
+            "complete_weeks_in_period": len(week_starts),
+            "partial_boundary_weeks_excluded": len(all_week_starts) - len(week_starts),
             "quantity_basis": "product_stock_unit",
             "excluded_statuses": ["draft", "cancelled", "submitted", "approved"],
             "seasonality": {
@@ -313,6 +369,6 @@ class OrderHistoryForecastService:
                 "boosted_week_multiplier": float(uplift),
                 "target_week_multiplier": float(target_multiplier),
             },
-            "order_count": len({order_id for values in order_ids.values() for order_id in values}),
+            "order_count": len(operational_order_ids) + len(historical_order_ids),
             "products": result,
         }
