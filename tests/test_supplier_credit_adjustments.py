@@ -161,6 +161,27 @@ def test_supplier_credit_adjustment_validates_invoice_order_currency_and_tenant(
     )
     assert invalid_amount.status_code == 400
 
+    sub_cent_amount = logged_in_client_a.post(
+        f"/api/orders/{first_order_id}/credit-adjustments",
+        json={
+            "reference_number": "CREDIT-SUB-CENT",
+            "adjustment_type": "credit_note",
+            "adjustment_date": "2026-11-10",
+            "amount": "0.001",
+        },
+    )
+    assert sub_cent_amount.status_code == 400
+    excess_precision_amount = logged_in_client_a.post(
+        f"/api/orders/{first_order_id}/credit-adjustments",
+        json={
+            "reference_number": "CREDIT-EXCESS-PRECISION",
+            "adjustment_type": "credit_note",
+            "adjustment_date": "2026-11-10",
+            "amount": "1.001",
+        },
+    )
+    assert excess_precision_amount.status_code == 400
+
     foreign_list = logged_in_client_b.get(
         f"/api/orders/{first_order_id}/credit-adjustments"
     )
