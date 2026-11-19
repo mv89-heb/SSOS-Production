@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Activity, AlertTriangle, BarChart3, Boxes, CalendarDays, CheckCircle2,
   ChevronLeft, CircleDollarSign, Clock3, FileText, Package, RefreshCw, ShoppingCart,
-  Truck, Wallet,
+  Truck, Wallet, FileSearch, ClipboardList,
 } from "lucide-react";
 import { apiClient } from "@/services/api-client";
 import { catalogService } from "@/services/catalog-service";
@@ -168,6 +168,22 @@ export default function AnalyticsCenterPage() {
   const readiness = useQuery({ queryKey: ["analytics-center", "data-readiness"], queryFn: () => priceIntelligenceService.getDataReadiness(), retry: 1 });
   const reminders = useQuery({ queryKey: ["analytics-center", "open-reminders"], queryFn: () => reminderService.getOpen(), retry: 1, refetchInterval: 60_000 });
 
+  const budgets = useQuery({
+    queryKey: ["analytics-center", "budgets"],
+    queryFn: async () => (await apiClient.get<{ success: boolean; budgets: Array<{ id: number; scope_type: string; scope_value: string; period_type: string; period_start: string; amount: number; currency: string; spent_amount: number; remaining_amount: number; active: boolean }> }>("/api/procurement-budgets")).data.budgets,
+    retry: 1,
+  });
+  const documents = useQuery({
+    queryKey: ["analytics-center", "documents"],
+    queryFn: async () => (await apiClient.get<{ success: boolean; analyses: Array<{ id: number; filename: string; document_type: string | null; status: string; created_at: string }> }>("/api/document-intelligence", { params: { limit: 200 } })).data.analyses,
+    retry: 1,
+  });
+  const audit = useQuery({
+    queryKey: ["analytics-center", "audit"],
+    queryFn: async () => (await apiClient.get<{ success: boolean; logs: Array<{ id: number; action: string; title: string | null; created_at: string }> }>("/api/audit", { params: { limit: 500, offset: 0 } })).data.logs,
+    retry: 1,
+  });
+
   const orderRows = orders.data?.orders ?? [];
   const productRows = catalog.data ?? [];
   const supplierRows = suppliers.data ?? [];
@@ -222,11 +238,26 @@ export default function AnalyticsCenterPage() {
   const orderCurrencies = Object.entries(spendData?.ordered.totals_by_currency ?? {});
   const profileRows = (profiles.data ?? []).filter((row) => row.active).slice(0, 10);
   const readinessData = readiness.data;
-  const loadedCount = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders].filter((query) => query.isSuccess).length;
-  const failedCount = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders].filter((query) => query.isError).length;
-  const loading = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders].some((query) => query.isLoading);
+  const budgetRows = budgets.data ?? [];
+  const budgetBars = budgetRows.map((row) => ({ label: `${row.scope_type === "department" ? "מחלקה" : "פרויקט"} · ${row.scope_value}`, value: Math.max(0, Number(row.spent_amount ?? 0)), hint: `${money(Number(row.spent_amount ?? 0), row.currency)} / ${money(Number(row.amount ?? 0), row.currency)}` }));
+  const documentStatusRows = useMemo(() => {
+    const labels: Record<string, string> = { UPLOADED: "הועלה", PROCESSING: "בעיבוד", ANALYZED: "נותח", PARTIALLY_APPLIED: "יושם חלקית", AI_UNAVAILABLE: "AI לא זמין", FAILED: "נכשל", APPLIED: "יושם" };
+    const counts = new Map<string, number>();
+    for (const row of documents.data ?? []) counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
+    return Array.from(counts, ([key, value]) => ({ label: labels[key] ?? key, value, id: key }));
+  }, [documents.data]);
+  const auditActionRows = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of audit.data ?? []) counts.set(row.action || "ללא סוג פעולה", (counts.get(row.action || "ללא סוג פעולה") ?? 0) + 1);
+    return Array.from(counts, ([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8);
+  }, [audit.data]);
+  const extraQueries = [budgets, documents, audit];
+  const baseQueries = [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders];
+  const loadedCount = [...baseQueries, ...extraQueries].filter((query) => query.isSuccess).length;
+  const failedCount = [...baseQueries, ...extraQueries].filter((query) => query.isError).length;
+  const loading = [...baseQueries, ...extraQueries].some((query) => query.isLoading);
 
-  const refresh = () => [spend, orders, catalog, suppliers, inventory, recommendations, profiles, portfolio, supplierScores, readiness, reminders].forEach((query) => void query.refetch());
+  const refresh = () => [...baseQueries, ...extraQueries].forEach((query) => void query.refetch());
 
   return (
     <div dir="rtl" className="min-w-0 space-y-6 pb-10">
@@ -296,6 +327,21 @@ export default function AnalyticsCenterPage() {
         <Panel title="שלמות נתוני ספקים ומחירים" subtitle="המדדים משקפים את הרשומות הקיימות בלבד.">{readiness.isError?<Empty text="מדדי שלמות הנתונים לא זמינים."/>:<div className="grid grid-cols-2 gap-3 text-sm"><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><span className="text-xs text-slate-500">הצעות ספק פעילות</span><b className="mt-1 block text-xl">{number(readinessData?.supplier_offers.active)}</b></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><span className="text-xs text-slate-500">ספקים עם הצעות</span><b className="mt-1 block text-xl">{number(readinessData?.supplier_offers.suppliers_covered)}</b></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><span className="text-xs text-slate-500">היסטוריית מחירים</span><b className="mt-1 block text-xl">{number(readinessData?.price_intelligence.history_rows)}</b></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><span className="text-xs text-slate-500">תצפיות מחיר</span><b className="mt-1 block text-xl">{number(readinessData?.price_intelligence.observation_rows)}</b></div></div>}</Panel>
       </section>}
 
+      <section className="grid min-w-0 gap-4 xl:grid-cols-3">
+        <Panel title="ביצוע תקציבי רכש" subtitle="התחייבויות מהזמנות שהוגשו, אושרו, נשלחו או הושלמו. אין חיבור בין מטבעות.">
+          {budgets.isError ? <Empty text="נתוני התקציבים אינם זמינים בהרשאות המשתמש או כרגע."/> : budgetBars.length ? <Bars rows={budgetBars}/> : <Empty text="לא הוגדרו תקציבים פעילים."/>}
+          <div className="mt-3 text-left"><Link href="/dashboard/settings/procurement-budgets" className="text-xs font-bold text-indigo-600 hover:underline">לניהול תקציבים <ChevronLeft className="inline" size={14}/></Link></div>
+        </Panel>
+        <Panel title="מסמכים וקליטה" subtitle="מספר מסמכים לפי סטטוס עיבוד מתוך 200 הרשומות האחרונות.">
+          {documents.isError ? <Empty text="נתוני המסמכים אינם זמינים בהרשאות המשתמש או כרגע."/> : <Donut rows={documentStatusRows}/>}
+          <div className="mt-3 text-left"><Link href="/dashboard/document-intelligence" className="text-xs font-bold text-indigo-600 hover:underline">למסמכים וקליטה <ChevronLeft className="inline" size={14}/></Link></div>
+        </Panel>
+        <Panel title="פעילות מערכת וביקורת" subtitle="התפלגות סוגי פעולות מתוך עד 500 אירועי הביקורת האחרונים.">
+          {audit.isError ? <Empty text="נתוני הביקורת אינם זמינים בהרשאות המשתמש או כרגע."/> : <Bars rows={auditActionRows}/>}
+          <div className="mt-3 text-left"><Link href="/dashboard/audit" className="text-xs font-bold text-indigo-600 hover:underline">להיסטוריית פעולות <ChevronLeft className="inline" size={14}/></Link></div>
+        </Panel>
+      </section>
+
       <Panel title="כניסה לניתוח מודולים" subtitle="מעבר מהתמונה הכוללת למסכי העבודה והנתונים המפורטים.">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {[
@@ -331,7 +377,7 @@ export default function AnalyticsCenterPage() {
 
       <footer className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950">
         <span><CalendarDays className="ml-1 inline" size={14}/> תקופת הוצאות: {applied.start} עד {applied.end}</span>
-        <span>{loadedCount}/11 מקורות נטענו בהצלחה · {failedCount? "חלק מהמדדים אינם זמינים":"המקורות הזמינים נטענו"}</span>
+        <span>{loadedCount}/14 מקורות נטענו בהצלחה · {failedCount? "חלק מהמדדים אינם זמינים":"המקורות הזמינים נטענו"}</span>
       </footer>
     </div>
   );
