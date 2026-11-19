@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from flask import Blueprint, Response, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import String, and_, cast, func, or_, select
+from sqlalchemy.orm import selectinload
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.extensions import db
@@ -224,7 +225,9 @@ def search_orders():
             }), 413
 
         orders = db.session.scalars(
-            stmt.order_by(Order.created_at.desc(), Order.id.desc()).limit(limit).offset(offset)
+            stmt.order_by(Order.created_at.desc(), Order.id.desc())
+            .options(selectinload(Order.order_items).selectinload(OrderItem.product))
+            .limit(limit).offset(offset)
         ).all()
 
         if csv_export:
