@@ -110,7 +110,7 @@ export default function OrdersPage() {
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      window.URL.revokeObjectURL(url);
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
     } catch {
       setExportError("הייצוא נכשל. אם יש יותר מ־5,000 הזמנות, צמצם את החיפוש או את טווח התאריכים.");
     } finally {
