@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 import re
+from difflib import SequenceMatcher
 
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
@@ -380,6 +381,203 @@ def review_document(batch_id, document_id):
         return _error(exc)
 
 
+def _similarity(left, right):
+    left = _norm(left)
+    right = _norm(right)
+    if not left or not right:
+        return 0.0
+    score = SequenceMatcher(None, left, right).ratio()
+    if len(left) >= 4 and (left in right or right in left):
+        score = max(score, 0.65)
+    left_tokens = set(left.split())
+    right_tokens = set(right.split())
+    if left_tokens and right_tokens:
+        score = max(score, len(left_tokens & right_tokens) / len(left_tokens | right_tokens))
+    return score
+
+
+def _manual_import_catalog(tenant_id):
+    suppliers = db.session.scalars(select(Supplier).where(
+        Supplier.tenant_id == tenant_id,
+    )).all()
+    products = db.session.scalars(select(Product).where(
+        Product.tenant_id == tenant_id,
+        Product.active.is_(True),
+    )).all()
+    return suppliers, products
+
+
+@historical_document_import_bp.route("/manual-orders/preview", methods=["POST"])
+@login_required
+def preview_manual_orders():
+    """Validate and suggest catalog matches without writing any records."""
+    try:
+        PermissionService.require_role_at_least("manager")
+        payload = request.get_json(silent=True) or {}
+        orders_payload = payload.get("orders")
+        if not isinstance(orders_payload, list) or not orders_payload or len(orders_payload) > 500:
+            raise BadRequest("orders must be a non-empty list of at most 500 orders")
+
+        suppliers, products = _manual_import_catalog(current_user.tenant_id)
+        suppliers_by_name = {}
+        suppliers_by_key = {}
+        products_by_supplier_and_name = {}
+        products_by_supplier = {}
+        for supplier in suppliers:
+            suppliers_by_name.setdefault(_norm(supplier.name), []).append(supplier)
+            suppliers_by_key.setdefault(_supplier_key(supplier.name), []).append(supplier)
+        for product in products:
+            products_by_supplier_and_name.setdefault(
+                (product.supplier_id, _norm(product.name)), []
+            ).append(product)
+            products_by_supplier.setdefault(product.supplier_id, []).append(product)
+
+        preview_orders = []
+        summary = {
+            "order_count": len(orders_payload),
+            "supplier_matches": 0,
+            "unmatched_suppliers": 0,
+            "line_count": 0,
+            "exact_product_matches": 0,
+            "unmatched_products": 0,
+            "missing_quantities": 0,
+            "unverified_units": 0,
+            "cartons_missing_pack_size": 0,
+        }
+
+        for order_index, raw_order in enumerate(orders_payload, start=1):
+            if not isinstance(raw_order, dict):
+                raise BadRequest(f"Order {order_index} must be an object")
+            supplier_name = str(raw_order.get("supplier_name") or "").strip()
+            supplier = None
+            explicit_supplier_id = raw_order.get("supplier_id")
+            if explicit_supplier_id not in (None, ""):
+                if type(explicit_supplier_id) is not int or explicit_supplier_id <= 0:
+                    raise BadRequest(f"Order {order_index}: supplier_id must be a positive integer")
+                supplier = next((row for row in suppliers if row.id == explicit_supplier_id), None)
+                if supplier is None:
+                    raise BadRequest(f"Order {order_index}: supplier_id does not belong to this organization")
+            else:
+                exact = suppliers_by_name.get(_norm(supplier_name), [])
+                canonical = suppliers_by_key.get(_supplier_key(supplier_name), [])
+                matches = exact if exact else canonical
+                supplier = matches[0] if len(matches) == 1 else None
+
+            supplier_candidates = []
+            if supplier is None:
+                for candidate in suppliers:
+                    score = _similarity(supplier_name, candidate.name)
+                    if score >= 0.2:
+                        supplier_candidates.append({
+                            "supplier_id": candidate.id,
+                            "supplier_name": candidate.name,
+                            "score": round(score, 3),
+                        })
+                supplier_candidates.sort(key=lambda row: (-row["score"], row["supplier_name"]))
+                supplier_candidates = supplier_candidates[:3]
+                summary["unmatched_suppliers"] += 1
+            else:
+                summary["supplier_matches"] += 1
+
+            order_date = _date(raw_order.get("order_date"))
+            if order_date is None:
+                raise BadRequest(f"Order {order_index}: a valid order_date is required")
+            lines = raw_order.get("items")
+            if not isinstance(lines, list) or not lines:
+                raise BadRequest(f"Order {order_index}: at least one item is required")
+
+            preview_lines = []
+            for line_index, raw_line in enumerate(lines, start=1):
+                if not isinstance(raw_line, dict):
+                    raise BadRequest(f"Order {order_index}, item {line_index}: item must be an object")
+                description = str(raw_line.get("description") or "").strip()
+                if not description or len(description) > 255:
+                    raise BadRequest(f"Order {order_index}, item {line_index}: description is required and must be at most 255 characters")
+                quantity = None
+                if raw_line.get("quantity") not in (None, ""):
+                    try:
+                        quantity = Decimal(str(raw_line["quantity"]))
+                    except (InvalidOperation, TypeError, ValueError):
+                        raise BadRequest(f"Order {order_index}, item {line_index}: quantity must be numeric")
+                    if not quantity.is_finite() or quantity <= 0 or quantity > Decimal("100000"):
+                        raise BadRequest(f"Order {order_index}, item {line_index}: quantity must be greater than 0 and at most 100000")
+                explicit_unit = str(raw_line.get("quantity_unit") or "").strip().lower() or None
+                if explicit_unit not in (None, "carton", "piece", "unit"):
+                    raise BadRequest(f"Order {order_index}, item {line_index}: quantity_unit must be carton, piece, or unit")
+                if quantity is None:
+                    summary["missing_quantities"] += 1
+                if quantity is not None and explicit_unit is None:
+                    summary["unverified_units"] += 1
+
+                matched = None
+                candidates = []
+                explicit_product_id = raw_line.get("product_id")
+                if explicit_product_id not in (None, ""):
+                    if type(explicit_product_id) is not int or explicit_product_id <= 0:
+                        raise BadRequest(f"Order {order_index}, item {line_index}: product_id must be a positive integer")
+                    matched = next((row for row in products if row.id == explicit_product_id), None)
+                    if matched is None or supplier is None or matched.supplier_id != supplier.id:
+                        raise BadRequest(f"Order {order_index}, item {line_index}: product_id must belong to the selected supplier and organization")
+                elif supplier is not None:
+                    exact_products = products_by_supplier_and_name.get((supplier.id, _norm(description)), [])
+                    matched = exact_products[0] if len(exact_products) == 1 else None
+                    if matched is None:
+                        for candidate in products_by_supplier.get(supplier.id, []):
+                            score = _similarity(description, candidate.name)
+                            if score >= 0.2:
+                                candidates.append({
+                                    "product_id": candidate.id,
+                                    "product_name": candidate.name,
+                                    "unit": candidate.unit,
+                                    "units_per_carton": candidate.units_per_carton,
+                                    "score": round(score, 3),
+                                })
+                        candidates.sort(key=lambda row: (-row["score"], row["product_name"]))
+                        candidates = candidates[:3]
+
+                if matched is not None:
+                    summary["exact_product_matches"] += 1
+                    match_type = "manual" if explicit_product_id else "exact"
+                else:
+                    summary["unmatched_products"] += 1
+                    match_type = "unmatched"
+                declared_unit = str(raw_line.get("unit") or "").strip() or None
+                if quantity is not None and explicit_unit == "carton" and matched is not None and not matched.units_per_carton:
+                    summary["cartons_missing_pack_size"] += 1
+                preview_lines.append({
+                    "line_index": line_index,
+                    "description": description,
+                    "quantity": float(quantity) if quantity is not None else None,
+                    "unit": declared_unit,
+                    "quantity_unit": explicit_unit or "unverified",
+                    "product_id": matched.id if matched else None,
+                    "product_name": matched.name if matched else None,
+                    "product_match": match_type,
+                    "product_candidates": candidates,
+                })
+                summary["line_count"] += 1
+
+            preview_orders.append({
+                "order_index": order_index,
+                "order_date": order_date.isoformat(),
+                "supplier_name": supplier.name if supplier else supplier_name,
+                "supplier_id": supplier.id if supplier else None,
+                "supplier_matched": supplier is not None,
+                "supplier_candidates": supplier_candidates,
+                "items": preview_lines,
+            })
+
+        return jsonify({
+            "success": True,
+            "summary": summary,
+            "orders": preview_orders,
+            "writes_performed": False,
+            "message": "Preview only. No historical records, operational orders, receipts, prices or inventory were changed.",
+        })
+    except HTTPException as exc:
+        return _error(exc)
+
+
 
 
 @historical_document_import_bp.route("/manual-orders", methods=["POST"])
@@ -433,10 +631,18 @@ def import_manual_orders():
             if not isinstance(raw_order, dict):
                 raise BadRequest(f"Order {index} must be an object")
             supplier_name = str(raw_order.get("supplier_name") or "").strip()
-            exact_matches = suppliers_by_name.get(_norm(supplier_name), [])
-            canonical_matches = suppliers_by_key.get(_supplier_key(supplier_name), [])
-            candidates = exact_matches if exact_matches else canonical_matches
-            supplier = candidates[0] if len(candidates) == 1 else None
+            explicit_supplier_id = raw_order.get("supplier_id")
+            if explicit_supplier_id not in (None, ""):
+                if type(explicit_supplier_id) is not int or explicit_supplier_id <= 0:
+                    raise BadRequest(f"Order {index}: supplier_id must be a positive integer")
+                supplier = next((row for row in suppliers if row.id == explicit_supplier_id), None)
+                if supplier is None:
+                    raise BadRequest(f"Order {index}: supplier_id does not belong to this organization")
+            else:
+                exact_matches = suppliers_by_name.get(_norm(supplier_name), [])
+                canonical_matches = suppliers_by_key.get(_supplier_key(supplier_name), [])
+                candidates = exact_matches if exact_matches else canonical_matches
+                supplier = candidates[0] if len(candidates) == 1 else None
             if supplier is None:
                 reason = "is ambiguous" if candidates else "does not match a supplier"
                 raise BadRequest(f"Order {index}: supplier '{supplier_name}' {reason} in this organization")
@@ -461,8 +667,20 @@ def import_manual_orders():
                         raise BadRequest(f"Order {index}, item {line_index}: quantity must be numeric")
                     if not quantity.is_finite() or quantity <= 0 or quantity > Decimal("100000"):
                         raise BadRequest(f"Order {index}, item {line_index}: quantity must be greater than 0 and at most 100000")
-                candidates = products_by_supplier_and_name.get((supplier.id, _norm(description)), [])
-                matched = candidates[0] if len(candidates) == 1 else None
+                explicit_product_id = raw_line.get("product_id")
+                if explicit_product_id not in (None, ""):
+                    if type(explicit_product_id) is not int or explicit_product_id <= 0:
+                        raise BadRequest(f"Order {index}, item {line_index}: product_id must be a positive integer")
+                    matched = next((row for row in products if row.id == explicit_product_id), None)
+                    if matched is None or matched.supplier_id != supplier.id:
+                        raise BadRequest(f"Order {index}, item {line_index}: product_id must belong to the selected supplier and organization")
+                    product_candidates = [matched]
+                    product_match = "manual"
+                else:
+                    candidates = products_by_supplier_and_name.get((supplier.id, _norm(description)), [])
+                    matched = candidates[0] if len(candidates) == 1 else None
+                    product_candidates = candidates
+                    product_match = "exact" if matched else ("ambiguous" if len(candidates) > 1 else "unmatched")
                 declared_unit = str(raw_line.get("unit") or "").strip() or None
                 explicit_unit = str(raw_line.get("quantity_unit") or "").strip().lower() or None
                 if explicit_unit not in (None, "carton", "piece", "unit"):
@@ -475,7 +693,7 @@ def import_manual_orders():
                     "product_id": matched.id if matched else None,
                     "stock_unit": ("יחידה" if str(matched.unit or "").strip() == "יחידה" else "ארגז") if matched else None,
                     "units_per_carton": matched.units_per_carton if matched else None,
-                    "product_match": "exact" if matched else ("ambiguous" if len(candidates) > 1 else "unmatched"),
+                    "product_match": product_match,
                 })
             created = HistoricalPurchaseOrder(
                 tenant_id=current_user.tenant_id,
