@@ -145,6 +145,7 @@ def _register_blueprints(app):
     from app.routes.procurement_budgets import procurement_budgets_bp
     from app.routes.order_tracking import order_tracking_bp
     from app.routes.supplier_invoices import supplier_invoices_bp
+    from app.routes.supplier_credit_adjustments import supplier_credit_adjustments_bp
     from app.routes.catalog import catalog_bp
     from app.routes.category_routes import category_bp
     from app.routes.audit import audit_bp
@@ -176,6 +177,7 @@ def _register_blueprints(app):
     app.register_blueprint(procurement_budgets_bp)
     app.register_blueprint(order_tracking_bp)
     app.register_blueprint(supplier_invoices_bp)
+    app.register_blueprint(supplier_credit_adjustments_bp)
     app.register_blueprint(catalog_bp)
     app.register_blueprint(category_bp)
     app.register_blueprint(audit_bp)
