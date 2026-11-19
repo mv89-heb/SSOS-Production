@@ -57,6 +57,11 @@ def upgrade():
         ["tenant_id", "supplier_id", "adjustment_date"],
     )
     op.create_index(
+        "ix_supplier_credit_adjustments_invoice_id",
+        "supplier_credit_adjustments",
+        ["invoice_id"],
+    )
+    op.create_index(
         "ix_supplier_credit_adjustments_tenant_status",
         "supplier_credit_adjustments",
         ["tenant_id", "status"],
@@ -65,6 +70,7 @@ def upgrade():
 
 def downgrade():
     op.drop_index("ix_supplier_credit_adjustments_tenant_status", table_name="supplier_credit_adjustments")
+    op.drop_index("ix_supplier_credit_adjustments_invoice_id", table_name="supplier_credit_adjustments")
     op.drop_index("ix_supplier_credit_adjustments_tenant_supplier_date", table_name="supplier_credit_adjustments")
     op.drop_index("ix_supplier_credit_adjustments_tenant_order_date", table_name="supplier_credit_adjustments")
     op.drop_table("supplier_credit_adjustments")
