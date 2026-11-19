@@ -18,6 +18,31 @@ export interface OrderSearchParams {
   offset?: number;
 }
 
+export interface SavedOrderSearch {
+  id: number;
+  name: string;
+  filters: {
+    q: string;
+    status: string;
+    supplier_id: number | null;
+    start_date: string;
+    end_date: string;
+  };
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface CreateSavedOrderSearchInput {
+  name: string;
+  filters: {
+    q?: string;
+    status?: string;
+    supplier_id?: number | null;
+    start_date?: string;
+    end_date?: string;
+  };
+}
+
 export interface UpdateDraftOrderInput {
   notes?: string;
   planned_order_date?: string | null;
@@ -102,6 +127,21 @@ export const orderService = {
       params: { ...params, format: "csv", limit: 5000, offset: 0 },
       responseType: "blob",
     });
+    return data;
+  },
+
+  getSavedSearches: async () => {
+    const { data } = await apiClient.get<{ success: boolean; saved_searches: SavedOrderSearch[] }>("/api/orders/searches");
+    return data.saved_searches;
+  },
+
+  createSavedSearch: async (payload: CreateSavedOrderSearchInput) => {
+    const { data } = await apiClient.post<{ success: boolean; saved_search: SavedOrderSearch }>("/api/orders/searches", payload);
+    return data.saved_search;
+  },
+
+  deleteSavedSearch: async (id: number) => {
+    const { data } = await apiClient.delete<{ success: boolean; deleted_id: number }>(`/api/orders/searches/${id}`);
     return data;
   },
 
