@@ -15,6 +15,7 @@ depends_on = None
 # rejected by PostgreSQL even if a future code path forgets the service guard.
 RESTRICTED_FOREIGN_KEYS = (
     ("supplier_invoices", "order_id", "orders"),
+    ("order_items", "order_id", "orders"),
     ("order_tracking_events", "order_id", "orders"),
     ("price_history", "product_id", "products"),
     ("price_history", "supplier_id", "suppliers"),
