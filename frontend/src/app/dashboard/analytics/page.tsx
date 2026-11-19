@@ -295,6 +295,21 @@ export default function AnalyticsCenterPage() {
         </div>
       </Panel>
 
+      <Panel title="טבלת נתונים לייצוא" subtitle="נתוני המקור שמאחורי הגרפים. ניתן לייצא את הטבלה ל־Excel או לשמור את המסך כ־PDF באמצעות סרגל הייצוא.">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-right text-xs">
+            <thead><tr className="border-b border-slate-200 text-slate-500 dark:border-slate-800"><th className="px-3 py-2">תחום</th><th className="px-3 py-2">פריט</th><th className="px-3 py-2">נתון</th><th className="px-3 py-2">יחידה / מטבע</th></tr></thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {orderedGroups.map((row)=><tr key={`spend-${row.supplier_id}-${row.currency}`}><td className="px-3 py-2">הוצאות רכש</td><td className="px-3 py-2 font-semibold">{row.supplier_name}</td><td className="px-3 py-2 tabular-nums">{number(row.total)}</td><td className="px-3 py-2">{row.currency}</td></tr>)}
+              {statusRows.map((row)=><tr key={`status-${row.id}`}><td className="px-3 py-2">הזמנות</td><td className="px-3 py-2 font-semibold">{row.label}</td><td className="px-3 py-2 tabular-nums">{number(row.value)}</td><td className="px-3 py-2">הזמנות</td></tr>)}
+              {categoryRows.map((row)=><tr key={`category-${row.label}`}><td className="px-3 py-2">קטלוג</td><td className="px-3 py-2 font-semibold">{row.label}</td><td className="px-3 py-2 tabular-nums">{number(row.value)}</td><td className="px-3 py-2">מוצרים</td></tr>)}
+              {riskRows.map((row)=><tr key={`risk-${row.id}`}><td className="px-3 py-2">מלאי</td><td className="px-3 py-2 font-semibold">{row.label}</td><td className="px-3 py-2 tabular-nums">{number(row.value)}</td><td className="px-3 py-2">מוצרים</td></tr>)}
+              {profileRows.map((row)=><tr key={`profile-${row.id}`}><td className="px-3 py-2">צריכה</td><td className="px-3 py-2 font-semibold">{row.name}</td><td className="px-3 py-2 tabular-nums">{number(row.weighted_weekly_consumption)}</td><td className="px-3 py-2">צריכה שבועית משוקללת</td></tr>)}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
       <footer className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950">
         <span><CalendarDays className="ml-1 inline" size={14}/> תקופת הוצאות: {applied.start} עד {applied.end}</span>
         <span>{loadedCount}/10 מקורות נטענו בהצלחה · {failedCount? "חלק מהמדדים אינם זמינים":"המקורות הזמינים נטענו"}</span>
