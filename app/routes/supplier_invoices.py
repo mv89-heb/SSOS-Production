@@ -70,7 +70,7 @@ def create_order_invoice(order_id):
     try:
         PermissionService.require_role_at_least("employee")
         data = request.get_json(silent=True) or {}
-        order = db.session.scalar(select(Order).where(Order.id == order_id, Order.tenant_id == current_user.tenant_id))
+        order = db.session.scalar(select(Order).where(Order.id == order_id, Order.tenant_id == current_user.tenant_id).with_for_update())
         if order is None:
             raise NotFound("Order not found")
         invoice_number = str(data.get("invoice_number") or "").strip()
