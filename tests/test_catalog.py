@@ -646,10 +646,9 @@ def test_delete_product_with_price_history_and_observations_is_blocked(
     from app.models.price_observation import PriceObservation
 
     supplier_id, product_id = _make_product(logged_in_client_a)
-    tenant_id = db.session.execute(
-        __import__("sqlalchemy").select(__import__("app.models.product", fromlist=["Product"]).Product.tenant_id)
-        .where(__import__("app.models.product", fromlist=["Product"]).Product.id == product_id)
-    ).scalar_one()
+    from app.models.product import Product
+
+    tenant_id = db.session.get(Product, product_id).tenant_id
     history = PriceHistory(
         tenant_id=tenant_id,
         product_id=product_id,
