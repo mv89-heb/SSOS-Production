@@ -459,34 +459,36 @@ export default function OrdersPage() {
             </div>
             <div dir="rtl" className="hidden w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain md:block">
               <table dir="rtl" className="w-max min-w-[950px] text-right text-sm">
-              <thead className="border-b border-slate-100 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/40"><tr>{["מס' הזמנה", "ספק", "סטטוס", "תזכורת", "סה\"כ", "נוצר בתאריך", ""].map((heading, index) => <th key={heading || index} className="px-5 py-3 text-xs font-extrabold text-slate-500">{heading}</th>)}</tr></thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredOrders.map((order) => {
-                  const reminderAt = formatReminder(order.next_reminder_at);
-                  const reminderDue = !!order.next_reminder_at && new Date(order.next_reminder_at).getTime() <= Date.now() && order.reminder_state !== "complete";
-                  return (
-                    <tr key={order.id} className="group transition-colors hover:bg-indigo-50/40 dark:hover:bg-slate-800/60">
-                      <td className="px-5 py-4">
-                        <Link href={`/dashboard/orders/${order.id}`} className="font-extrabold text-indigo-600 hover:text-indigo-700 hover:underline dark:text-indigo-400">{order.order_number}</Link>
-                        {!!order.search_provenance?.matched_fields.length && <p className="mt-1 max-w-56 text-[11px] text-indigo-600 dark:text-indigo-300">התאמה: {order.search_provenance.matched_fields.join(" · ")}</p>}
-                        {!!order.search_provenance?.missing_fields.length && <p className="mt-1 max-w-56 text-[11px] font-semibold text-amber-700 dark:text-amber-300">חסר: {order.search_provenance.missing_fields.join(" · ")}</p>}
-                      </td>
-                      <td className="px-5 py-4 font-medium text-slate-700 dark:text-slate-200">{order.supplier_name}</td>
-                      <td className="px-5 py-4"><OrderStatusBadge status={order.status} /></td>
-                      <td className="px-5 py-4">
-                        {order.reminder_state !== "complete" && reminderAt ? (
-                          <Link href={`/dashboard/orders/${order.id}`} className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold ${reminderDue ? "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300" : "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"}`}>
-                            <Bell size={13} /> {reminderDue ? "דורשת טיפול" : reminderAt}
-                          </Link>
-                        ) : <span className="text-xs text-slate-400">אין תזכורת</span>}
-                      </td>
-                      <td className="px-5 py-4 font-bold text-slate-800 dark:text-slate-100">{order.currency} {order.final_total.toLocaleString("he-IL")}</td>
-                      <td className="px-5 py-4 text-sm text-slate-500">{formatDate(order.created_at)}</td>
-                      <td className="px-5 py-4"><Link href={`/dashboard/orders/${order.id}`} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-500 opacity-70 transition hover:bg-white hover:text-indigo-600 hover:opacity-100 dark:hover:bg-slate-900">פרטים <ArrowLeft size={13} /></Link></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+                <thead className="border-b border-slate-100 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/40">
+                  <tr>
+                    <th className="px-4 py-3">
+                      <input type="checkbox" aria-label="בחירת כל ההזמנות בעמוד" checked={allPageOrdersSelected} onChange={(event) => togglePageSelection(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    </th>
+                    {visibleColumns.map((column) => <th key={column} className="whitespace-nowrap px-5 py-3 text-xs font-extrabold text-slate-500">{ORDER_COLUMNS.find((item) => item.id === column)?.label}</th>)}
+                    <th className="px-5 py-3 text-xs font-extrabold text-slate-500">פעולות</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredOrders.map((order) => {
+                    const reminderAt = formatReminder(order.next_reminder_at);
+                    const reminderDue = !!order.next_reminder_at && new Date(order.next_reminder_at).getTime() <= Date.now() && order.reminder_state !== "complete";
+                    return (
+                      <tr key={order.id} className="group transition-colors hover:bg-indigo-50/40 dark:hover:bg-slate-800/60">
+                        <td className="px-4 py-4">
+                          <input type="checkbox" aria-label={`בחירת הזמנה ${order.order_number}`} checked={selectedOrderIds.includes(order.id)} onChange={(event) => toggleOrderSelection(order.id, event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                        </td>
+                        {visibleColumns.map((column) => (
+                          <td key={column} className="max-w-64 px-5 py-4 align-top">
+                            {renderOrderColumn(order, column, reminderAt, reminderDue)}
+                          </td>
+                        ))}
+                        <td className="px-5 py-4">
+                          <Link href={`/dashboard/orders/${order.id}`} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-500 opacity-70 transition hover:bg-white hover:text-indigo-600 hover:opacity-100 dark:hover:bg-slate-900">פרטים <ArrowLeft size={13} /></Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
               </table>
             </div>
             {searchResult && (
