@@ -2,11 +2,13 @@ from datetime import date, datetime, time, timedelta, timezone
 
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, and_, cast, func, or_, select
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from app.extensions import db
 from app.models.order import Order, VALID_STATUSES
+from app.models.order_item import OrderItem
+from app.models.product import Product
 from app.services.permission_service import PermissionService
 
 
@@ -88,6 +90,19 @@ def search_orders():
                 Order.notes.ilike(pattern, escape="\\"),
                 Order.department.ilike(pattern, escape="\\"),
                 Order.project.ilike(pattern, escape="\\"),
+                cast(Order.items, String).ilike(pattern, escape="\\"),
+                Order.order_items.any(and_(
+                    OrderItem.tenant_id == current_user.tenant_id,
+                    OrderItem.product.has(and_(
+                        Product.tenant_id == current_user.tenant_id,
+                        or_(
+                            Product.name.ilike(pattern, escape="\\"),
+                            Product.sku.ilike(pattern, escape="\\"),
+                            Product.supplier_sku.ilike(pattern, escape="\\"),
+                            Product.barcode.ilike(pattern, escape="\\"),
+                        ),
+                    )),
+                )),
             ))
 
         count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
