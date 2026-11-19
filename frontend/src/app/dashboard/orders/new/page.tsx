@@ -304,8 +304,8 @@ export default function NewOrderPage() {
             <div className="min-w-0 flex-1">
               <h2 className="font-extrabold text-slate-950 dark:text-white">הצעות לפי היסטוריית הזמנות</h2>
               <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                מבוסס על הזמנות שנשלחו לספק או הושלמו במערכת בלבד. טיוטות, אישורים פנימיים, ביטולים וספירות מלאי אינם נכללים.
-                הכמויות מנורמלות ליחידת המלאי של המוצר; שורות קרטון מומרות לפי גודל האריזה שנשמר בהזמנה. המחזור הוא 3 שבועות רגילים ושבוע רביעי בתוספת 40%.
+                משלב הזמנות פעילות שנשלחו לספק או הושלמו עם אצוות היסטוריות שאושרו לאחר בדיקת שיוך ספק, מוצר ויחידה. טיוטות, אישורים פנימיים, ביטולים וספירות מלאי אינם נכללים.
+                הכמויות מנורמלות ליחידת המלאי של המוצר; שורות קרטון מומרות לפי גודל האריזה שנשמר בהזמנה. שבועות חלקיים בתחילת ובסוף הטווח אינם משמשים לחישוב הממוצע. המחזור הוא 3 שבועות רגילים ושבוע רביעי בתוספת 40%.
               </p>
               <p className="mt-1 text-[11px] text-slate-500">
                 שבוע היעד מחושב לפי מועד ההזמנה בתוספת זמן האספקה של הספק: {forecastTargetDate}.
@@ -332,6 +332,9 @@ export default function NewOrderPage() {
                       <div className="text-xs text-slate-500">
                         שבוע מתוגבר: {item.boosted_weekly_forecast.toLocaleString("he-IL", { maximumFractionDigits: 2 })} {item.unit}
                       </div>
+                      <div className="mt-1 text-[11px] text-slate-500">
+                        מקור: {item.operational_order_count} פעילות · {item.historical_order_count} היסטוריות · {item.complete_weeks_with_orders} שבועות מלאים עם הזמנות
+                      </div>
                       <button
                         type="button"
                         onClick={() => addSuggestedProduct(item.product_id, item.recommended_quantity)}
@@ -349,7 +352,7 @@ export default function NewOrderPage() {
               )}
               {supplierHistoryForecast && (
                 <p className="mt-3 text-[11px] text-slate-500">
-                  נבדקו {supplierHistoryForecast.order_count} הזמנות בטווח {supplierHistoryForecast.period.start_date} עד {supplierHistoryForecast.period.end_date}.
+                  נכללו {supplierHistoryForecast.source_counts.operational_orders} הזמנות פעילות ו־{supplierHistoryForecast.source_counts.historical_orders} הזמנות היסטוריות מאושרות (סה״כ {supplierHistoryForecast.order_count}) בטווח {supplierHistoryForecast.period.start_date} עד {supplierHistoryForecast.period.end_date}. החישוב מבוסס על {supplierHistoryForecast.complete_weeks_in_period} שבועות מלאים; {supplierHistoryForecast.partial_boundary_weeks_excluded} שבועות חלקיים בקצוות הוצאו מהממוצע.
                 </p>
               )}
             </div>
