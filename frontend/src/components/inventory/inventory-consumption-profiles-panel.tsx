@@ -33,6 +33,7 @@ export default function InventoryConsumptionProfilesPanel() {
   const profiles = useQuery({ queryKey: ["inventory", "consumption-profiles"], queryFn: inventoryService.getConsumptionProfiles });
   const options = useQuery({ queryKey: ["inventory", "consumption-profile-options"], queryFn: inventoryService.getConsumptionProfileOptions });
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<ProfileForm>(blankForm);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -41,7 +42,7 @@ export default function InventoryConsumptionProfilesPanel() {
     ? (number(form.regular_weekly_consumption) * (number(form.reinforcement_cycle_weeks) - 1) + number(form.reinforced_weekly_consumption)) / number(form.reinforcement_cycle_weeks)
     : 0;
 
-  const reset = () => { setEditingId(null); setForm(blankForm); };
+  const reset = () => { setEditingId(null); setForm(blankForm); setFormOpen(false); };
   const save = async () => {
     if (!form.name.trim() || !form.category.trim()) { setMessage("יש למלא שם מוצר וקטגוריה."); return; }
     if (form.max_order_quantity !== "" && number(form.max_order_quantity) < number(form.min_order_quantity)) { setMessage("הכמות המרבית חייבת להיות גדולה או שווה לכמות המינימלית."); return; }
@@ -74,7 +75,7 @@ export default function InventoryConsumptionProfilesPanel() {
   return <section dir="rtl" className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-5">
     <header className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="text-xl font-black">מעקב צריכה ותגבור שבתות</h2><p className="mt-1 text-sm text-slate-500">פרופילי תכנון עצמאיים לחד־פעמי, נייר, ניקיון וציוד. ניתן להוסיף מוצרים ולקשר אותם לקטלוג בהמשך.</p></div>
-      <button onClick={reset} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-black text-white"><Plus size={16}/> מוצר לתכנון</button>
+      <button onClick={()=>{setEditingId(null);setForm(blankForm);setFormOpen(true);}} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-black text-white"><Plus size={16}/> מוצר לתכנון</button>
     </header>
     {message && <div role="status" className="rounded-xl bg-indigo-50 p-3 text-sm font-bold text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-200">{message}</div>}
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -84,7 +85,7 @@ export default function InventoryConsumptionProfilesPanel() {
       <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">המרת חודש תכנון</div><div className="text-2xl font-black">4 שבועות</div></div>
     </div>
 
-    {(editingId !== null || form.name !== "") && <div className="space-y-3 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 dark:border-indigo-900 dark:bg-indigo-950/20">
+    {formOpen && <div className="space-y-3 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 dark:border-indigo-900 dark:bg-indigo-950/20">
       <div className="flex items-center justify-between"><h3 className="font-black">{editingId ? "עריכת פרופיל צריכה" : "הוספת פרופיל צריכה"}</h3><button onClick={reset} aria-label="סגירה" className="rounded-lg p-2"><X size={17}/></button></div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label className={labelClass}>שם מוצר / קבוצת מוצרים<input className={inputClass} value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="למשל: מגשי אלומיניום"/></label>
@@ -114,7 +115,7 @@ export default function InventoryConsumptionProfilesPanel() {
           <td className="px-3 py-3 tabular-nums">{qty(p.regular_weekly_consumption)}</td><td className="px-3 py-3 tabular-nums">{qty(p.reinforced_weekly_consumption)}</td>
           <td className="px-3 py-3 font-black tabular-nums">{qty(p.weighted_weekly_consumption)}</td><td className="px-3 py-3 tabular-nums">{qty(p.monthly_consumption)}</td><td className="px-3 py-3 tabular-nums">{qty(p.safety_stock)}</td>
           <td className="px-3 py-3"><span className={p.mapping_status==="mapped"?"text-emerald-700":"text-amber-700"}>{p.mapping_status==="mapped"?`${p.product_ids.length} מוצרים`:"ממתין לשיוך"}</span></td>
-          <td className="px-3 py-3"><div className="flex gap-1"><button onClick={()=>{setEditingId(p.id);setForm(fromProfile(p));}} title="עריכה" className="rounded-lg bg-slate-100 p-2 dark:bg-slate-800"><Link2 size={15}/></button><button onClick={()=>archive(p)} title="העברה לארכיון" className="rounded-lg bg-slate-100 p-2 text-red-600 dark:bg-slate-800"><Archive size={15}/></button></div></td>
+          <td className="px-3 py-3"><div className="flex gap-1"><button onClick={()=>{setEditingId(p.id);setForm(fromProfile(p));setFormOpen(true);}} title="עריכה" className="rounded-lg bg-slate-100 p-2 dark:bg-slate-800"><Link2 size={15}/></button><button onClick={()=>archive(p)} title="העברה לארכיון" className="rounded-lg bg-slate-100 p-2 text-red-600 dark:bg-slate-800"><Archive size={15}/></button></div></td>
         </tr>)}</tbody>
       </table>
       {!(profiles.data??[]).length&&<div className="p-8 text-center text-sm text-slate-500">אין עדיין פרופילי צריכה. הוסף מוצר ראשון לתכנון.</div>}
