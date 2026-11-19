@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -116,10 +116,11 @@ class SavedOrderSearchService:
 
         supplier_id = value.get("supplier_id")
         if supplier_id not in (None, ""):
-            try:
-                supplier_id = int(supplier_id)
-            except (TypeError, ValueError):
+            if isinstance(supplier_id, bool) or not isinstance(supplier_id, (int, str)):
                 raise BadRequest("supplier_id must be an integer")
+            if isinstance(supplier_id, str) and not supplier_id.isdigit():
+                raise BadRequest("supplier_id must be an integer")
+            supplier_id = int(supplier_id)
             if supplier_id <= 0:
                 raise BadRequest("supplier_id must be positive")
             supplier_exists = db.session.scalar(
