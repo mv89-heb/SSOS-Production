@@ -2,393 +2,187 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { orderService } from "@/services/order-service";
-import { useSuppliers, useProducts } from "@/hooks/use-catalog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { OrderStatusBadge } from "@/components/ui/badge";
 import {
-  ShoppingBag,
-  Clock3,
-  CheckCircle2,
-  Users,
-  Package,
-  ArrowLeft,
-  AlertTriangle,
-  Plus,
-  Upload,
-  TrendingUp,
+  AlertTriangle, ArrowLeft, Bell, CalendarClock, CheckCircle2, Clock3,
+  Package, Plus, RefreshCw, ShoppingBag, Sparkles, Users, Wallet,
 } from "lucide-react";
+import { orderService } from "@/services/order-service";
+import { priceIntelligenceService } from "@/services/price-intelligence-service";
+import { catalogService } from "@/services/catalog-service";
+import { OrderStatusBadge } from "@/components/ui/badge";
+import type { Order } from "@/types";
 
-type StatTone = "violet" | "indigo" | "sky" | "amber" | "emerald";
-
-type DashboardStat = {
-  label: string;
-  value: number;
-  icon: typeof Users;
-  tone: StatTone;
-  href: string;
-};
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("he-IL", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(value));
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
 }
 
 function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat("he-IL", {
-    style: "currency",
-    currency: currency || "ILS",
-    maximumFractionDigits: 0,
-  }).format(value);
+  try {
+    return new Intl.NumberFormat("he-IL", { style: "currency", currency: currency || "ILS", maximumFractionDigits: 0 }).format(value);
+  } catch {
+    return new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 }).format(value) + " " + (currency || "מטבע לא ידוע");
+  }
 }
 
-export default function DashboardPage() {
-  const { data: orders, isLoading: ordersLoading } = useQuery({
-    queryKey: ["orders"],
-    queryFn: () => orderService.getOrders(),
-  });
-  const { data: suppliers, isLoading: suppliersLoading } = useSuppliers();
-  const { data: products, isLoading: productsLoading } = useProducts();
-
-  const allOrders = orders ?? [];
-  const allSuppliers = suppliers ?? [];
-  const allProducts = products ?? [];
-
-  const pendingApprovals = allOrders.filter((order) => order.status === "submitted");
-  const completedOrders = allOrders.filter((order) => order.status === "completed");
-  const lowStockProducts = allProducts.filter((product) => {
-    if (product.current_stock === null || product.current_stock === undefined) return false;
-    if (product.min_stock === null || product.min_stock === undefined) return false;
-    return product.current_stock <= product.min_stock;
-  });
-
-  const recentOrders = [...allOrders]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 5);
-
-  const recentSuppliers = [...allSuppliers]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 5);
-
-  const activeProducts = allProducts.filter((product) => product.active);
-  const catalogValue = activeProducts.reduce((sum, product) => sum + (product.current_price ?? 0), 0);
-
-  const stats: DashboardStat[] = [
-    {
-      label: "ספקים פעילים",
-      value: allSuppliers.length,
-      icon: Users,
-      tone: "violet",
-      href: "/dashboard/suppliers",
-    },
-    {
-      label: "מוצרים פעילים",
-      value: activeProducts.length,
-      icon: Package,
-      tone: "indigo",
-      href: "/dashboard/catalog",
-    },
-    {
-      label: "סה״כ הזמנות",
-      value: allOrders.length,
-      icon: ShoppingBag,
-      tone: "sky",
-      href: "/dashboard/orders",
-    },
-    {
-      label: "ממתינות לאישור",
-      value: pendingApprovals.length,
-      icon: Clock3,
-      tone: pendingApprovals.length > 0 ? "amber" : "emerald",
-      href: "/dashboard/orders",
-    },
-  ];
-
-  return (
-    <div className="space-y-8 pb-8">
-      <section className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-        <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            מרכז שליטה
-          </div>
-          <h1 className="page-title">לוח בקרה</h1>
-          <p className="page-subtitle">תמונת מצב מהירה של הרכש, המלאי והפעילות בארגון.</p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/dashboard/catalog"
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-indigo-200 hover:text-indigo-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
-          >
-            <Upload className="h-4 w-4" />
-            ייבוא מחירון
-          </Link>
-          <Link
-            href="/dashboard/orders/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700"
-          >
-            <Plus className="h-4 w-4" />
-            הזמנה חדשה
-          </Link>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => (
-          <StatCard key={stat.label} {...stat} />
-        ))}
-      </section>
-
-      <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <Link
-          href="/dashboard/orders"
-          className="group rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-700 p-6 text-white shadow-xl shadow-indigo-600/15 transition hover:-translate-y-0.5"
-        >
-          <div className="flex items-start justify-between">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
-              <Clock3 className="h-5 w-5" />
-            </div>
-            <ArrowLeft className="h-5 w-5 opacity-60 transition group-hover:-translate-x-1" />
-          </div>
-          <p className="mt-7 text-sm font-semibold text-indigo-100">דורש טיפול</p>
-          <p className="mt-1 text-4xl font-black">{pendingApprovals.length}</p>
-          <p className="mt-1 text-sm text-indigo-100">
-            {pendingApprovals.length === 1 ? "הזמנה ממתינה לאישור" : "הזמנות ממתינות לאישור"}
-          </p>
-        </Link>
-
-        <Link
-          href="/dashboard/catalog"
-          className="group rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-amber-900/60 dark:bg-amber-950/30"
-        >
-          <div className="flex items-start justify-between">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
-              <AlertTriangle className="h-5 w-5" />
-            </div>
-            <ArrowLeft className="h-5 w-5 text-amber-500 opacity-60 transition group-hover:-translate-x-1" />
-          </div>
-          <p className="mt-7 text-sm font-semibold text-amber-800 dark:text-amber-300">מלאי נמוך</p>
-          <p className="mt-1 text-4xl font-black text-slate-950 dark:text-white">{lowStockProducts.length}</p>
-          <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">מוצרים מתחת לרף המינימום</p>
-        </Link>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-start justify-between">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">
-              <TrendingUp className="h-5 w-5" />
-            </div>
-            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">נתוני קטלוג</span>
-          </div>
-          <p className="mt-7 text-sm font-semibold text-slate-500">סכום מחירי הקטלוג הפעיל</p>
-          <p className="mt-1 text-3xl font-black text-slate-950 dark:text-white">{formatMoney(catalogValue, "ILS")}</p>
-          <p className="mt-1 text-sm text-slate-400">סכום מחירים נוכחיים, לא הוצאה בפועל</p>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Card className="glass-card">
-          <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
-            <div>
-              <CardTitle className="text-base font-extrabold text-slate-950 dark:text-white">הזמנות אחרונות</CardTitle>
-              <p className="mt-1 text-xs text-slate-400">הפעילות האחרונה במערכת</p>
-            </div>
-            <Link href="/dashboard/orders" className="text-xs font-bold text-indigo-600 hover:text-indigo-700">לכל ההזמנות</Link>
-          </CardHeader>
-          <CardContent className="pt-2">
-            {ordersLoading ? (
-              <DashboardListSkeleton />
-            ) : recentOrders.length === 0 ? (
-              <EmptyState icon={ShoppingBag} title="אין הזמנות עדיין" href="/dashboard/orders/new" action="צור הזמנה" />
-            ) : (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {recentOrders.map((order) => (
-                  <Link
-                    key={order.id}
-                    href={`/dashboard/orders/${order.id}`}
-                    className="flex items-center justify-between gap-4 rounded-xl px-2 py-3.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-bold text-slate-900 dark:text-white">{order.order_number}</div>
-                      <div className="mt-0.5 truncate text-xs text-slate-400">{order.supplier_name} · {formatDate(order.created_at)}</div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <span className="hidden text-sm font-bold text-slate-700 sm:inline dark:text-slate-200">
-                        {formatMoney(order.final_total, order.currency)}
-                      </span>
-                      <OrderStatusBadge status={order.status} />
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="glass-card">
-          <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
-            <div>
-              <CardTitle className="text-base font-extrabold text-slate-950 dark:text-white">ספקים אחרונים</CardTitle>
-              <p className="mt-1 text-xs text-slate-400">ספקים שנוספו לאחרונה</p>
-            </div>
-            <Link href="/dashboard/suppliers" className="text-xs font-bold text-indigo-600 hover:text-indigo-700">לכל הספקים</Link>
-          </CardHeader>
-          <CardContent className="pt-2">
-            {suppliersLoading ? (
-              <DashboardListSkeleton />
-            ) : recentSuppliers.length === 0 ? (
-              <EmptyState icon={Users} title="אין ספקים עדיין" href="/dashboard/suppliers" action="ניהול ספקים" />
-            ) : (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {recentSuppliers.map((supplier) => (
-                  <Link
-                    key={supplier.id}
-                    href={`/dashboard/suppliers/${supplier.id}`}
-                    className="flex items-center justify-between gap-4 rounded-xl px-2 py-3.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-extrabold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                        {supplier.name.slice(0, 1).toUpperCase()}
-                      </div>
-                      <span className="truncate text-sm font-bold text-slate-900 dark:text-white">{supplier.name}</span>
-                    </div>
-                    <span className="shrink-0 text-xs text-slate-400">{formatDate(supplier.created_at)}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
-
-      <Card className="glass-card">
-        <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
-          <div>
-            <CardTitle className="text-base font-extrabold text-slate-950 dark:text-white">מוצרים מובילים בקטלוג</CardTitle>
-            <p className="mt-1 text-xs text-slate-400">מוצגים לפי המחיר הנוכחי הגבוה ביותר — לא לפי תדירות הזמנה</p>
-          </div>
-          <Link href="/dashboard/catalog" className="text-xs font-bold text-indigo-600 hover:text-indigo-700">קטלוג מלא</Link>
-        </CardHeader>
-        <CardContent className="pt-3">
-          {productsLoading ? (
-            <DashboardListSkeleton rows={5} />
-          ) : activeProducts.length === 0 ? (
-            <EmptyState icon={Package} title="אין מוצרים פעילים" href="/dashboard/catalog" action="פתיחת הקטלוג" />
-          ) : (
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-              {[...activeProducts]
-                .sort((a, b) => (b.current_price ?? 0) - (a.current_price ?? 0))
-                .slice(0, 5)
-                .map((product) => {
-                  const hasStock = product.current_stock !== null && product.min_stock !== null;
-                  const isLow = hasStock && product.current_stock! <= product.min_stock!;
-                  return (
-                    <Link
-                      key={product.id}
-                      href={`/dashboard/catalog/${product.id}`}
-                      className="rounded-xl border border-slate-100 p-4 transition hover:border-indigo-200 hover:bg-indigo-50/40 dark:border-slate-800 dark:hover:border-indigo-900 dark:hover:bg-indigo-950/20"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <Package className="h-4 w-4 text-slate-400" />
-                        {isLow && <span className="h-2 w-2 rounded-full bg-amber-500" title="מלאי נמוך" />}
-                      </div>
-                      <p className="mt-4 truncate text-sm font-bold text-slate-900 dark:text-white">{product.name}</p>
-                      <p className="mt-1 text-xs text-slate-400">{product.category || "ללא קטגוריה"}</p>
-                      <p className="mt-3 text-sm font-black text-indigo-700 dark:text-indigo-300">{product.current_price != null && product.current_price > 0 ? formatMoney(product.current_price, product.currency) : "חסר מחיר"}</p>
-                    </Link>
-                  );
-                })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {completedOrders.length > 0 && (
-        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm dark:border-emerald-900/50 dark:bg-emerald-950/30">
-          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          <span className="font-semibold text-emerald-900 dark:text-emerald-200">{completedOrders.length} הזמנות הושלמו בהצלחה.</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  tone,
-  href,
-}: DashboardStat) {
-  const toneClasses: Record<StatTone, string> = {
-    violet: "bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300",
-    indigo: "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300",
-    sky: "bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300",
-    amber: "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300",
-    emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300",
+function MetricCard({ label, value, hint, href, icon: Icon, tone = "slate" }: {
+  label: string; value: string | number; hint: string; href: string; icon: typeof Users;
+  tone?: "slate" | "indigo" | "amber" | "red" | "emerald" | "violet";
+}) {
+  const tones = {
+    slate: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+    indigo: "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300",
+    amber: "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+    red: "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300",
+    emerald: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+    violet: "bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300",
   };
-
   return (
-    <Link href={href} className="group glass-card glass-card-hover p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold text-slate-400">{label}</p>
-          <p className="mt-2 text-3xl font-black tracking-tight text-slate-950 dark:text-white">{value.toLocaleString("he-IL")}</p>
-        </div>
-        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${toneClasses[tone]}`}>
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-      <div className="mt-5 flex items-center gap-1 text-[11px] font-bold text-slate-400 transition group-hover:text-indigo-600">
-        פתיחה
-        <ArrowLeft className="h-3 w-3 transition group-hover:-translate-x-0.5" />
-      </div>
+    <Link href={href} className="group min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-950 sm:p-5">
+      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs font-bold text-slate-500 dark:text-slate-400">{label}</p><p className="mt-2 break-words text-2xl font-black tracking-tight text-slate-950 dark:text-white sm:text-3xl">{typeof value === "number" ? value.toLocaleString("he-IL") : value}</p></div><span className={"flex h-10 w-10 shrink-0 items-center justify-center rounded-xl " + tones[tone]}><Icon size={19} /></span></div>
+      <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-400"><span>{hint}</span><ArrowLeft size={13} className="shrink-0 transition group-hover:-translate-x-1 group-hover:text-indigo-600" /></div>
     </Link>
   );
 }
 
-function DashboardListSkeleton({ rows = 5 }: { rows?: number }) {
+function Section({ title, subtitle, href, linkLabel, children }: {
+  title: string; subtitle?: string; href?: string; linkLabel?: string; children: React.ReactNode;
+}) {
   return (
-    <div className="space-y-3 py-3">
-      {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="flex items-center justify-between gap-4 rounded-xl p-2">
-          <div className="flex flex-1 items-center gap-3">
-            <div className="h-9 w-9 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
-            <div className="flex-1 space-y-2">
-              <div className="h-3 w-2/3 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
-              <div className="h-2.5 w-1/3 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
-            </div>
-          </div>
-          <div className="h-6 w-16 animate-pulse rounded-full bg-slate-100 dark:bg-slate-800" />
-        </div>
-      ))}
-    </div>
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 dark:border-slate-800 sm:px-5">
+        <div><h2 className="font-black text-slate-900 dark:text-white">{title}</h2>{subtitle && <p className="mt-1 text-xs text-slate-500">{subtitle}</p>}</div>
+        {href && <Link href={href} className="shrink-0 text-xs font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-300">{linkLabel || "לצפייה"} ←</Link>}
+      </div>
+      {children}
+    </section>
   );
 }
 
-function EmptyState({
-  icon: Icon,
-  title,
-  href,
-  action,
-}: {
-  icon: typeof Package;
-  title: string;
-  href: string;
-  action: string;
-}) {
+function EmptyRow({ children }: { children: React.ReactNode }) {
+  return <div className="px-5 py-8 text-center text-sm text-slate-500">{children}</div>;
+}
+
+function OrderRow({ order }: { order: Order }) {
   return (
-    <div className="flex flex-col items-center justify-center py-10 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-800">
-        <Icon className="h-5 w-5" />
-      </div>
-      <p className="mt-3 text-sm font-bold text-slate-700 dark:text-slate-200">{title}</p>
-      <Link href={href} className="mt-2 text-xs font-bold text-indigo-600 hover:text-indigo-700">
-        {action} ←
-      </Link>
+    <Link href={"/dashboard/orders/" + order.id} className="flex min-w-0 flex-col gap-2 px-4 py-3 transition hover:bg-slate-50 dark:hover:bg-slate-900/70 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+      <div className="min-w-0"><div className="truncate text-sm font-bold text-slate-900 dark:text-white">{order.order_number} <span className="font-normal text-slate-400">· {order.supplier_name}</span></div><div className="mt-1 text-xs text-slate-400">{formatDate(order.created_at)}{order.planned_order_date ? " · אספקה מתוכננת: " + formatDate(order.planned_order_date) : ""}</div></div>
+      <div className="flex items-center justify-between gap-3 sm:justify-end"><span className="text-sm font-bold text-slate-700 dark:text-slate-200">{formatMoney(Number(order.final_total || 0), order.currency)}</span><OrderStatusBadge status={order.status} /></div>
+    </Link>
+  );
+}
+
+export default function DashboardPage() {
+  const ordersQuery = useQuery({ queryKey: ["orders"], queryFn: () => orderService.getOrders(), staleTime: 30000 });
+  const suppliersQuery = useQuery({ queryKey: ["dashboard", "active-suppliers"], queryFn: () => catalogService.listSuppliers(true), staleTime: 60000 });
+  const productsQuery = useQuery({ queryKey: ["dashboard", "active-products"], queryFn: () => catalogService.listProducts(undefined, true), staleTime: 60000 });
+  const inventoryQuery = useQuery({
+    queryKey: ["dashboard", "inventory-recommendations"],
+    queryFn: () => priceIntelligenceService.getInventoryRecommendations({ lookback_days: 60, safety_days: 2, limit: 500 }),
+    staleTime: 60000, retry: 1,
+  });
+  const portfolioQuery = useQuery({
+    queryKey: ["dashboard", "procurement-portfolio"],
+    queryFn: () => priceIntelligenceService.getPortfolioSummary(5),
+    staleTime: 60000, retry: 1,
+  });
+
+  const orders = ordersQuery.data ?? [];
+  const activeSuppliers = suppliersQuery.data ?? [];
+  const activeProducts = productsQuery.data ?? [];
+  const suppliersLoading = suppliersQuery.isLoading;
+  const productsLoading = productsQuery.isLoading;
+  const inventory = inventoryQuery.data?.recommendations ?? [];
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const pendingApprovals = orders.filter((order) => order.status === "submitted");
+  const openOrders = orders.filter((order) => ["draft", "submitted", "approved", "sent"].includes(order.status));
+  const overdueReminders = orders.filter((order) => {
+    if (order.status === "completed" || order.status === "cancelled" || order.reminder_state === "complete") return false;
+    if (order.reminder_state === "due" || order.reminder_state === "critical") return true;
+    if (!order.next_reminder_at) return false;
+    const dueAt = new Date(order.next_reminder_at);
+    return !Number.isNaN(dueAt.getTime()) && dueAt.getTime() <= now.getTime();
+  });
+  const monthOrders = orders.filter((order) => {
+    const createdAt = new Date(order.created_at);
+    return !Number.isNaN(createdAt.getTime()) && createdAt >= monthStart && order.status !== "cancelled" && order.status !== "draft";
+  });
+  const committedByCurrency = (() => {
+    const totals = new Map<string, number>();
+    for (const order of monthOrders) {
+      const currency = order.currency || "ILS";
+      totals.set(currency, (totals.get(currency) || 0) + Number(order.final_total || 0));
+    }
+    return [...totals.entries()].sort(([a], [b]) => a.localeCompare(b));
+  })();
+
+  const urgentStock = inventory.filter((row) => row.status === "urgent");
+  const reorderStock = inventory.filter((row) => row.status === "reorder");
+  const insufficientStockData = inventory.filter((row) => row.status === "insufficient_data");
+  const recentOrders = [...orders].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 7);
+  const recentSuppliers = [...activeSuppliers].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5);
+  const opportunities = portfolioQuery.data?.top_opportunities ?? [];
+  const operationalLoading = ordersQuery.isLoading || inventoryQuery.isLoading;
+  const attentionItems = [
+    { key: "approval", count: pendingApprovals.length, label: "הזמנות ממתינות לאישור", href: "/dashboard/orders", tone: "amber" as const },
+    { key: "reminder", count: overdueReminders.length, label: "תזכורות שדורשות טיפול", href: "/dashboard/reminders", tone: "red" as const },
+    { key: "urgent", count: urgentStock.length, label: "מוצרים בסיכון מלאי דחוף", href: "/dashboard/procurement-intelligence", tone: "red" as const },
+    { key: "reorder", count: reorderStock.length, label: "מוצרים שמומלץ להזמין", href: "/dashboard/procurement-intelligence", tone: "amber" as const },
+  ].filter((item) => item.count > 0);
+
+  return (
+    <div dir="rtl" className="w-full min-w-0 max-w-full space-y-5 pb-8 sm:space-y-6">
+      <header className="flex min-w-0 flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0"><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> מרכז שליטה תפעולי</div><h1 className="page-title">לוח בקרה</h1><p className="page-subtitle">מה דורש טיפול עכשיו, מה מצב הרכש ואיפה קיימות הזדמנויות לשיפור.</p><p className="mt-2 text-xs text-slate-400">עודכן: {new Intl.DateTimeFormat("he-IL", { dateStyle: "medium", timeStyle: "short" }).format(now)}</p></div>
+        <div className="flex w-full flex-wrap gap-2 lg:w-auto">
+          <Link href="/dashboard/procurement-intelligence" className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-700 dark:text-slate-200 sm:flex-none"><Sparkles size={16} /> תמונת מצב רכש</Link>
+          <Link href="/dashboard/orders/new" className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-indigo-700 sm:flex-none"><Plus size={17} /> הזמנה חדשה</Link>
+          <button type="button" onClick={() => { void ordersQuery.refetch(); void inventoryQuery.refetch(); void portfolioQuery.refetch(); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300" aria-label="רענון נתונים"><RefreshCw size={16} className={operationalLoading ? "animate-spin" : ""} /><span className="sm:hidden">רענון</span></button>
+        </div>
+      </header>
+
+      {(ordersQuery.isError || inventoryQuery.isError || portfolioQuery.isError) && <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"><AlertTriangle size={18} className="mt-0.5 shrink-0" /><div><strong>חלק מהנתונים לא נטענו.</strong><p className="mt-1 text-xs">הנתונים הזמינים מוצגים כרגיל. אין לפרש נתון חסר כאפס; אפשר לרענן ולנסות שוב.</p></div></div>}
+
+      <section className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-4 sm:gap-4">
+        <MetricCard label="הזמנות פתוחות" value={ordersQuery.isLoading ? "…" : openOrders.length} hint="טיוטה, ממתינה, מאושרת או נשלחה" href="/dashboard/orders" icon={ShoppingBag} tone="indigo" />
+        <MetricCard label="ממתינות לאישור" value={ordersQuery.isLoading ? "…" : pendingApprovals.length} hint="הזמנות שהוגשו לאישור" href="/dashboard/orders" icon={Clock3} tone={pendingApprovals.length ? "amber" : "emerald"} />
+        <MetricCard label="תזכורות באיחור" value={ordersQuery.isLoading ? "…" : overdueReminders.length} hint="לפי מצב התזכורת ומועד היעד" href="/dashboard/reminders" icon={Bell} tone={overdueReminders.length ? "red" : "emerald"} />
+        <MetricCard label="סיכון מלאי דחוף" value={inventoryQuery.isLoading ? "…" : inventoryQuery.isError ? "לא זמין" : urgentStock.length} hint="לפי המלצות מלאי מבוססות נתונים" href="/dashboard/procurement-intelligence" icon={Package} tone={urgentStock.length ? "red" : "emerald"} />
+      </section>
+
+      <section className="grid min-w-0 gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <Section title="מרכז טיפול — מה דורש תשומת לב" subtitle="רק פריטים שיש להם אינדיקציה תפעולית ברורה." href="/dashboard/orders" linkLabel="ניהול הזמנות">
+          {operationalLoading ? <div className="space-y-3 p-5"><div className="h-10 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" /><div className="h-10 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" /></div> : attentionItems.length === 0 ? <EmptyRow><CheckCircle2 className="mx-auto mb-2 text-emerald-500" size={22} />אין כרגע פריטי טיפול לפי הנתונים הזמינים.</EmptyRow> : <div className="divide-y divide-slate-100 dark:divide-slate-800">{attentionItems.map((item) => <Link key={item.key} href={item.href} className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-900/60 sm:px-5"><div className="flex min-w-0 items-center gap-3"><span className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-xl " + (item.tone === "red" ? "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300" : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300")}><AlertTriangle size={17} /></span><span className="text-sm font-bold text-slate-800 dark:text-slate-100">{item.label}</span></div><span className="text-xl font-black tabular-nums text-slate-900 dark:text-white">{item.count.toLocaleString("he-IL")}</span></Link>)}</div>}
+          {inventoryQuery.isSuccess && insufficientStockData.length > 0 && <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/50">ל־{insufficientStockData.length.toLocaleString("he-IL")} מוצרים אין עדיין מספיק נתוני ספירה/צריכה להמלצה אמינה. הם לא סווגו כדחופים.</div>}
+        </Section>
+
+        <Section title="התחייבויות רכש החודש" subtitle="סכום הזמנות שאינן טיוטה או מבוטלות — לא תשלומים שבוצעו." href="/dashboard/orders" linkLabel="פירוט הזמנות">
+          {ordersQuery.isLoading ? <EmptyRow>טוען נתוני הזמנות…</EmptyRow> : committedByCurrency.length === 0 ? <EmptyRow>אין הזמנות מחייבות בחודש הנוכחי.</EmptyRow> : <div className="space-y-3 p-4 sm:p-5">{committedByCurrency.map(([currency, total]) => <div key={currency} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-4 dark:border-slate-800"><div className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300"><Wallet size={17} /> {currency}</div><div className="text-xl font-black tabular-nums text-slate-900 dark:text-white">{formatMoney(total, currency)}</div></div>)}<p className="text-[11px] leading-5 text-slate-400">החישוב מבוסס על תאריך יצירת ההזמנה והסכום הסופי הרשום בה. מטבעות שונים מוצגים בנפרד, ללא המרה מלאכותית.</p></div>}
+        </Section>
+      </section>
+
+      <section className="grid min-w-0 gap-4 lg:grid-cols-2">
+        <Section title="הזמנות אחרונות" subtitle="מעקב מהיר אחר ההזמנות האחרונות שנוצרו." href="/dashboard/orders" linkLabel="כל ההזמנות">
+          {ordersQuery.isLoading ? <EmptyRow>טוען הזמנות…</EmptyRow> : recentOrders.length === 0 ? <EmptyRow>אין עדיין הזמנות להצגה.</EmptyRow> : <div className="divide-y divide-slate-100 dark:divide-slate-800">{recentOrders.map((order) => <OrderRow key={order.id} order={order} />)}</div>}
+        </Section>
+        <Section title="הזדמנויות מחיר" subtitle="הזדמנויות מחושבות מהשוואות ספקים; אינן חיסכון שמומש." href="/dashboard/procurement-intelligence" linkLabel="ניתוח מלא">
+          {portfolioQuery.isLoading ? <EmptyRow>טוען השוואות מחירים…</EmptyRow> : portfolioQuery.isError ? <EmptyRow>נתוני השוואת המחירים אינם זמינים כרגע.</EmptyRow> : opportunities.length === 0 ? <EmptyRow>אין כרגע הזדמנויות מחיר מאומתות להצגה.</EmptyRow> : <div className="divide-y divide-slate-100 dark:divide-slate-800">{opportunities.slice(0, 5).map((item) => <div key={item.product_id} className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-5"><div className="min-w-0"><div className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{item.product_name}</div><div className="mt-1 text-xs text-slate-400">{item.current_supplier || "ספק נוכחי לא ידוע"} ← {item.best_supplier || "חלופה לא ידועה"}</div></div><div className="shrink-0 text-left"><div className="text-sm font-black text-emerald-700 dark:text-emerald-300">{formatMoney(item.savings_per_unit, item.currency)} ליחידה</div><div className="text-[11px] text-slate-400">{item.savings_percent.toLocaleString("he-IL", { maximumFractionDigits: 1 })}% פוטנציאלי</div></div></div>)}</div>}
+        </Section>
+      </section>
+
+      <section className="grid min-w-0 gap-4 lg:grid-cols-2">
+        <Section title="ספקים שנוספו לאחרונה" subtitle="קיצורי דרך לעבודה מול הספקים הפעילים." href="/dashboard/suppliers" linkLabel="כל הספקים">
+          {suppliersLoading ? <EmptyRow>טוען ספקים…</EmptyRow> : recentSuppliers.length === 0 ? <EmptyRow>אין ספקים פעילים להצגה.</EmptyRow> : <div className="divide-y divide-slate-100 dark:divide-slate-800">{recentSuppliers.map((supplier) => <Link key={supplier.id} href={"/dashboard/suppliers/" + supplier.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-900/60 sm:px-5"><div className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300">{supplier.name.slice(0, 1)}</span><span className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{supplier.name}</span></div><span className="shrink-0 text-xs text-slate-400">{formatDate(supplier.created_at)}</span></Link>)}</div>}
+        </Section>
+        <Section title="איכות נתוני הקטלוג" subtitle="מדדים תיאוריים — אינם משנים מוצרים או מחירים." href="/dashboard/catalog" linkLabel="ניהול קטלוג">
+          {productsLoading ? <EmptyRow>טוען קטלוג…</EmptyRow> : <div className="grid grid-cols-2 gap-3 p-4 sm:p-5"><div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900"><div className="text-xs text-slate-500">מוצרים פעילים</div><div className="mt-1 text-2xl font-black">{activeProducts.length.toLocaleString("he-IL")}</div></div><div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900"><div className="text-xs text-slate-500">ספקים פעילים</div><div className="mt-1 text-2xl font-black">{activeSuppliers.length.toLocaleString("he-IL")}</div></div><div className="rounded-xl bg-amber-50 p-4 dark:bg-amber-950/20"><div className="text-xs text-amber-800 dark:text-amber-300">מוצרים ללא מחיר תקין</div><div className="mt-1 text-2xl font-black text-amber-800 dark:text-amber-200">{activeProducts.filter((product) => product.current_price == null || Number(product.current_price) <= 0).length.toLocaleString("he-IL")}</div></div><div className="rounded-xl bg-indigo-50 p-4 dark:bg-indigo-950/30"><div className="text-xs text-indigo-800 dark:text-indigo-300">מוצרים ללא יחידת מידה</div><div className="mt-1 text-2xl font-black text-indigo-800 dark:text-indigo-200">{activeProducts.filter((product) => !String(product.unit || "").trim()).length.toLocaleString("he-IL")}</div></div></div>}
+        </Section>
+      </section>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/50"><div className="flex items-center gap-2"><CalendarClock size={16} /> הנתונים מוצגים לפי המידע שנשמר במערכת; ספירת מלאי חסרה אינה נחשבת לאפס.</div><Link href="/dashboard/inventory" className="font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-300">פתיחת ניהול מלאי ←</Link></div>
     </div>
   );
 }
