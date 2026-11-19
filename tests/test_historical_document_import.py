@@ -193,3 +193,92 @@ def test_manual_historical_orders_are_isolated_and_preserve_unknown_units(logged
 def test_historical_supplier_key_handles_unique_initial_and_company_suffix():
     assert _supplier_key("ר. שמאי") == _supplier_key("שמאי")
     assert _supplier_key('פעמית בע"מ') == _supplier_key("פעמית")
+
+
+def test_manual_historical_preview_is_read_only_and_suggests_supplier_and_product_matches(
+    logged_in_client_a, tenant_a_admin, db
+):
+    from sqlalchemy import select, func
+    from app.models.historical_document_import import HistoricalImportBatch, HistoricalPurchaseOrder
+    from app.models.product import Product
+    from app.models.supplier import Supplier
+
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="פעמית.ח", active=True)
+    db.session.add(supplier)
+    db.session.flush()
+    product = Product(
+        tenant_id=tenant_id, supplier_id=supplier.id,
+        name="מגבת 165 TED מ' 1/6 בקרטון יבוא",
+        sku="PREVIEW-TOWEL", unit="קרט", units_per_carton=6, active=True,
+    )
+    db.session.add(product)
+    db.session.commit()
+
+    response = logged_in_client_a.post("/api/historical-document-import/manual-orders/preview", json={
+        "orders": [
+            {
+                "order_date": "2026-07-21",
+                "supplier_name": "פעמית",
+                "items": [{"description": "מגבת נייר 165מ'", "quantity": 10, "quantity_unit": "carton"}],
+            },
+            {
+                "order_date": "2026-07-22",
+                "supplier_name": "פעמית.ח",
+                "items": [{"description": "מגבת נייר 165מ'", "quantity": None}],
+            },
+        ],
+    })
+    assert response.status_code == 200, response.get_json()
+    result = response.get_json()
+    assert result["writes_performed"] is False
+    assert result["summary"]["order_count"] == 2
+    assert result["summary"]["unmatched_suppliers"] == 1
+    assert result["orders"][0]["supplier_candidates"][0]["supplier_id"] == supplier.id
+    assert result["orders"][1]["items"][0]["product_candidates"][0]["product_id"] == product.id
+    assert result["summary"]["missing_quantities"] == 1
+    assert db.session.scalar(select(func.count()).select_from(HistoricalImportBatch)) == 0
+    assert db.session.scalar(select(func.count()).select_from(HistoricalPurchaseOrder)) == 0
+
+
+def test_manual_historical_import_accepts_explicit_tenant_scoped_catalog_mapping(
+    logged_in_client_a, tenant_a_admin, db
+):
+    from app.models.historical_document_import import HistoricalPurchaseOrder
+    from app.models.product import Product
+    from app.models.supplier import Supplier
+
+    tenant_id = tenant_a_admin[0]["tenant"]["id"]
+    supplier = Supplier(tenant_id=tenant_id, name="פעמית.ח", active=True)
+    db.session.add(supplier)
+    db.session.flush()
+    product = Product(
+        tenant_id=tenant_id, supplier_id=supplier.id,
+        name="מגבת 165 TED מ' 1/6 בקרטון יבוא",
+        sku="EXPLICIT-MAP-TOWEL", unit="קרט", units_per_carton=6, active=True,
+    )
+    db.session.add(product)
+    db.session.commit()
+
+    response = logged_in_client_a.post("/api/historical-document-import/manual-orders", json={
+        "name": "Explicit mapping history",
+        "orders": [{
+            "order_date": "2026-07-21",
+            "supplier_name": "פעמית",
+            "supplier_id": supplier.id,
+            "items": [{
+                "description": "מגבת נייר 165מ'",
+                "product_id": product.id,
+                "quantity": 10,
+                "unit": "קרטונים",
+                "quantity_unit": "carton",
+            }],
+        }],
+    })
+    assert response.status_code == 201, response.get_json()
+    line = response.get_json()["orders"][0]["items"][0]
+    assert line["product_id"] == product.id
+    assert line["product_match"] == "manual"
+    assert line["units_per_carton"] == 6
+    saved = db.session.query(HistoricalPurchaseOrder).one()
+    assert saved.items[0]["product_id"] == product.id
