@@ -209,7 +209,8 @@ def _build_xlsx_export(orders, filters):
     info.column_dimensions["A"].width = 24
     info.column_dimensions["B"].width = 48
     for row in info.iter_rows(min_row=2):
-        row[1].data_type = "s"
+        if isinstance(row[1].value, str):
+            row[1].data_type = "s"
 
     output = io.BytesIO()
     workbook.save(output)
