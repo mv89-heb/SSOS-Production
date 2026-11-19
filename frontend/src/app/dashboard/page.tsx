@@ -149,7 +149,7 @@ export default function DashboardPage() {
       <section className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-4 sm:gap-4">
         <MetricCard label="הזמנות פתוחות" value={ordersQuery.isLoading ? "…" : openOrders.length} hint="טיוטה, ממתינה, מאושרת או נשלחה" href="/dashboard/orders" icon={ShoppingBag} tone="indigo" />
         <MetricCard label="ממתינות לאישור" value={ordersQuery.isLoading ? "…" : pendingApprovals.length} hint="הזמנות שהוגשו לאישור" href="/dashboard/orders" icon={Clock3} tone={pendingApprovals.length ? "amber" : "emerald"} />
-        <MetricCard label="תזכורות באיחור" value={remindersQuery.isLoading ? "…" : remindersQuery.isError ? "לא זמין" : overdueReminders.length} hint="לפי רשימת התזכורות הפעילות ומועד היעד" href="/dashboard/reminders" icon={Bell} tone={overdueReminders.length ? "red" : "emerald"} />
+        <MetricCard label="תזכורות באיחור" value={remindersQuery.isLoading ? "…" : remindersQuery.isError ? "לא זמין" : overdueReminders.length} hint="לפי רשימת התזכורות הפעילות ומועד היעד" href="/dashboard/reminders" icon={Bell} tone={remindersQuery.isError ? "slate" : overdueReminders.length ? "red" : "emerald"} />
         <MetricCard label="סיכון מלאי דחוף" value={inventoryQuery.isLoading ? "…" : inventoryQuery.isError ? "לא זמין" : urgentStock.length} hint="לפי המלצות מלאי מבוססות נתונים" href="/dashboard/procurement-intelligence" icon={Package} tone={urgentStock.length ? "red" : "emerald"} />
       </section>
 
