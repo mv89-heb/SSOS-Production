@@ -14,6 +14,7 @@ from app.models.receipt import Receipt, RECEIPT_POSTED
 from app.models.receipt_item import ReceiptItem
 from app.models.supplier import Supplier
 from app.models.supplier_invoice import SupplierInvoice, SupplierInvoicePayment
+from app.models.supplier_credit_adjustment import SupplierCreditAdjustment, CREDIT_ADJUSTMENT_ACTIVE
 from app.services.permission_service import PermissionService
 
 
@@ -124,6 +125,19 @@ def _supplier_reliability(tenant_id: int, start_at: datetime, end_at: datetime):
     for item in order_items:
         items_by_order[item.order_id].append(item)
 
+    credit_adjustments = db.session.scalars(
+        select(SupplierCreditAdjustment).where(
+            SupplierCreditAdjustment.tenant_id == tenant_id,
+            SupplierCreditAdjustment.order_id.in_(order_ids),
+            SupplierCreditAdjustment.status == CREDIT_ADJUSTMENT_ACTIVE,
+            SupplierCreditAdjustment.adjustment_date >= start_at.date(),
+            SupplierCreditAdjustment.adjustment_date < end_at.date(),
+        ).order_by(SupplierCreditAdjustment.adjustment_date.asc(), SupplierCreditAdjustment.id.asc())
+    ).all()
+    adjustments_by_order = defaultdict(list)
+    for adjustment in credit_adjustments:
+        adjustments_by_order[adjustment.order_id].append(adjustment)
+
     metrics = {}
     for order in orders:
         supplier = supplier_by_order.get(order.id)
@@ -140,8 +154,14 @@ def _supplier_reliability(tenant_id: int, start_at: datetime, end_at: datetime):
             "missing_planned_date": 0,
             "missing_receipt_date": 0,
             "orders_without_posted_receipt": 0,
+            "credit_adjustment_count": 0,
+            "orders_with_credit_adjustments": 0,
         })
         metric["completed_orders"] += 1
+        order_adjustments = adjustments_by_order.get(order.id, [])
+        metric["credit_adjustment_count"] += len(order_adjustments)
+        if order_adjustments:
+            metric["orders_with_credit_adjustments"] += 1
         if not order.planned_order_date:
             metric["missing_planned_date"] += 1
 
@@ -181,9 +201,14 @@ def _supplier_reliability(tenant_id: int, start_at: datetime, end_at: datetime):
             **metric,
             "late_rate_percent": round(metric["late_orders"] * 100 / delivery_n, 1) if delivery_n else None,
             "shortage_rate_percent": round(metric["short_orders"] * 100 / shortage_n, 1) if shortage_n else None,
-            "credit_adjustment_frequency": None,
-            "credit_adjustment_data_available": False,
-            "credit_adjustment_note": "אין במערכת קישור מובנה בין זיכויים/התאמות לבין ספק והזמנה; המדד אינו מחושב.",
+            "credit_adjustment_frequency": round(
+                metric["orders_with_credit_adjustments"] * 100 / metric["completed_orders"], 1
+            ) if metric["completed_orders"] else None,
+            "credit_adjustment_data_available": True,
+            "credit_adjustment_note": (
+                "אחוז ההזמנות שהושלמו בתקופה ושויך להן לפחות זיכוי/התאמה פעילים. "
+                "המספר בסוגריים הוא מספר המסמכים; זיכויים שבוטלו אינם נספרים."
+            ),
         })
     return sorted(result, key=lambda row: row["supplier_name"].casefold())
 
@@ -294,7 +319,7 @@ def procurement_spend():
                 "invoiced": "Recorded supplier invoices by invoice date. This is not added to ordered spend.",
                 "paid": "Recorded invoice payments by payment date. Partial payments are counted only when paid.",
                 "currency": "Totals are separated by currency; currencies are never converted or summed together.",
-                "reliability": "Supplier reliability uses completed orders created in the selected period. Lateness is measured from planned date to the last posted receipt; shortage means at least one line has an accepted (undamaged) quantity below the ordered quantity. Missing dates and sample sizes are shown; credit/adjustment frequency is not available without structured linkage.",
+                "reliability": "Supplier reliability uses completed orders created in the selected period. Lateness is measured from planned date to the last posted receipt; shortage means at least one line has an accepted (undamaged) quantity below the ordered quantity. Missing dates and sample sizes are shown. Credit adjustment frequency is the percentage of completed orders with at least one active linked credit/adjustment dated in the selected period; voided entries are excluded.",
             },
             "ordered": {"totals_by_currency": totals(ordered_groups), "by_supplier": _serialize_groups(ordered_groups)},
             "invoiced": {"totals_by_currency": totals(invoiced_groups), "by_supplier": _serialize_groups(invoiced_groups)},
