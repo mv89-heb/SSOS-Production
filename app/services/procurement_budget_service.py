@@ -211,7 +211,10 @@ class ProcurementBudgetService:
                 budget for budget in period_budgets
                 if scope_value and budget.scope_value.lower() == str(scope_value).strip().lower()
             ]
-            if period_budgets and not matching:
+            # Require an assignment only when the order has no value for a scope
+            # that is governed by active budgets. An explicitly assigned but unbudgeted
+            # department/project must not be blocked by another scope's budget.
+            if period_budgets and not scope_value:
                 missing_scopes.append(scope_type)
             for budget in matching:
                 spent = self._spent_for_budget(budget, exclude_order_id=order.id)
