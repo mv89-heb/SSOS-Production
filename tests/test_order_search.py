@@ -458,13 +458,14 @@ def test_bulk_mark_sent_updates_orders_atomically_and_audits_each_order(
 
     with logged_in_client_a.application.app_context():
         assert all(db.session.get(Order, order_id).status == "sent" for order_id in order_ids)
+        tenant_id = db.session.get(Order, order_ids[0]).tenant_id
         audit_events = db.session.scalars(
             select(AuditLog).where(
                 AuditLog.action == "order.sent",
-                AuditLog.metadata_json["order_id"].as_integer().in_(order_ids),
+                AuditLog.tenant_id == tenant_id,
             )
         ).all()
-        assert len(audit_events) == 2
+        assert {event.metadata_json.get("order_id") for event in audit_events} == set(order_ids)
 
 
 def test_bulk_mark_sent_rolls_back_all_orders_when_one_is_not_approved(
@@ -492,13 +493,14 @@ def test_bulk_mark_sent_rolls_back_all_orders_when_one_is_not_approved(
     with logged_in_client_a.application.app_context():
         assert db.session.get(Order, first_id).status == "approved"
         assert db.session.get(Order, second_id).status == "draft"
+        tenant_id = db.session.get(Order, first_id).tenant_id
         sent_events = db.session.scalars(
             select(AuditLog).where(
                 AuditLog.action == "order.sent",
-                AuditLog.metadata_json["order_id"].as_integer() == first_id,
+                AuditLog.tenant_id == tenant_id,
             )
         ).all()
-        assert sent_events == []
+        assert not any(event.metadata_json.get("order_id") == first_id for event in sent_events)
 
 
 def test_bulk_mark_sent_rejects_foreign_tenant_and_invalid_ids(
