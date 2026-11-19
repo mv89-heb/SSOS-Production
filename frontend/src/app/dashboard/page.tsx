@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle, ArrowLeft, Bell, CalendarClock, CheckCircle2, Clock3,
@@ -9,7 +8,7 @@ import {
 } from "lucide-react";
 import { orderService } from "@/services/order-service";
 import { priceIntelligenceService } from "@/services/price-intelligence-service";
-import { useSuppliers, useProducts } from "@/hooks/use-catalog";
+import { catalogService } from "@/services/catalog-service";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import type { Order } from "@/types";
 
@@ -77,8 +76,8 @@ function OrderRow({ order }: { order: Order }) {
 
 export default function DashboardPage() {
   const ordersQuery = useQuery({ queryKey: ["orders"], queryFn: () => orderService.getOrders(), staleTime: 30000 });
-  const { data: suppliers, isLoading: suppliersLoading } = useSuppliers(true);
-  const { data: products, isLoading: productsLoading } = useProducts(undefined, true);
+  const suppliersQuery = useQuery({ queryKey: ["dashboard", "active-suppliers"], queryFn: () => catalogService.listSuppliers(true), staleTime: 60000 });
+  const productsQuery = useQuery({ queryKey: ["dashboard", "active-products"], queryFn: () => catalogService.listProducts(undefined, true), staleTime: 60000 });
   const inventoryQuery = useQuery({
     queryKey: ["dashboard", "inventory-recommendations"],
     queryFn: () => priceIntelligenceService.getInventoryRecommendations({ lookback_days: 60, safety_days: 2, limit: 500 }),
@@ -91,8 +90,10 @@ export default function DashboardPage() {
   });
 
   const orders = ordersQuery.data ?? [];
-  const activeSuppliers = suppliers ?? [];
-  const activeProducts = products ?? [];
+  const activeSuppliers = suppliersQuery.data ?? [];
+  const activeProducts = productsQuery.data ?? [];
+  const suppliersLoading = suppliersQuery.isLoading;
+  const productsLoading = productsQuery.isLoading;
   const inventory = inventoryQuery.data?.recommendations ?? [];
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -109,14 +110,14 @@ export default function DashboardPage() {
     const createdAt = new Date(order.created_at);
     return !Number.isNaN(createdAt.getTime()) && createdAt >= monthStart && order.status !== "cancelled" && order.status !== "draft";
   });
-  const committedByCurrency = useMemo(() => {
+  const committedByCurrency = (() => {
     const totals = new Map<string, number>();
     for (const order of monthOrders) {
       const currency = order.currency || "ILS";
       totals.set(currency, (totals.get(currency) || 0) + Number(order.final_total || 0));
     }
     return [...totals.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [monthOrders]);
+  })();
 
   const urgentStock = inventory.filter((row) => row.status === "urgent");
   const reorderStock = inventory.filter((row) => row.status === "reorder");
