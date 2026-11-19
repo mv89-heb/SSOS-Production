@@ -9,7 +9,7 @@ import { orderService } from "@/services/order-service";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AlertCircle, ArrowLeft, Bell, BookmarkPlus, CheckCircle2, Clock3, Download, FileSpreadsheet, Columns3, PackageCheck, Plus, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, Bell, BookmarkPlus, CheckCircle2, Clock3, Download, FileSpreadsheet, Columns3, PackageCheck, Plus, Printer, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
 
 const STATUS_FILTERS = [
   { value: "all", label: "הכול" },
@@ -265,6 +265,16 @@ export default function OrdersPage() {
       },
     });
   };
+  const handlePrintReport = () => {
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("q", search.trim());
+    if (status !== "all") params.set("status", status);
+    if (startDate) params.set("start_date", startDate);
+    if (endDate) params.set("end_date", endDate);
+    const query = params.toString();
+    window.open(`/dashboard/orders/print${query ? `?${query}` : ""}`, "_blank", "noopener,noreferrer");
+  };
+
   const handleExport = async (format: "csv" | "xlsx") => {
     if (format === "csv") setIsExporting(true);
     else setIsExportingExcel(true);
@@ -326,6 +336,9 @@ export default function OrdersPage() {
               </Button>
               <Button type="button" variant="secondary" onClick={() => handleExport("xlsx")} disabled={isExporting || isExportingExcel || totalResults === 0}>
                 <FileSpreadsheet size={15} /> {isExportingExcel ? "מייצא..." : "Excel"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={handlePrintReport} disabled={totalResults === 0}>
+                <Printer size={15} /> הדפסה
               </Button>
             </div>
             <Button type="button" variant="secondary" onClick={() => setShowColumnSettings((value) => !value)} className="shrink-0">
