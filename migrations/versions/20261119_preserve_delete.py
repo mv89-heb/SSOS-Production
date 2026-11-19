@@ -17,7 +17,9 @@ RESTRICTED_FOREIGN_KEYS = (
     ("supplier_invoices", "order_id", "orders"),
     ("order_tracking_events", "order_id", "orders"),
     ("price_history", "product_id", "products"),
+    ("price_history", "supplier_id", "suppliers"),
     ("price_observations", "product_id", "products"),
+    ("price_observations", "supplier_id", "suppliers"),
     ("product_codes", "product_id", "products"),
     ("product_classification_feedback", "product_id", "products"),
 )
