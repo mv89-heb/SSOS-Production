@@ -14,24 +14,24 @@ depends_on = None
 
 
 SEED_ROWS = [
-    ("צלחות קלקר (גודל 9)", "חד\"פ", 5, 10, 5, 2, 4, 3, 4.5, "healthy"),
-    ("כוסות נייר (שתייה חמה/קרה)", "חד\"פ", 4, 8, 4, 1.5, 3, 3, 4.5, "healthy"),
-    ("מרקיות (קלקר / פלסטיק קשיח)", "חד\"פ", 2, 8, 2, 1, 2.5, 3, 4.5, "reorder"),
-    ("סכו\"ם (כפות, מזלגות, סכינים)", "חד\"פ", 2, 5, 2, 1, 2, 3, 4.5, "healthy"),
-    ("כוסות פלסטיק קשיח / פשוטות", "חד\"פ", 2, 5, 2, 1, 2, 3, 4.5, "healthy"),
-    ("לפטניות / קסרול אובלי", "חד\"פ", 2, 4, 2, 1, 2, 3, 4.5, "healthy"),
-    ("קערות פירות גדולות", "חד\"פ", 2, 3, 2, 0.5, 1.5, 3, 4.5, "healthy"),
-    ("מגבות נייר (165 מ׳ למתקנים)", "נייר", 6, 10, 6, 2, 3.5, 3, 4.5, "healthy"),
-    ("נייר טואלט (צץ-רץ / פטנט)", "נייר", 3, 5, 3, 1, 2, 3, 4.5, "healthy"),
-    ("סבון ידיים / מקציף", "ניקיון", 1, 3, 1, 0.5, 1, 3, 4.5, "healthy"),
-    ("נוזל לניקוי כלים", "ניקיון", 1, 12, 1, 1, 2, 3, 4.5, "healthy"),
-    ("אקונומיקה וחומצה לשירותים", "ניקיון", 3, 6, 3, 1, 2, 3, 4.5, "healthy"),
-    ("שקיות אשפה (שחורות / קומפקט)", "תחזוקה", 1, 3, 1, 1, 2, 3, 4.5, "healthy"),
-    ("כפפות (לטקס / ניטריל)", "תחזוקה", 1, 12, 1, 1, 2, 3, 4.5, "healthy"),
-    ("פח שובך 50 ליטר", "תחזוקה", 5, 10, 5, 0.2, 0.5, 3, 4.5, "healthy"),
-    ("מגבים, מטאטאים ויאה", "ציוד", 5, 10, 5, 0.2, 0.5, 3, 4.5, "healthy"),
-    ("תבניות גסטרונום / אלומיניום", "אפייה", 3, 10, 3, 1, 3, 3, 4.5, "healthy"),
-    ("תבנית אינגליש קייק / A8", "אפייה", 1, 3, 1, 0.5, 1, 3, 4.5, "healthy"),
+    ("צלחות קלקר (גודל 9)", "חד\"פ", 5, 10, 5, 2, 4, 3, 4.5, "healthy", "both"),
+    ("כוסות נייר (שתייה חמה/קרה)", "חד\"פ", 4, 8, 4, 1.5, 3, 3, 4.5, "healthy", "both"),
+    ("מרקיות (קלקר / פלסטיק קשיח)", "חד\"פ", 2, 8, 2, 1, 2.5, 3, 4.5, "reorder", "both"),
+    ("סכו\"ם (כפות, מזלגות, סכינים)", "חד\"פ", 2, 5, 2, 1, 2, 3, 4.5, "healthy", "both"),
+    ("כוסות פלסטיק קשיח / פשוטות", "חד\"פ", 2, 5, 2, 1, 2, 3, 4.5, "healthy", "pamit"),
+    ("לפטניות / קסרול אובלי", "חד\"פ", 2, 4, 2, 1, 2, 3, 4.5, "healthy", "pamit"),
+    ("קערות פירות גדולות", "חד\"פ", 2, 3, 2, 0.5, 1.5, 3, 4.5, "healthy", "pamit"),
+    ("מגבות נייר (165 מ׳ למתקנים)", "נייר", 6, 10, 6, 2, 3.5, 3, 4.5, "healthy", "pamit"),
+    ("נייר טואלט (צץ-רץ / פטנט)", "נייר", 3, 5, 3, 1, 2, 3, 4.5, "healthy", "pamit"),
+    ("סבון ידיים / מקציף", "ניקיון", 1, 3, 1, 0.5, 1, 3, 4.5, "healthy", "pamit"),
+    ("נוזל לניקוי כלים", "ניקיון", 1, 12, 1, 1, 2, 3, 4.5, "healthy", "pamit"),
+    ("אקונומיקה וחומצה לשירותים", "ניקיון", 3, 6, 3, 1, 2, 3, 4.5, "healthy", "pamit"),
+    ("שקיות אשפה (שחורות / קומפקט)", "תחזוקה", 1, 3, 1, 1, 2, 3, 4.5, "healthy", "pamit"),
+    ("כפפות (לטקס / ניטריל)", "תחזוקה", 1, 12, 1, 1, 2, 3, 4.5, "healthy", "pamit"),
+    ("פח שובך 50 ליטר", "תחזוקה", 5, 10, 5, 0.2, 0.5, 3, 4.5, "healthy", "pamit"),
+    ("מגבים, מטאטאים ויאה", "ציוד", 5, 10, 5, 0.2, 0.5, 3, 4.5, "healthy", "pamit"),
+    ("תבניות גסטרונום / אלומיניום", "אפייה", 3, 10, 3, 1, 3, 3, 4.5, "healthy", "pamit"),
+    ("תבנית אינגליש קייק / A8", "אפייה", 1, 3, 1, 0.5, 1, 3, 4.5, "healthy", "pamit"),
 ]
 
 
@@ -83,10 +83,10 @@ def upgrade():
             ORDER BY CASE WHEN name ILIKE '%שמאי%' THEN 0 ELSE 1 END, id
         """), {"tenant_id": tenant_id}).scalars().all()
         rows = []
-        for name, category, minimum, maximum, average, regular, reinforced, cycle, safety, status in SEED_ROWS:
+        for name, category, minimum, maximum, average, regular, reinforced, cycle, safety, status, supplier_group in SEED_ROWS:
             rows.append({
                 "tenant_id": tenant_id, "name": name, "category": category,
-                "supplier_ids": supplier_ids, "product_ids": [],
+                "supplier_ids": [sid for sid in supplier_ids if (supplier_group == "both" or (supplier_group == "shamai" and "שמאי" in bind.execute(sa.text("SELECT name FROM suppliers WHERE id = :id"), {"id": sid}).scalar()) or (supplier_group == "pamit" and "פעמית" in bind.execute(sa.text("SELECT name FROM suppliers WHERE id = :id"), {"id": sid}).scalar()))], "product_ids": [],
                 "min_order_quantity": minimum, "max_order_quantity": maximum,
                 "average_order_quantity": average, "regular_weekly_consumption": regular,
                 "reinforced_weekly_consumption": reinforced, "reinforcement_cycle_weeks": cycle,
