@@ -129,9 +129,9 @@ export const orderService = {
     return data;
   },
 
-  exportOrders: async (params: OrderSearchParams = {}) => {
+  exportOrders: async (params: OrderSearchParams = {}, format: "csv" | "xlsx" = "csv") => {
     const { data } = await apiClient.get<Blob>("/api/orders/search", {
-      params: { ...params, format: "csv", limit: 5000, offset: 0 },
+      params: { ...params, format, limit: 5000, offset: 0 },
       responseType: "blob",
     });
     return data;
