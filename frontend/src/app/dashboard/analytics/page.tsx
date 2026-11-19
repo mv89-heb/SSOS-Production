@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Activity, AlertTriangle, BarChart3, Boxes, CalendarDays, CheckCircle2,
   ChevronLeft, CircleDollarSign, Clock3, FileText, Package, RefreshCw, ShoppingCart,
-  Truck, Wallet, FileSearch, ClipboardList,
+  Truck, Wallet,
 } from "lucide-react";
 import { apiClient } from "@/services/api-client";
 import { catalogService } from "@/services/catalog-service";
