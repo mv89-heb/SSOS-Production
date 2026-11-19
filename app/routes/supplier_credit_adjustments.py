@@ -47,7 +47,12 @@ def _amount(value):
         raise BadRequest("amount must be a valid number")
     if not amount.is_finite() or amount <= 0 or amount > Decimal("9999999999.99"):
         raise BadRequest("amount must be greater than zero and within the supported limit")
-    return amount.quantize(Decimal("0.01"))
+    cents = amount.quantize(Decimal("0.01"))
+    if amount != cents:
+        raise BadRequest("amount must have no more than two decimal places")
+    if cents <= 0:
+        raise BadRequest("amount must be at least 0.01")
+    return cents
 
 
 def _order_for_tenant(order_id):
