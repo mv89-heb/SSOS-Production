@@ -107,7 +107,7 @@ def _register_request_context(app):
         return jsonify({
             "success": False,
             "error": "weekly_inventory_count_required",
-            "message": "יש להשלים ספירת מלאי שבועית מלאה לפני ביצוע פעולות במערכת.",
+            "message": "יש להשלים את קבוצת המוצרים שהוקצתה לספירה השבועית לפני ביצוע פעולות במערכת.",
             "count_status": status,
             "action_url": "/dashboard/inventory/count",
         }), 423
