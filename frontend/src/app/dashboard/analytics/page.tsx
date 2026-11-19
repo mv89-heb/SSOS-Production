@@ -98,7 +98,7 @@ function Donut({ rows }: { rows: Array<{ label: string; value: number }> }) {
   }).join(", ");
   return <div className="flex flex-col items-center gap-5 sm:flex-row sm:justify-around">
     <div className="relative h-40 w-40 shrink-0 rounded-full" style={{ background: `conic-gradient(${gradient})` }}>
-      <div className="absolute inset-7 flex flex-col items-center justify-center rounded-full bg-white text-center dark:bg-slate-950"><span className="text-2xl font-black tabular-nums">{number(total)}</span><span className="text-[10px] text-slate-500">סה״כ פריטים</span></div>
+      <div className="absolute inset-7 flex flex-col items-center justify-center rounded-full bg-white text-center dark:bg-slate-950"><span className="text-2xl font-black tabular-nums">{number(total)}</span><span className="text-[10px] text-slate-500">סה״כ</span></div>
     </div>
     <div className="w-full space-y-2">{rows.map((row, index) => <div key={row.label} className="flex items-center justify-between gap-3 text-xs"><span className="flex min-w-0 items-center gap-2"><i className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: palette[index % palette.length] }}/><span className="truncate text-slate-600 dark:text-slate-300">{row.label}</span></span><b className="tabular-nums">{number(row.value)} · {Math.round(row.value / total * 100)}%</b></div>)}</div>
   </div>;
