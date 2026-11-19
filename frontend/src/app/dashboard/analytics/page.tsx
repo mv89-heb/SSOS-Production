@@ -239,7 +239,7 @@ export default function AnalyticsCenterPage() {
   const profileRows = (profiles.data ?? []).filter((row) => row.active).slice(0, 10);
   const readinessData = readiness.data;
   const budgetRows = budgets.data ?? [];
-  const budgetBars = budgetRows.map((row) => ({ label: `${row.scope_type === "department" ? "מחלקה" : "פרויקט"} · ${row.scope_value}`, value: Math.max(0, Number(row.spent_amount ?? 0)), hint: `${money(Number(row.spent_amount ?? 0), row.currency)} / ${money(Number(row.amount ?? 0), row.currency)}` }));
+  const budgetCurrencies = Array.from(new Set(budgetRows.map((row) => row.currency))).sort();
   const documentStatusRows = useMemo(() => {
     const labels: Record<string, string> = { UPLOADED: "הועלה", PROCESSING: "בעיבוד", ANALYZED: "נותח", PARTIALLY_APPLIED: "יושם חלקית", AI_UNAVAILABLE: "AI לא זמין", FAILED: "נכשל", APPLIED: "יושם" };
     const counts = new Map<string, number>();
@@ -329,7 +329,7 @@ export default function AnalyticsCenterPage() {
 
       <section className="grid min-w-0 gap-4 xl:grid-cols-3">
         <Panel title="ביצוע תקציבי רכש" subtitle="התחייבויות מהזמנות שהוגשו, אושרו, נשלחו או הושלמו. אין חיבור בין מטבעות.">
-          {budgets.isError ? <Empty text="נתוני התקציבים אינם זמינים בהרשאות המשתמש או כרגע."/> : budgetBars.length ? <Bars rows={budgetBars}/> : <Empty text="לא הוגדרו תקציבים פעילים."/>}
+          {budgets.isError ? <Empty text="נתוני התקציבים אינם זמינים בהרשאות המשתמש או כרגע."/> : budgetCurrencies.length ? <div className="space-y-5">{budgetCurrencies.map((code) => <div key={code}><h3 className="mb-2 text-xs font-black text-slate-500">{code} · התחייבות מתוך תקציב</h3><Bars rows={budgetRows.filter((row) => row.currency === code).map((row) => ({ label: `${row.scope_type === "department" ? "מחלקה" : "פרויקט"} · ${row.scope_value}`, value: Math.max(0, Number(row.spent_amount ?? 0)), hint: `${money(Number(row.spent_amount ?? 0), code)} / ${money(Number(row.amount ?? 0), code)}` }))}/></div>)}</div> : <Empty text="לא הוגדרו תקציבים פעילים."/>}
           <div className="mt-3 text-left"><Link href="/dashboard/settings/procurement-budgets" className="text-xs font-bold text-indigo-600 hover:underline">לניהול תקציבים <ChevronLeft className="inline" size={14}/></Link></div>
         </Panel>
         <Panel title="מסמכים וקליטה" subtitle="מספר מסמכים לפי סטטוס עיבוד מתוך 200 הרשומות האחרונות.">
