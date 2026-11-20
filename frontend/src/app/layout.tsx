@@ -20,16 +20,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="he" dir="rtl" className={assistant.variable} suppressHydrationWarning>
       <body className={cn("font-sans antialiased bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100")}>
-        <ThemeProvider>
-          <QueryProvider>
-            <ToastProvider>
-              <AuthProvider>
+        <QueryProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <ThemeProvider>
                 {children}
                 <ReminderPushRegistration />
-              </AuthProvider>
-            </ToastProvider>
-          </QueryProvider>
-        </ThemeProvider>
+              </ThemeProvider>
+            </AuthProvider>
+          </ToastProvider>
+        </QueryProvider>
       </body>
     </html>
   );
