@@ -33,11 +33,11 @@ export default function InventoryPlanningPage() {
 
   return <div dir="rtl" className="mx-auto max-w-5xl space-y-5 pb-12">
     <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-      <a href="/dashboard/inventory" className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600"><ArrowRight size={17}/> חזרה למלאי</a>
-      <div className="mt-4 flex items-center gap-3"><CalendarDays className="text-indigo-600"/><div><h1 className="text-3xl font-black">תקופות מיוחדות ותכנון חגים</h1><p className="mt-1 text-sm text-slate-500">הגדר מכפיל צריכה ואת ימי ההזמנה/אספקה כאשר החג משנה את ההתנהלות הרגילה.</p></div></div>
+      <a href="/dashboard/inventory" className="inline-flex items-center gap-2 text-sm font-bold text-teal-600"><ArrowRight size={17}/> חזרה למלאי</a>
+      <div className="mt-4 flex items-center gap-3"><CalendarDays className="text-teal-600"/><div><h1 className="text-3xl font-black">תקופות מיוחדות ותכנון חגים</h1><p className="mt-1 text-sm text-slate-500">הגדר מכפיל צריכה ואת ימי ההזמנה/אספקה כאשר החג משנה את ההתנהלות הרגילה.</p></div></div>
     </header>
     <InventoryConsumptionProfilesPanel />
-    {message && <div className="rounded-2xl bg-indigo-50 p-4 text-sm font-black text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300">{message}</div>}
+    {message && <div className="rounded-2xl bg-teal-50 p-4 text-sm font-black text-teal-700 dark:bg-teal-950/30 dark:text-teal-300">{message}</div>}
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
       <div className="flex items-center justify-between"><h2 className="text-xl font-black">{editingId ? "עריכת תקופה" : "הוספת תקופה"}</h2>{editingId ? <button onClick={reset} className="text-sm font-bold text-slate-500">ביטול</button> : null}</div>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -50,7 +50,7 @@ export default function InventoryPlanningPage() {
         <input value={form.order_cutoff_time} onChange={(e)=>setForm({...form,order_cutoff_time:e.target.value})} placeholder="שעת חיתוך להזמנה, למשל 12:00" className="rounded-xl border p-3 dark:border-slate-700 dark:bg-slate-900"/>
         <textarea value={form.notes} onChange={(e)=>setForm({...form,notes:e.target.value})} placeholder="הערות" className="min-h-24 rounded-xl border p-3 dark:border-slate-700 dark:bg-slate-900"/>
       </div>
-      <button onClick={save} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-indigo-600 px-5 text-sm font-black text-white"><Save size={17}/> שמור תקופה</button>
+      <button onClick={save} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-600 px-5 text-sm font-black text-white"><Save size={17}/> שמור תקופה</button>
     </section>
     <section className="space-y-3">{(periods.data ?? []).map((period) => <article key={period.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-black">{period.name}</h3><span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-black text-amber-700">×{period.consumption_multiplier}</span></div><div className="mt-1 text-sm text-slate-500">{period.start_date} – {period.end_date}</div><div className="mt-2 text-xs text-slate-500">הזמנה: {period.order_days || "לפי הספק"} · אספקה: {period.delivery_days || "לפי הספק"}{period.order_cutoff_time ? ` · חיתוך: ${period.order_cutoff_time}` : ""}</div></div><div className="flex gap-2"><button onClick={()=>{setEditingId(period.id);edit(period);window.scrollTo({top:0,behavior:"smooth"});}} className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700">ערוך</button><button onClick={()=>remove(period.id)} className="rounded-xl bg-red-50 p-2 text-red-700"><Trash2 size={18}/></button></div></div></article>)}{!periods.isLoading && !(periods.data ?? []).length && <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-slate-500">אין עדיין תקופות מיוחדות. אפשר להוסיף או לחזור למסך המלאי וללחוץ „הוסף תקופות חגים”.</div>}</section>
   </div>;
