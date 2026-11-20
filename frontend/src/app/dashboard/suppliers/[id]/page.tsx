@@ -74,7 +74,7 @@ function DaySelector({
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
         <div className="flex items-center gap-2 text-slate-900 dark:text-white">
-          <span className="text-indigo-600 dark:text-indigo-400">{icon}</span>
+          <span className="text-teal-600 dark:text-teal-400">{icon}</span>
           <h2 className="font-bold">{title}</h2>
         </div>
         <p className="mt-1 text-xs text-slate-500">{description}</p>
@@ -88,10 +88,10 @@ function DaySelector({
               type="button"
               onClick={() => toggle(day)}
               aria-pressed={active}
-              className={`group flex min-h-[92px] flex-col items-center justify-center gap-3 border-b border-l border-slate-100 px-3 transition last:border-l-0 hover:bg-indigo-50/70 dark:border-slate-800 dark:hover:bg-indigo-950/30 ${active ? "bg-indigo-50 dark:bg-indigo-950/40" : "bg-white dark:bg-slate-900"}`}
+              className={`group flex min-h-[92px] flex-col items-center justify-center gap-3 border-b border-l border-slate-100 px-3 transition last:border-l-0 hover:bg-teal-50/70 dark:border-slate-800 dark:hover:bg-teal-950/30 ${active ? "bg-teal-50 dark:bg-teal-950/40" : "bg-white dark:bg-slate-900"}`}
             >
-              <span className={`text-sm font-bold ${active ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-300"}`}>{day}</span>
-              <span className={`flex h-7 w-7 items-center justify-center rounded-md border-2 transition ${active ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300 bg-white text-transparent dark:border-slate-600 dark:bg-slate-950"}`}>
+              <span className={`text-sm font-bold ${active ? "text-teal-700 dark:text-teal-300" : "text-slate-600 dark:text-slate-300"}`}>{day}</span>
+              <span className={`flex h-7 w-7 items-center justify-center rounded-md border-2 transition ${active ? "border-teal-600 bg-teal-600 text-white" : "border-slate-300 bg-white text-transparent dark:border-slate-600 dark:bg-slate-950"}`}>
                 <Check size={16} strokeWidth={3} />
               </span>
             </button>
@@ -292,7 +292,7 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
                 <div><label className="mb-1.5 block text-sm font-semibold">שעת סגירת הזמנות</label><Input type="time" value={form.order_cutoff_time} onChange={(e) => setForm((f) => ({ ...f, order_cutoff_time: e.target.value }))} /></div>
                 <div className="sm:col-span-2"><label className="mb-1.5 block text-sm font-semibold">כשרות / תעודות / תקנים</label><Input value={form.certification_details} onChange={(e) => setForm((f) => ({ ...f, certification_details: e.target.value }))} placeholder="פרטים כפי שאומתו מול הספק" /></div>
                 <div className="sm:col-span-2"><label className="mb-1.5 block text-sm font-semibold">הערות פנימיות</label><textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={3} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></div>
-                <div className="sm:col-span-2"><label className="mb-1.5 block text-sm font-semibold">סטטוס</label><label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700"><input type="checkbox" checked={form.active} onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))} className="h-4 w-4 accent-indigo-600" /><span className="text-sm font-medium">ספק פעיל</span></label></div>
+                <div className="sm:col-span-2"><label className="mb-1.5 block text-sm font-semibold">סטטוס</label><label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700"><input type="checkbox" checked={form.active} onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))} className="h-4 w-4 accent-teal-600" /><span className="text-sm font-medium">ספק פעיל</span></label></div>
               </CardContent>
             </Card>
 
@@ -320,7 +320,7 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
               <div><dt className="text-xs text-slate-500">מס׳ לקוח</dt><dd className="mt-1 font-medium">{supplier.customer_number || "—"}</dd></div>
               <div><dt className="text-xs text-slate-500">כתובת</dt><dd className="mt-1 font-medium">{[supplier.address, supplier.city].filter(Boolean).join(", ") || "—"}</dd></div>
               <div><dt className="text-xs text-slate-500">ח.פ. / עוסק מורשה</dt><dd className="mt-1 font-medium">{supplier.tax_id || "—"}</dd></div>
-              <div><dt className="text-xs text-slate-500">אתר אינטרנט</dt><dd className="mt-1 font-medium">{supplier.website ? <a href={supplier.website.startsWith("http://") || supplier.website.startsWith("https://") ? supplier.website : "https://" + supplier.website} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">{supplier.website}</a> : "—"}</dd></div>
+              <div><dt className="text-xs text-slate-500">אתר אינטרנט</dt><dd className="mt-1 font-medium">{supplier.website ? <a href={supplier.website.startsWith("http://") || supplier.website.startsWith("https://") ? supplier.website : "https://" + supplier.website} target="_blank" rel="noreferrer" className="text-teal-600 hover:underline">{supplier.website}</a> : "—"}</dd></div>
               <div><dt className="text-xs text-slate-500">קטגוריית ספק</dt><dd className="mt-1 font-medium">{supplier.supplier_category || "—"}</dd></div>
               <div><dt className="text-xs text-slate-500">תנאי תשלום</dt><dd className="mt-1 font-medium">{supplier.payment_terms || "—"}</dd></div>
               <div><dt className="text-xs text-slate-500">ימי אשראי</dt><dd className="mt-1 font-medium">{supplier.credit_days ?? "—"}</dd></div>
