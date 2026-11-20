@@ -30,20 +30,20 @@ function formatMoney(value: number, currency: string) {
 
 function MetricCard({ label, value, hint, href, icon: Icon, tone = "slate" }: {
   label: string; value: string | number; hint: string; href: string; icon: typeof Users;
-  tone?: "slate" | "indigo" | "amber" | "red" | "emerald" | "violet";
+  tone?: "slate" | "teal" | "amber" | "red" | "emerald" | "violet";
 }) {
   const tones = {
     slate: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-    indigo: "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300",
+    teal: "bg-teal-50 text-teal-600 dark:bg-teal-950/50 dark:text-teal-300",
     amber: "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
     red: "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300",
     emerald: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
     violet: "bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300",
   };
   return (
-    <Link href={href} className="group min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-950 sm:p-5">
+    <Link href={href} className="group min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-950 sm:p-5">
       <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs font-bold text-slate-500 dark:text-slate-400">{label}</p><p className="mt-2 break-words text-2xl font-black tracking-tight text-slate-950 dark:text-white sm:text-3xl">{typeof value === "number" ? value.toLocaleString("he-IL") : value}</p></div><span className={"flex h-10 w-10 shrink-0 items-center justify-center rounded-xl " + tones[tone]}><Icon size={19} /></span></div>
-      <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-400"><span>{hint}</span><ArrowLeft size={13} className="shrink-0 transition group-hover:-translate-x-1 group-hover:text-indigo-600" /></div>
+      <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-400"><span>{hint}</span><ArrowLeft size={13} className="shrink-0 transition group-hover:-translate-x-1 group-hover:text-teal-600" /></div>
     </Link>
   );
 }
@@ -55,7 +55,7 @@ function Section({ title, subtitle, href, linkLabel, children }: {
     <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 dark:border-slate-800 sm:px-5">
         <div><h2 className="font-black text-slate-900 dark:text-white">{title}</h2>{subtitle && <p className="mt-1 text-xs text-slate-500">{subtitle}</p>}</div>
-        {href && <Link href={href} className="shrink-0 text-xs font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-300">{linkLabel || "לצפייה"} ←</Link>}
+        {href && <Link href={href} className="shrink-0 text-xs font-bold text-teal-600 hover:text-teal-800 dark:text-teal-300">{linkLabel || "לצפייה"} ←</Link>}
       </div>
       {children}
     </section>
@@ -136,10 +136,10 @@ export default function DashboardPage() {
   return (
     <div dir="rtl" className="w-full min-w-0 max-w-full space-y-5 pb-8 sm:space-y-6">
       <header className="flex min-w-0 flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0"><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> מרכז שליטה תפעולי</div><h1 className="page-title">לוח בקרה</h1><p className="page-subtitle">מה דורש טיפול עכשיו, מה מצב הרכש ואיפה קיימות הזדמנויות לשיפור.</p><p className="mt-2 text-xs text-slate-400">עודכן: {new Intl.DateTimeFormat("he-IL", { dateStyle: "medium", timeStyle: "short" }).format(now)}</p></div>
+        <div className="min-w-0"><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-700 dark:bg-teal-950/60 dark:text-teal-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> מרכז שליטה תפעולי</div><h1 className="page-title">לוח בקרה</h1><p className="page-subtitle">מה דורש טיפול עכשיו, מה מצב הרכש ואיפה קיימות הזדמנויות לשיפור.</p><p className="mt-2 text-xs text-slate-400">עודכן: {new Intl.DateTimeFormat("he-IL", { dateStyle: "medium", timeStyle: "short" }).format(now)}</p></div>
         <div className="flex w-full flex-wrap gap-2 lg:w-auto">
-          <Link href="/dashboard/procurement-intelligence" className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-700 dark:text-slate-200 sm:flex-none"><Sparkles size={16} /> תמונת מצב רכש</Link>
-          <Link href="/dashboard/orders/new" className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-indigo-700 sm:flex-none"><Plus size={17} /> הזמנה חדשה</Link>
+          <Link href="/dashboard/procurement-intelligence" className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-teal-300 hover:text-teal-700 dark:border-slate-700 dark:text-slate-200 sm:flex-none"><Sparkles size={16} /> תמונת מצב רכש</Link>
+          <Link href="/dashboard/orders/new" className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-teal-700 sm:flex-none"><Plus size={17} /> הזמנה חדשה</Link>
           <button type="button" onClick={() => { void ordersQuery.refetch(); void inventoryQuery.refetch(); void portfolioQuery.refetch(); void remindersQuery.refetch(); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300" aria-label="רענון נתונים"><RefreshCw size={16} className={operationalLoading ? "animate-spin" : ""} /><span className="sm:hidden">רענון</span></button>
         </div>
       </header>
@@ -147,7 +147,7 @@ export default function DashboardPage() {
       {(ordersQuery.isError || inventoryQuery.isError || portfolioQuery.isError || remindersQuery.isError) && <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"><AlertTriangle size={18} className="mt-0.5 shrink-0" /><div><strong>חלק מהנתונים לא נטענו.</strong><p className="mt-1 text-xs">הנתונים הזמינים מוצגים כרגיל. אין לפרש נתון חסר כאפס; אפשר לרענן ולנסות שוב.</p></div></div>}
 
       <section className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-4 sm:gap-4">
-        <MetricCard label="הזמנות פתוחות" value={ordersQuery.isLoading ? "…" : ordersQuery.isError ? "לא זמין" : openOrders.length} hint="טיוטה, ממתינה, מאושרת או נשלחה" href="/dashboard/orders" icon={ShoppingBag} tone={ordersQuery.isError ? "slate" : "indigo"} />
+        <MetricCard label="הזמנות פתוחות" value={ordersQuery.isLoading ? "…" : ordersQuery.isError ? "לא זמין" : openOrders.length} hint="טיוטה, ממתינה, מאושרת או נשלחה" href="/dashboard/orders" icon={ShoppingBag} tone={ordersQuery.isError ? "slate" : "teal"} />
         <MetricCard label="ממתינות לאישור" value={ordersQuery.isLoading ? "…" : ordersQuery.isError ? "לא זמין" : pendingApprovals.length} hint="הזמנות שהוגשו לאישור" href="/dashboard/orders" icon={Clock3} tone={ordersQuery.isError ? "slate" : pendingApprovals.length ? "amber" : "emerald"} />
         <MetricCard label="תזכורות באיחור" value={remindersQuery.isLoading ? "…" : remindersQuery.isError ? "לא זמין" : overdueReminders.length} hint="לפי רשימת התזכורות הפעילות ומועד היעד" href="/dashboard/reminders" icon={Bell} tone={remindersQuery.isError ? "slate" : overdueReminders.length ? "red" : "emerald"} />
         <MetricCard label="סיכון מלאי דחוף" value={inventoryQuery.isLoading ? "…" : inventoryQuery.isError ? "לא זמין" : urgentStock.length} hint="לפי המלצות מלאי מבוססות נתונים" href="/dashboard/procurement-intelligence" icon={Package} tone={inventoryQuery.isError ? "slate" : urgentStock.length ? "red" : "emerald"} />
@@ -178,11 +178,11 @@ export default function DashboardPage() {
           {suppliersLoading ? <EmptyRow>טוען ספקים…</EmptyRow> : recentSuppliers.length === 0 ? <EmptyRow>אין ספקים פעילים להצגה.</EmptyRow> : <div className="divide-y divide-slate-100 dark:divide-slate-800">{recentSuppliers.map((supplier) => <Link key={supplier.id} href={"/dashboard/suppliers/" + supplier.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-900/60 sm:px-5"><div className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300">{supplier.name.slice(0, 1)}</span><span className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{supplier.name}</span></div><span className="shrink-0 text-xs text-slate-400">{formatDate(supplier.created_at)}</span></Link>)}</div>}
         </Section>
         <Section title="איכות נתוני הקטלוג" subtitle="מדדים תיאוריים — אינם משנים מוצרים או מחירים." href="/dashboard/catalog" linkLabel="ניהול קטלוג">
-          {productsLoading ? <EmptyRow>טוען קטלוג…</EmptyRow> : <div className="grid grid-cols-2 gap-3 p-4 sm:p-5"><div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900"><div className="text-xs text-slate-500">מוצרים פעילים</div><div className="mt-1 text-2xl font-black">{activeProducts.length.toLocaleString("he-IL")}</div></div><div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900"><div className="text-xs text-slate-500">ספקים פעילים</div><div className="mt-1 text-2xl font-black">{activeSuppliers.length.toLocaleString("he-IL")}</div></div><div className="rounded-xl bg-amber-50 p-4 dark:bg-amber-950/20"><div className="text-xs text-amber-800 dark:text-amber-300">מוצרים ללא מחיר תקין</div><div className="mt-1 text-2xl font-black text-amber-800 dark:text-amber-200">{activeProducts.filter((product) => product.current_price == null || Number(product.current_price) <= 0).length.toLocaleString("he-IL")}</div></div><div className="rounded-xl bg-indigo-50 p-4 dark:bg-indigo-950/30"><div className="text-xs text-indigo-800 dark:text-indigo-300">מוצרים ללא יחידת מידה</div><div className="mt-1 text-2xl font-black text-indigo-800 dark:text-indigo-200">{activeProducts.filter((product) => !String(product.unit || "").trim()).length.toLocaleString("he-IL")}</div></div></div>}
+          {productsLoading ? <EmptyRow>טוען קטלוג…</EmptyRow> : <div className="grid grid-cols-2 gap-3 p-4 sm:p-5"><div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900"><div className="text-xs text-slate-500">מוצרים פעילים</div><div className="mt-1 text-2xl font-black">{activeProducts.length.toLocaleString("he-IL")}</div></div><div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900"><div className="text-xs text-slate-500">ספקים פעילים</div><div className="mt-1 text-2xl font-black">{activeSuppliers.length.toLocaleString("he-IL")}</div></div><div className="rounded-xl bg-amber-50 p-4 dark:bg-amber-950/20"><div className="text-xs text-amber-800 dark:text-amber-300">מוצרים ללא מחיר תקין</div><div className="mt-1 text-2xl font-black text-amber-800 dark:text-amber-200">{activeProducts.filter((product) => product.current_price == null || Number(product.current_price) <= 0).length.toLocaleString("he-IL")}</div></div><div className="rounded-xl bg-teal-50 p-4 dark:bg-teal-950/30"><div className="text-xs text-teal-800 dark:text-teal-300">מוצרים ללא יחידת מידה</div><div className="mt-1 text-2xl font-black text-teal-800 dark:text-teal-200">{activeProducts.filter((product) => !String(product.unit || "").trim()).length.toLocaleString("he-IL")}</div></div></div>}
         </Section>
       </section>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/50"><div className="flex items-center gap-2"><CalendarClock size={16} /> הנתונים מוצגים לפי המידע שנשמר במערכת; ספירת מלאי חסרה אינה נחשבת לאפס.</div><Link href="/dashboard/inventory" className="font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-300">פתיחת ניהול מלאי ←</Link></div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/50"><div className="flex items-center gap-2"><CalendarClock size={16} /> הנתונים מוצגים לפי המידע שנשמר במערכת; ספירת מלאי חסרה אינה נחשבת לאפס.</div><Link href="/dashboard/inventory" className="font-bold text-teal-600 hover:text-teal-800 dark:text-teal-300">פתיחת ניהול מלאי ←</Link></div>
     </div>
   );
 }
