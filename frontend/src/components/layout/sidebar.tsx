@@ -5,7 +5,8 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3, FileSearch, CalendarDays, BrainCircuit, Warehouse, Bell, ClipboardCheck, Calculator, Egg, Wallet, Activity } from "lucide-react";\nimport SsosLogo from "@/components/brand/ssos-logo";
+import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, ChevronRight, HelpCircle, BarChart3, FileSearch, CalendarDays, BrainCircuit, Warehouse, Bell, ClipboardCheck, Calculator, Egg, Wallet, Activity } from "lucide-react";
+import SsosLogo from "@/components/brand/ssos-logo";
 
 const ORGANIZATION_NAME = "ישיבת אוהבי ירושלים - ראשית";
 const groups = [
