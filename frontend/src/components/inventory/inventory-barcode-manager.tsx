@@ -118,7 +118,7 @@ export default function InventoryBarcodeManager({ open, products, displayedProdu
       <div className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-slate-950 sm:rounded-3xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5 dark:border-slate-800">
           <div>
-            <div className="text-xs font-black text-indigo-600">ברקודים פנימיים</div>
+            <div className="text-xs font-black text-teal-600">ברקודים פנימיים</div>
             <h2 className="mt-1 text-2xl font-black">ניהול והדפסת מדבקות</h2>
             <p className="mt-1 text-sm text-slate-500">ברקוד מזהה את המוצר הארגוני, ללא תלות בספק. ניתן לבחור כמה מדבקות להדפיס לכל מוצר.</p>
           </div>
@@ -128,12 +128,12 @@ export default function InventoryBarcodeManager({ open, products, displayedProdu
         <div className="grid gap-3 p-5 sm:grid-cols-4">
           <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900"><div className="text-xs font-bold text-slate-500">מוצרים פעילים</div><div className="mt-1 text-2xl font-black">{products.length}</div></div>
           <div className="rounded-2xl bg-amber-50 p-4 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200"><div className="text-xs font-bold">ללא ברקוד</div><div className="mt-1 text-2xl font-black">{missingCount}</div></div>
-          <div className="rounded-2xl bg-indigo-50 p-4 text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-200"><div className="text-xs font-bold">מוצרים נבחרים</div><div className="mt-1 text-2xl font-black">{selectedCount}</div></div>
+          <div className="rounded-2xl bg-teal-50 p-4 text-teal-800 dark:bg-teal-950/30 dark:text-teal-200"><div className="text-xs font-bold">מוצרים נבחרים</div><div className="mt-1 text-2xl font-black">{selectedCount}</div></div>
           <div className="rounded-2xl bg-emerald-50 p-4 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200"><div className="text-xs font-bold">מדבקות נבחרות</div><div className="mt-1 text-2xl font-black">{selectedLabelCount}</div></div>
         </div>
 
         <div className="flex flex-wrap gap-2 border-b border-slate-200 px-5 pb-4 dark:border-slate-800">
-          <button onClick={generateMissing} disabled={busy || missingCount === 0} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-black text-white disabled:opacity-50"><RefreshCw size={17} /> צור ברקודים חסרים</button>
+          <button onClick={generateMissing} disabled={busy || missingCount === 0} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-600 px-4 text-sm font-black text-white disabled:opacity-50"><RefreshCw size={17} /> צור ברקודים חסרים</button>
           <button onClick={printAll} disabled={busy || !products.length || allLabelCount > MAX_TOTAL_LABELS} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-black text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"><Printer size={17} /> הדפס מוצר אחד מכל מוצר</button>
           <button onClick={printSelected} disabled={busy || !selectedCount || selectedLabelCount > MAX_TOTAL_LABELS} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-black disabled:opacity-50 dark:border-slate-700"><Printer size={17} /> הדפס נבחרים ({selectedLabelCount})</button>
           <button onClick={selectVisible} disabled={busy || !visibleProducts.length} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-black dark:border-slate-700"><CheckSquare size={17} /> הוסף מוצגים</button>
@@ -152,9 +152,9 @@ export default function InventoryBarcodeManager({ open, products, displayedProdu
               const checked = selectedIds.includes(product.id);
               const quantity = quantities[product.id] ?? 1;
               return (
-                <div key={product.id} className={`flex flex-wrap items-center gap-3 rounded-2xl border p-3 transition ${checked ? "border-indigo-300 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/30" : "border-slate-200 dark:border-slate-800"}`}>
+                <div key={product.id} className={`flex flex-wrap items-center gap-3 rounded-2xl border p-3 transition ${checked ? "border-teal-300 bg-teal-50 dark:border-teal-800 dark:bg-teal-950/30" : "border-slate-200 dark:border-slate-800"}`}>
                   <button type="button" onClick={() => toggle(product.id)} disabled={busy} className="flex min-w-0 flex-1 items-center gap-3 text-right">
-                    {checked ? <CheckSquare className="shrink-0 text-indigo-600" size={20} /> : <Square className="shrink-0 text-slate-400" size={20} />}
+                    {checked ? <CheckSquare className="shrink-0 text-teal-600" size={20} /> : <Square className="shrink-0 text-slate-400" size={20} />}
                     <span className="min-w-0 flex-1"><span className="block truncate font-black">{product.name}</span><span className="mt-0.5 block truncate text-xs text-slate-500">{product.sku || "ללא מק״ט"}</span></span>
                     <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black ${product.barcode ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300" : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"}`}>{product.barcode || "חסר"}</span>
                   </button>
