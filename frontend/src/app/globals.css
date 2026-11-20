@@ -61,3 +61,65 @@
   main th, main td { border: 1px solid #cbd5e1 !important; padding: 4px 6px !important; color: #111827 !important; background: #fff !important; }
   main tr { break-inside: avoid; } a { color: #111827 !important; text-decoration: none !important; }
 }
+
+
+/* SSOS branded login intro — short, responsive and accessible. */
+.ssos-intro {
+  isolation: isolate;
+  background: radial-gradient(ellipse at 50% 42%, #123e56 0%, #0b263e 42%, #061525 100%);
+  animation: ssos-intro-exit .55s 1.8s cubic-bezier(.4,0,.2,1) both;
+}
+.ssos-intro-grid {
+  opacity: .12;
+  background-image: linear-gradient(rgb(159 231 217 / .18) 1px, transparent 1px), linear-gradient(90deg, rgb(159 231 217 / .18) 1px, transparent 1px);
+  background-size: 52px 52px;
+  mask-image: radial-gradient(ellipse at center, black, transparent 78%);
+}
+.ssos-intro-glow {
+  position: absolute;
+  width: min(72vw, 34rem);
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  filter: blur(75px);
+  pointer-events: none;
+}
+.ssos-intro-glow-one { background: rgb(20 184 166 / .2); top: -35%; right: -18%; animation: ssos-intro-drift 5s ease-in-out infinite alternate; }
+.ssos-intro-glow-two { background: rgb(14 116 144 / .22); bottom: -42%; left: -18%; animation: ssos-intro-drift 6s ease-in-out infinite alternate-reverse; }
+.ssos-intro-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(78vw, 34rem);
+  aspect-ratio: 1;
+  border: 1px solid rgb(159 231 217 / .13);
+  border-radius: 9999px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.ssos-intro-ring-one { animation: ssos-intro-spin 28s linear infinite; }
+.ssos-intro-ring-two { width: min(62vw, 27rem); border-style: dashed; border-color: rgb(159 231 217 / .1); animation: ssos-intro-spin 38s linear infinite reverse; }
+.ssos-intro-content { animation: ssos-intro-arrive .9s cubic-bezier(.16,1,.3,1) both; }
+.ssos-intro-logo { filter: drop-shadow(0 18px 38px rgb(0 0 0 / .35)); animation: ssos-intro-logo 1.1s cubic-bezier(.16,1,.3,1) both; }
+.ssos-intro-logo > span > span:first-child { width: 6.5rem; height: 6.5rem; border-radius: 2rem; }
+.ssos-intro-logo svg { width: 4.5rem; height: 4.5rem; }
+.ssos-intro-rule { background: linear-gradient(90deg, transparent, #9fe7d9, transparent); animation: ssos-intro-rule 1s .45s ease both; }
+.ssos-intro-title { animation: ssos-intro-text .7s .35s ease both; }
+.ssos-intro-subtitle { animation: ssos-intro-text .7s .55s ease both; }
+@keyframes ssos-intro-arrive { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ssos-intro-logo { 0% { opacity: 0; transform: scale(.72) rotate(-9deg); } 68% { opacity: 1; transform: scale(1.06) rotate(2deg); } 100% { opacity: 1; transform: scale(1) rotate(0); } }
+@keyframes ssos-intro-text { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ssos-intro-rule { from { opacity: 0; transform: scaleX(.15); } to { opacity: 1; transform: scaleX(1); } }
+@keyframes ssos-intro-spin { to { rotate: 360deg; } }
+@keyframes ssos-intro-drift { from { transform: scale(.88) translate3d(-2%, -1%, 0); } to { transform: scale(1.08) translate3d(3%, 2%, 0); } }
+@keyframes ssos-intro-exit { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+@media (max-width: 640px) {
+  .ssos-intro-logo > span > span:first-child { width: 5.5rem; height: 5.5rem; border-radius: 1.7rem; }
+  .ssos-intro-logo svg { width: 3.8rem; height: 3.8rem; }
+  .ssos-intro-ring-one { width: 92vw; }
+  .ssos-intro-ring-two { width: 72vw; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ssos-intro { animation: none; }
+  .ssos-intro-content, .ssos-intro-logo, .ssos-intro-rule, .ssos-intro-title, .ssos-intro-subtitle,
+  .ssos-intro-ring, .ssos-intro-glow { animation: none; }
+}

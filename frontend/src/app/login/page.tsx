@@ -9,6 +9,7 @@ import { Lock, Mail, Loader2, ShieldCheck, Sparkles, Boxes, TrendingUp } from 'l
 import { cn } from '@/lib/utils';
 import SsosLogo from '@/components/brand/ssos-logo';
 import ThemeSwitcher from '@/components/layout/theme-switcher';
+import LoginIntro from '@/components/brand/login-intro';
 import { useTheme } from '@/providers/theme-provider';
 
 const loginSchema = z.object({
@@ -37,6 +38,7 @@ export default function LoginPage() {
 
   return (
     <main dir="rtl" className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4 py-8 text-slate-900 transition-colors dark:bg-[#071b2c] dark:text-slate-100">
+      <LoginIntro />
       <div className="absolute left-4 top-4 z-20"><ThemeSwitcher compact /></div>
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -right-40 -top-48 h-[34rem] w-[34rem] rounded-full bg-teal-500/15 blur-[100px] ssos-glow" />
