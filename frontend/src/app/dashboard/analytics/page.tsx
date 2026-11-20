@@ -65,7 +65,7 @@ function Panel({ title, subtitle, action, children }: {
 function Metric({ label, value, note, icon: Icon, state = "normal" }: {
   label: string; value: string; note: string; icon: typeof BarChart3; state?: "normal" | "warning" | "good";
 }) {
-  const color = state === "warning" ? "text-amber-600 bg-amber-50 dark:bg-amber-950/30" : state === "good" ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30" : "text-indigo-600 bg-indigo-50 dark:bg-indigo-950/30";
+  const color = state === "warning" ? "text-amber-600 bg-amber-50 dark:bg-amber-950/30" : state === "good" ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30" : "text-teal-600 bg-teal-50 dark:bg-teal-950/30";
   return <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
     <div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold text-slate-500">{label}</span><span className={`rounded-xl p-2 ${color}`}><Icon size={17}/></span></div>
     <div className="mt-3 break-words text-2xl font-black tabular-nums text-slate-900 dark:text-white">{value}</div>
@@ -81,9 +81,9 @@ function Bars({ rows, onSelect, selected }: {
   if (!rows.length) return <Empty text="אין נתונים זמינים להצגה בגרף הזה." />;
   return <div className="space-y-3">{rows.map((row, index) => {
     const id = row.id ?? row.label;
-    return <button type="button" key={id} onClick={() => onSelect?.(id)} className={`block w-full rounded-xl p-1 text-right ${selected === id ? "bg-indigo-50 ring-1 ring-indigo-200 dark:bg-indigo-950/30 dark:ring-indigo-900" : "hover:bg-slate-50 dark:hover:bg-slate-900"}`}>
+    return <button type="button" key={id} onClick={() => onSelect?.(id)} className={`block w-full rounded-xl p-1 text-right ${selected === id ? "bg-teal-50 ring-1 ring-teal-200 dark:bg-teal-950/30 dark:ring-teal-900" : "hover:bg-slate-50 dark:hover:bg-slate-900"}`}>
       <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="min-w-0 truncate font-bold text-slate-700 dark:text-slate-200">{row.label}</span><span className="shrink-0 tabular-nums text-slate-500">{row.hint ?? number(row.value)}</span></div>
-      <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.max(0, row.value) / max * 100}%`, opacity: 1 - index * 0.025 }}/></div>
+      <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-teal-500" style={{ width: `${Math.max(0, row.value) / max * 100}%`, opacity: 1 - index * 0.025 }}/></div>
     </button>;
   })}</div>;
 }
@@ -230,23 +230,23 @@ export default function AnalyticsCenterPage() {
 
   return (
     <div dir="rtl" className="min-w-0 space-y-6 pb-10">
-      <header className="rounded-2xl border border-indigo-200 bg-gradient-to-l from-indigo-50 via-white to-sky-50 p-5 shadow-sm dark:border-indigo-900 dark:from-indigo-950/30 dark:via-slate-950 dark:to-sky-950/20 sm:p-7">
+      <header className="rounded-2xl border border-teal-200 bg-gradient-to-l from-teal-50 via-white to-sky-50 p-5 shadow-sm dark:border-teal-900 dark:from-teal-950/30 dark:via-slate-950 dark:to-sky-950/20 sm:p-7">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="min-w-0"><div className="mb-2 flex items-center gap-2 text-sm font-bold text-indigo-600"><Activity size={17}/> מרכז אנליטיקה · SSOS</div>
+          <div className="min-w-0"><div className="mb-2 flex items-center gap-2 text-sm font-bold text-teal-600"><Activity size={17}/> מרכז אנליטיקה · SSOS</div>
             <h1 className="text-3xl font-black text-slate-900 dark:text-white">תמונת מצב כוללת</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">ניתוח משולב של רכש, הזמנות, מלאי, צריכה, ספקים ומחירים. כל מדד מוצג לפי מקור הנתונים שלו, ללא חיבור מטבעות או ערבוב תחזית עם ביצוע בפועל.</p>
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <label className="grid gap-1 text-xs font-semibold text-slate-500">מתאריך<input aria-label="מתאריך" type="date" value={startDate} max={endDate} onChange={(event)=>setStartDate(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"/></label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500">עד תאריך<input aria-label="עד תאריך" type="date" value={endDate} min={startDate} max={today()} onChange={(event)=>setEndDate(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"/></label>
-            <button type="button" disabled={!startDate || !endDate || startDate>endDate} onClick={()=>setApplied({start:startDate,end:endDate})} className="min-h-10 rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white disabled:opacity-50">החל טווח</button>
+            <button type="button" disabled={!startDate || !endDate || startDate>endDate} onClick={()=>setApplied({start:startDate,end:endDate})} className="min-h-10 rounded-xl bg-teal-600 px-4 text-sm font-bold text-white disabled:opacity-50">החל טווח</button>
             <button type="button" onClick={refresh} disabled={loading} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"><RefreshCw size={15} className={loading?"animate-spin":""}/> רענן</button>
           </div>
         </div>
       </header>
 
       <nav aria-label="ניווט אנליטיקה" className="flex flex-wrap gap-2">
-        {([{id:"overview",label:"תמונת מצב"},{id:"orders",label:"רכש והזמנות"},{id:"inventory",label:"מלאי וצריכה"},{id:"suppliers",label:"ספקים ומחירים"}] as const).map((tab)=><button key={tab.id} type="button" onClick={()=>setDetailTab(tab.id)} className={`rounded-xl px-4 py-2 text-sm font-bold ${detailTab===tab.id?"bg-indigo-600 text-white":"border border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"}`}>{tab.label}</button>)}
+        {([{id:"overview",label:"תמונת מצב"},{id:"orders",label:"רכש והזמנות"},{id:"inventory",label:"מלאי וצריכה"},{id:"suppliers",label:"ספקים ומחירים"}] as const).map((tab)=><button key={tab.id} type="button" onClick={()=>setDetailTab(tab.id)} className={`rounded-xl px-4 py-2 text-sm font-bold ${detailTab===tab.id?"bg-teal-600 text-white":"border border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"}`}>{tab.label}</button>)}
       </nav>
 
       {failedCount > 0 && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><AlertTriangle className="ml-2 inline" size={16}/>חלק מהמקורות לא נטענו ({loadedCount}/11 זמינים). הנתונים הזמינים מוצגים בנפרד; כשל בטעינה אינו מוצג כאפס.</div>}
@@ -264,14 +264,14 @@ export default function AnalyticsCenterPage() {
         <section className="grid min-w-0 gap-4 xl:grid-cols-2">
           <Panel title="הוצאות רכש לפי ספק" subtitle="הזמנות שאושרו, נשלחו והושלמו בלבד. יש לבחור מטבע אחד בכל פעם." action={<select aria-label="מטבע להצגה" value={activeCurrency} onChange={(event)=>setCurrency(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900">{(currencyOptions.length?currencyOptions:["ILS"]).map((code)=><option key={code} value={code}>{code}</option>)}</select>}>
             {spend.isError?<Empty text="מקור נתוני ההוצאות לא זמין כרגע."/>:<Bars rows={orderedGroups.map((group)=>({label:group.supplier_name,value:group.total,hint:money(group.total,activeCurrency),id:String(group.supplier_id??group.supplier_name)})).sort((a,b)=>b.value-a.value).slice(0,8)} onSelect={setSelectedSupplier} selected={selectedSupplier}/>}
-            {selectedSupplierGroup&&<div className="mt-4 rounded-xl bg-indigo-50 p-3 text-xs dark:bg-indigo-950/30"><b>{selectedSupplierGroup.supplier_name}</b> · {selectedSupplierGroup.count} הזמנות · {money(selectedSupplierGroup.total,activeCurrency)}<div className="mt-2 space-y-1">{selectedSupplierGroup.documents.slice(0,8).map((doc)=><div key={doc.id} className="flex justify-between gap-2"><span>{doc.reference} · {doc.date??"ללא תאריך"}</span><b>{money(doc.amount,activeCurrency)}</b></div>)}</div></div>}
-            <div className="mt-3 text-left"><Link href="/dashboard/procurement-analytics" className="text-xs font-bold text-indigo-600 hover:underline">לניתוח הוצאות מפורט <ChevronLeft className="inline" size={14}/></Link></div>
+            {selectedSupplierGroup&&<div className="mt-4 rounded-xl bg-teal-50 p-3 text-xs dark:bg-teal-950/30"><b>{selectedSupplierGroup.supplier_name}</b> · {selectedSupplierGroup.count} הזמנות · {money(selectedSupplierGroup.total,activeCurrency)}<div className="mt-2 space-y-1">{selectedSupplierGroup.documents.slice(0,8).map((doc)=><div key={doc.id} className="flex justify-between gap-2"><span>{doc.reference} · {doc.date??"ללא תאריך"}</span><b>{money(doc.amount,activeCurrency)}</b></div>)}</div></div>}
+            <div className="mt-3 text-left"><Link href="/dashboard/procurement-analytics" className="text-xs font-bold text-teal-600 hover:underline">לניתוח הוצאות מפורט <ChevronLeft className="inline" size={14}/></Link></div>
           </Panel>
           <Panel title="מגמת הוצאות חודשית" subtitle="מבוסס על הזמנות מאושרות לפי תאריך יצירה; מטבעות אינם מחוברים.">
             {spend.isError?<Empty text="מקור נתוני ההוצאות לא זמין כרגע."/>:<Trend rows={monthlySpend} currency={activeCurrency}/>}
           </Panel>
-          <Panel title="התפלגות סטטוס הזמנות" subtitle="כל ההזמנות הזמינות בארגון, לפי סטטוס נוכחי.">{orders.isError?<Empty text="נתוני ההזמנות לא זמינים כרגע."/>:<Donut rows={statusRows}/>}<div className="mt-3 text-left"><Link href="/dashboard/orders" className="text-xs font-bold text-indigo-600 hover:underline">לכל ההזמנות <ChevronLeft className="inline" size={14}/></Link></div></Panel>
-          <Panel title="התפלגות מוצרים לפי קטגוריה" subtitle="קטגוריות בקטלוג הפעיל; מוצגים שמונת הגדולים.">{catalog.isError?<Empty text="נתוני הקטלוג לא זמינים כרגע."/>:<Donut rows={categoryRows}/>}<div className="mt-3 text-left"><Link href="/dashboard/catalog" className="text-xs font-bold text-indigo-600 hover:underline">לניהול הקטלוג <ChevronLeft className="inline" size={14}/></Link></div></Panel>
+          <Panel title="התפלגות סטטוס הזמנות" subtitle="כל ההזמנות הזמינות בארגון, לפי סטטוס נוכחי.">{orders.isError?<Empty text="נתוני ההזמנות לא זמינים כרגע."/>:<Donut rows={statusRows}/>}<div className="mt-3 text-left"><Link href="/dashboard/orders" className="text-xs font-bold text-teal-600 hover:underline">לכל ההזמנות <ChevronLeft className="inline" size={14}/></Link></div></Panel>
+          <Panel title="התפלגות מוצרים לפי קטגוריה" subtitle="קטגוריות בקטלוג הפעיל; מוצגים שמונת הגדולים.">{catalog.isError?<Empty text="נתוני הקטלוג לא זמינים כרגע."/>:<Donut rows={categoryRows}/>}<div className="mt-3 text-left"><Link href="/dashboard/catalog" className="text-xs font-bold text-teal-600 hover:underline">לניהול הקטלוג <ChevronLeft className="inline" size={14}/></Link></div></Panel>
         </section>
       </>}
 
@@ -283,8 +283,8 @@ export default function AnalyticsCenterPage() {
       </section>}
 
       {detailTab === "inventory" && <section className="grid min-w-0 gap-4 xl:grid-cols-2">
-        <Panel title="מצב מלאי ותחזית" subtitle="המלצות מבוססות היסטוריית ספירות; חסר מידע מוצג בנפרד.">{recommendations.isError?<Empty text="נתוני תכנון המלאי לא זמינים."/>:<Donut rows={riskRows}/>}<div className="mt-3 text-left"><Link href="/dashboard/inventory" className="text-xs font-bold text-indigo-600 hover:underline">למסך המלאי <ChevronLeft className="inline" size={14}/></Link></div></Panel>
-        <Panel title="פרופילי צריכה ותגבור" subtitle="הצריכה השבועית המשוקללת מחושבת מפרופילים פעילים.">{profiles.isError?<Empty text="פרופילי הצריכה לא זמינים."/>:profileRows.length?<div className="space-y-3">{profileRows.map((row)=><div key={row.id} className="rounded-xl border p-3 dark:border-slate-800"><div className="flex flex-wrap justify-between gap-2"><b>{row.name}</b><span className="text-xs text-slate-500">{row.mapping_status==="mapped"?"מקושר למוצרים":"ממתין לקישור"}</span></div><div className="mt-2 grid grid-cols-3 gap-2 text-xs"><div><span className="block text-slate-500">רגיל</span><b>{number(row.regular_weekly_consumption)}</b></div><div><span className="block text-slate-500">תגבור</span><b>{number(row.reinforced_weekly_consumption)}</b></div><div><span className="block text-slate-500">משוקלל</span><b>{number(row.weighted_weekly_consumption)}</b></div></div></div>)}</div>:<Empty text="לא הוגדרו פרופילי צריכה פעילים."/>}<div className="mt-3 text-left"><Link href="/dashboard/inventory" className="text-xs font-bold text-indigo-600 hover:underline">לניהול מלאי וצריכה <ChevronLeft className="inline" size={14}/></Link></div></Panel>
+        <Panel title="מצב מלאי ותחזית" subtitle="המלצות מבוססות היסטוריית ספירות; חסר מידע מוצג בנפרד.">{recommendations.isError?<Empty text="נתוני תכנון המלאי לא זמינים."/>:<Donut rows={riskRows}/>}<div className="mt-3 text-left"><Link href="/dashboard/inventory" className="text-xs font-bold text-teal-600 hover:underline">למסך המלאי <ChevronLeft className="inline" size={14}/></Link></div></Panel>
+        <Panel title="פרופילי צריכה ותגבור" subtitle="הצריכה השבועית המשוקללת מחושבת מפרופילים פעילים.">{profiles.isError?<Empty text="פרופילי הצריכה לא זמינים."/>:profileRows.length?<div className="space-y-3">{profileRows.map((row)=><div key={row.id} className="rounded-xl border p-3 dark:border-slate-800"><div className="flex flex-wrap justify-between gap-2"><b>{row.name}</b><span className="text-xs text-slate-500">{row.mapping_status==="mapped"?"מקושר למוצרים":"ממתין לקישור"}</span></div><div className="mt-2 grid grid-cols-3 gap-2 text-xs"><div><span className="block text-slate-500">רגיל</span><b>{number(row.regular_weekly_consumption)}</b></div><div><span className="block text-slate-500">תגבור</span><b>{number(row.reinforced_weekly_consumption)}</b></div><div><span className="block text-slate-500">משוקלל</span><b>{number(row.weighted_weekly_consumption)}</b></div></div></div>)}</div>:<Empty text="לא הוגדרו פרופילי צריכה פעילים."/>}<div className="mt-3 text-left"><Link href="/dashboard/inventory" className="text-xs font-bold text-teal-600 hover:underline">לניהול מלאי וצריכה <ChevronLeft className="inline" size={14}/></Link></div></Panel>
         <Panel title="קטגוריות מוצרים" subtitle="מספר מוצרים בכל קטגוריה.">{catalog.isError?<Empty text="נתוני הקטלוג לא זמינים כרגע."/>:<Bars rows={categoryRows}/>}</Panel>
         <Panel title="איכות נתוני מלאי" subtitle="מדדי כיסוי וזמינות מתוך שירות מוכנות הנתונים.">{readiness.isError?<Empty text="מדדי איכות הנתונים לא זמינים."/>:<div className="space-y-3 text-sm">{[["מוצרים עם מחיר",readinessData?.products.priced,readinessData?.products.active],["מוצרים עם קטגוריה",readinessData?.products.categorized,readinessData?.products.active],["מוצרים עם כללי מלאי",readinessData?.products.with_stock_rules,readinessData?.products.active],["מוצרים מכוסים בהצעות ספק",readinessData?.supplier_offers.products_covered,readinessData?.products.active]].map(([label,value,total])=><div key={String(label)}><div className="mb-1 flex justify-between gap-2 text-xs"><span>{String(label)}</span><b>{number(Number(value??0))}/{number(Number(total??0))}</b></div><div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-sky-600" style={{width:`${Number(total)>0?Number(value??0)/Number(total)*100:0}%`}}/></div></div>)}</div>}</Panel>
       </section>}
@@ -310,7 +310,7 @@ export default function AnalyticsCenterPage() {
             {label:"תקציבי רכש",href:"/dashboard/settings/procurement-budgets",icon:Wallet},
             {label:"יומן ותזכורות",href:"/dashboard/calendar",icon:CalendarDays},
             {label:"היסטוריית פעולות",href:"/dashboard/audit",icon:Clock3},
-          ].map((item)=>{const Icon=item.icon;return <Link key={item.href} href={item.href} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-3 text-sm font-bold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-indigo-950/30"><span className="flex items-center gap-2"><Icon size={17} className="text-indigo-600"/>{item.label}</span><ChevronLeft size={16} className="text-slate-400"/></Link>})}
+          ].map((item)=>{const Icon=item.icon;return <Link key={item.href} href={item.href} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-3 text-sm font-bold text-slate-700 transition hover:border-teal-300 hover:bg-teal-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-teal-950/30"><span className="flex items-center gap-2"><Icon size={17} className="text-teal-600"/>{item.label}</span><ChevronLeft size={16} className="text-slate-400"/></Link>})}
         </div>
       </Panel>
 
