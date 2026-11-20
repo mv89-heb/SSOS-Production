@@ -3,21 +3,12 @@
 import { useEffect, useState } from "react";
 import SsosLogo from "@/components/brand/ssos-logo";
 
-const INTRO_KEY = "ssos-login-intro-seen";
-
 export default function LoginIntro() {
-  const [visible, setVisible] = useState(false);
+  // Render the splash immediately (including the server render) so the login
+  // form can never flash before it. It is intentionally shown on every visit.
+  const [visible, setVisible] = useState(true);
 
   useEffect(() => {
-    try {
-      if (window.sessionStorage.getItem(INTRO_KEY)) return;
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      window.sessionStorage.setItem(INTRO_KEY, "1");
-    } catch {
-      // Storage can be unavailable in private browsing; the intro still works.
-    }
-
-    setVisible(true);
     const timeout = window.setTimeout(() => setVisible(false), 2350);
     return () => window.clearTimeout(timeout);
   }, []);
