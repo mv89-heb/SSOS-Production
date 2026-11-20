@@ -51,11 +51,11 @@ export default function LoginPage() {
           <div className="ssos-mark-arrive"><SsosLogo size="lg" light={resolvedTheme === "dark"} /></div>
           <div className="ssos-rise mt-10 max-w-xl">
             <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-teal-200/20 bg-teal-200/10 px-4 py-2 text-xs font-bold text-teal-800 dark:text-teal-100"><Sparkles size={14} /> סביבת עבודה חכמה לניהול רכש</p>
-            <h1 className="text-4xl font-black leading-[1.2] tracking-tight xl:text-5xl">כל שרשרת הרכש.<br /><span className="text-teal-300">בשליטה אחת.</span></h1>
+            <h1 className="text-4xl font-black leading-[1.2] tracking-tight xl:text-5xl">כל שרשרת הרכש.<br /><span className="text-teal-700 dark:text-teal-300">בשליטה אחת.</span></h1>
             <p className="mt-5 max-w-lg text-base leading-8 text-slate-600 dark:text-slate-300">ניהול הזמנות, ספקים, מלאי ומסמכים — בחוויית עבודה אחת מדויקת, שקופה ונוחה.</p>
           </div>
           <div className="ssos-rise mt-10 grid max-w-xl grid-cols-3 gap-3">
-            {[{ icon: Boxes, title: 'רכש ומלאי' }, { icon: TrendingUp, title: 'תובנות ונתונים' }, { icon: ShieldCheck, title: 'בקרה ואמינות' }].map(({ icon: Icon, title }) => <div key={title} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-sm"><Icon className="mb-3 h-5 w-5 text-teal-300" /><p className="text-xs font-bold text-slate-700 dark:text-slate-200">{title}</p></div>)}
+            {[{ icon: Boxes, title: 'רכש ומלאי' }, { icon: TrendingUp, title: 'תובנות ונתונים' }, { icon: ShieldCheck, title: 'בקרה ואמינות' }].map(({ icon: Icon, title }) => <div key={title} className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-white/[0.06]"><Icon className="mb-3 h-5 w-5 text-teal-700 dark:text-teal-300" /><p className="text-xs font-bold text-slate-700 dark:text-slate-200">{title}</p></div>)}
           </div>
           <p className="mt-12 text-xs font-medium tracking-wide text-slate-500">SMART SUPPLIER ORDER SYSTEM <span className="mx-2 text-teal-500">•</span> SSOS</p>
         </section>
@@ -73,7 +73,7 @@ export default function LoginPage() {
               <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">כתובת אימייל</label>
               <div className="relative">
                 <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400"><Mail size={18} /></span>
-                <input {...register('email')} type="email" autoComplete="username" className={cn("block w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-4 pr-11 text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 transition focus:border-teal-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-teal-600/10", errors.email && "border-red-500 focus:border-red-500 focus:ring-red-100")} placeholder="name@company.com" />
+                <input {...register('email')} type="email" autoComplete="username" className={cn("block w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-4 pr-11 text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 transition focus:border-teal-600 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-teal-600/10", errors.email && "border-red-500 focus:border-red-500 focus:ring-red-100")} placeholder="name@company.com" />
               </div>
               {errors.email && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.email.message}</p>}
             </div>
