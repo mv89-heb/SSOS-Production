@@ -9,10 +9,10 @@ export const dynamic = "force-dynamic";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div dir="rtl" className="min-h-screen min-w-0 bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div dir="rtl" className="min-h-screen min-w-0 bg-[#f5f8fa] text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -right-32 -top-40 h-96 w-96 rounded-full bg-indigo-200/20 blur-3xl dark:bg-indigo-900/10" />
-        <div className="absolute -bottom-40 left-1/3 h-96 w-96 rounded-full bg-violet-200/15 blur-3xl dark:bg-violet-900/10" />
+        <div className="absolute -right-32 -top-40 h-96 w-96 rounded-full bg-teal-200/20 blur-3xl dark:bg-teal-900/10" />
+        <div className="absolute -bottom-40 left-1/3 h-96 w-96 rounded-full bg-sky-200/15 blur-3xl dark:bg-violet-900/10" />
       </div>
       <Sidebar />
       <div className="min-h-screen min-w-0 md:mr-64">
