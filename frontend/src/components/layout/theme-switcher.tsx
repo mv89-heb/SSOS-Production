@@ -19,7 +19,7 @@ export default function ThemeSwitcher({ compact = false }: ThemeSwitcherProps) {
         aria-label="בחירת ערכת נושא"
         value={mode}
         onChange={(event) => setMode(event.target.value as "light" | "dark" | "system")}
-        className="max-w-[112px] cursor-pointer bg-transparent text-xs font-bold outline-none"
+        className="max-w-[76px] sm:max-w-[112px] cursor-pointer bg-transparent text-xs font-bold outline-none"
       >
         <option value="light">מצב בהיר</option>
         <option value="dark">מצב כהה</option>
