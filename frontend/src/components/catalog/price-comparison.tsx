@@ -133,14 +133,14 @@ export function PriceComparison({
           <div className="grid grid-cols-2 gap-2">
             <div><div className="font-semibold text-slate-900">{money(row.price, row.currency)}</div><div className="text-xs text-slate-400">לפני מע״מ</div></div>
             <div><div className="font-semibold text-slate-900">{["ILS", "NIS"].includes(row.currency) ? money(row.price * 1.18, "ILS") : "—"}</div><div className="text-xs text-slate-400">כולל 18% מע״מ</div></div>
-          </div><div className="mt-1 text-xs text-slate-600 sm:hidden">{isComparable ? <>{money(row.normalized_price, row.currency)} <span className="text-slate-400">לפי יחידת השוואה</span></> : <span className="text-amber-700">לא ניתן להשוות</span>}</div>{offer?.last_paid_price != null && <div className="mt-1 text-xs text-indigo-700 dark:text-indigo-300">מחיר אחרון ששולם לפני מע״מ: {money(offer.last_paid_price, offer.currency)} · כולל מע״מ: {["ILS", "NIS"].includes(offer.currency) ? money(offer.last_paid_price * 1.18, "ILS") : "לא מחושב"}{offer.last_paid_at ? ` · ${new Date(offer.last_paid_at).toLocaleDateString("he-IL")}` : ""}</div>}
+          </div><div className="mt-1 text-xs text-slate-600 sm:hidden">{isComparable ? <>{money(row.normalized_price, row.currency)} <span className="text-slate-400">לפי יחידת השוואה</span></> : <span className="text-amber-700">לא ניתן להשוות</span>}</div>{offer?.last_paid_price != null && <div className="mt-1 text-xs text-teal-700 dark:text-teal-300">מחיר אחרון ששולם לפני מע״מ: {money(offer.last_paid_price, offer.currency)} · כולל מע״מ: {["ILS", "NIS"].includes(offer.currency) ? money(offer.last_paid_price * 1.18, "ILS") : "לא מחושב"}{offer.last_paid_at ? ` · ${new Date(offer.last_paid_at).toLocaleDateString("he-IL")}` : ""}</div>}
         </div>
         <div className="hidden text-right sm:block">
           {isComparable ? <><div className="font-semibold text-slate-900">{money(row.normalized_price, row.currency)}</div><div className="text-xs text-slate-400">לפי יחידת השוואה</div></> : <span className="text-xs text-amber-700">לא ניתן להשוות</span>}
         </div>
         <div className="flex items-center justify-end gap-2">
           {saving !== null && isComparable && <span className={saving > 0.000001 ? "text-xs font-semibold text-emerald-700" : saving < -0.000001 ? "text-xs font-semibold text-red-600" : "text-xs text-slate-400"}>{saving > 0.000001 ? "חיסכון " : saving < -0.000001 ? "יקר ב־" : ""}{Math.abs(saving) > 0.000001 ? money(Math.abs(saving), comparison.data?.current?.currency || currency) : "—"}</span>}
-          {canManage && offer && <><button type="button" onClick={() => { setEditingOfferId(offer.id); setNewSupplierId(String(offer.supplier_id)); setNewPrice(String(offer.price)); setNewUnit(offer.unit ?? ""); setNewCartonSize(offer.units_per_carton != null ? String(offer.units_per_carton) : ""); setNewCurrency(offer.currency || "ILS"); setError(null); setAddingOffer(true); }} disabled={updateOffer.isPending} className="rounded p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-50" aria-label={`עריכת הצעת ${row.supplier_name ?? "ספק"}`} title="עריכת הצעת מחיר"><Pencil size={14} /></button><button type="button" onClick={() => deleteOffer.mutate(offer.id)} disabled={deleteOffer.isPending} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" aria-label={`הסרת הצעת ${row.supplier_name ?? "ספק"}`} title="הסרת הצעת מחיר"><Trash2 size={14} /></button></>}
+          {canManage && offer && <><button type="button" onClick={() => { setEditingOfferId(offer.id); setNewSupplierId(String(offer.supplier_id)); setNewPrice(String(offer.price)); setNewUnit(offer.unit ?? ""); setNewCartonSize(offer.units_per_carton != null ? String(offer.units_per_carton) : ""); setNewCurrency(offer.currency || "ILS"); setError(null); setAddingOffer(true); }} disabled={updateOffer.isPending} className="rounded p-1.5 text-slate-400 hover:bg-teal-50 hover:text-teal-600 disabled:opacity-50" aria-label={`עריכת הצעת ${row.supplier_name ?? "ספק"}`} title="עריכת הצעת מחיר"><Pencil size={14} /></button><button type="button" onClick={() => deleteOffer.mutate(offer.id)} disabled={deleteOffer.isPending} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" aria-label={`הסרת הצעת ${row.supplier_name ?? "ספק"}`} title="הסרת הצעת מחיר"><Trash2 size={14} /></button></>}
         </div>
       </div>
     );
@@ -150,7 +150,7 @@ export function PriceComparison({
     <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900"><Award size={16} className="text-indigo-600" />השוואת מחירים בין ספקים</h3>
+          <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900"><Award size={16} className="text-teal-600" />השוואת מחירים בין ספקים</h3>
           <p className="mt-1 text-xs text-slate-500">הדירוג מתחשב ביחידת המידה ובמטבע. הצעות שאינן בנות השוואה מוצגות בנפרד.</p>
         </div>
         {canManage && !addingOffer && availableSuppliers.length > 0 && <Button onClick={() => setAddingOffer(true)} variant="secondary" className="h-8 text-xs"><Plus size={14} />הוספת הצעת ספק</Button>}
@@ -163,7 +163,7 @@ export function PriceComparison({
         {comparison.data.current && comparison.data.best_offer && comparison.data.saving_per_unit > 0 && <div className="grid gap-2 sm:grid-cols-3">
           <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">מחיר ספק ראשי</div><div className="mt-1 font-bold">{money(comparison.data.current.normalized_price, comparison.data.current.currency)}</div><div className="text-xs text-slate-400">ל־{normalizedUnitLabel(comparison.data.current.comparison_unit)}</div></div>
           <div className="rounded-lg bg-emerald-50 p-3"><div className="text-xs text-emerald-800">חיסכון אפשרי ליחידה</div><div className="mt-1 font-bold text-emerald-800">{money(comparison.data.saving_per_unit, comparison.data.current.currency)}</div><div className="text-xs text-emerald-700">{comparison.data.saving_percent.toFixed(1)}% פחות</div></div>
-          <div className="rounded-lg bg-indigo-50 p-3"><div className="text-xs text-indigo-800">הספק הזול ביותר</div><div className="mt-1 font-bold text-indigo-900">{comparison.data.best_offer.supplier_name || `ספק #${comparison.data.best_offer.supplier_id}`}</div><div className="text-xs text-indigo-700">{money(comparison.data.best_offer.normalized_price, comparison.data.best_offer.currency)} ליחידת השוואה</div></div>
+          <div className="rounded-lg bg-teal-50 p-3"><div className="text-xs text-teal-800">הספק הזול ביותר</div><div className="mt-1 font-bold text-teal-900">{comparison.data.best_offer.supplier_name || `ספק #${comparison.data.best_offer.supplier_id}`}</div><div className="text-xs text-teal-700">{money(comparison.data.best_offer.normalized_price, comparison.data.best_offer.currency)} ליחידת השוואה</div></div>
         </div>}
 
         {comparableRows.length > 0 ? <div className="overflow-hidden rounded-lg border border-slate-200">
@@ -179,7 +179,7 @@ export function PriceComparison({
 
       {!loading && !comparison.isError && comparison.data && comparableRows.length <= 1 && incomparableRows.length === 0 && offers.length === 0 && <p className="text-xs text-slate-500">עדיין לא הוזנו מחירים מספקים חלופיים.</p>}
 
-      {addingOffer && <div className="space-y-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+      {addingOffer && <div className="space-y-3 rounded-lg border border-teal-100 bg-teal-50/40 p-3">
         <div className="font-semibold text-sm">{editingOfferId !== null ? "עריכת הצעת מחיר" : "הוספת הצעת מחיר"}</div>
         <div className="grid gap-2 sm:grid-cols-2">
           {editingOfferId === null && <label className="text-xs text-slate-600">ספק<select value={newSupplierId} onChange={(e) => setNewSupplierId(e.target.value)} className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm"><option value="">בחר ספק...</option>{availableSuppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}
