@@ -9,7 +9,7 @@ export default function LoginIntro() {
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => setVisible(false), 2350);
+    const timeout = window.setTimeout(() => setVisible(false), 7000);
     return () => window.clearTimeout(timeout);
   }, []);
 
