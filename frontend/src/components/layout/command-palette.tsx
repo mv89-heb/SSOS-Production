@@ -72,7 +72,7 @@ export default function CommandPalette() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="hidden h-9 min-w-56 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-right text-xs text-slate-400 shadow-sm transition hover:border-indigo-200 hover:bg-white hover:text-slate-600 md:flex dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+        className="hidden h-9 min-w-56 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-right text-xs text-slate-400 shadow-sm transition hover:border-teal-200 hover:bg-white hover:text-slate-600 md:flex dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
         aria-label="חיפוש מהיר"
       >
         <Search className="h-4 w-4" />
@@ -95,10 +95,10 @@ export default function CommandPalette() {
                 filtered.map((item, index) => {
                   const Icon = item.icon;
                   return (
-                    <button key={item.href} type="button" onMouseEnter={() => setSelected(index)} onClick={() => navigate(item.href)} className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-3 text-right transition", index === selected ? "bg-indigo-50 text-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-200" : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800")}>
-                      <span className={cn("flex h-9 w-9 items-center justify-center rounded-lg", index === selected ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/70 dark:text-indigo-300" : "bg-slate-100 text-slate-500 dark:bg-slate-800")}><Icon className="h-4 w-4" /></span>
+                    <button key={item.href} type="button" onMouseEnter={() => setSelected(index)} onClick={() => navigate(item.href)} className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-3 text-right transition", index === selected ? "bg-teal-50 text-teal-900 dark:bg-teal-950/60 dark:text-teal-200" : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800")}>
+                      <span className={cn("flex h-9 w-9 items-center justify-center rounded-lg", index === selected ? "bg-teal-100 text-teal-600 dark:bg-teal-900/70 dark:text-teal-300" : "bg-slate-100 text-slate-500 dark:bg-slate-800")}><Icon className="h-4 w-4" /></span>
                       <span className="flex-1 text-sm font-semibold">{item.label}</span>
-                      {pathname === item.href && <span className="text-[10px] font-bold text-indigo-500">כאן</span>}
+                      {pathname === item.href && <span className="text-[10px] font-bold text-teal-500">כאן</span>}
                       {index === selected && <kbd className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-400 dark:border-slate-700">Enter</kbd>}
                     </button>
                   );
