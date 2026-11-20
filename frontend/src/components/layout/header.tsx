@@ -7,7 +7,8 @@ import { useAuth } from "@/providers/auth-provider";
 import { permissions } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { useOpenReminders } from "@/hooks/use-reminders";
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, LogOut, Menu, X, HelpCircle, Bell, CalendarDays, BarChart3, FileSearch, Warehouse, ClipboardCheck, BrainCircuit, Activity } from "lucide-react";\nimport SsosLogo from "@/components/brand/ssos-logo";
+import { LayoutDashboard, Users, Package, ShoppingCart, Settings, History, ShieldCheck, LogOut, Menu, X, HelpCircle, Bell, CalendarDays, BarChart3, FileSearch, Warehouse, ClipboardCheck, BrainCircuit, Activity } from "lucide-react";
+import SsosLogo from "@/components/brand/ssos-logo";
 import ThemeSwitcher from "@/components/layout/theme-switcher";
 
 const ORGANIZATION_NAME = "ישיבת אוהבי ירושלים - ראשית";
