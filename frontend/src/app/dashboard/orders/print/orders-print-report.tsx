@@ -137,14 +137,14 @@ export default function OrdersPrintReportPage() {
       `}</style>
 
       <div className="print-hidden flex flex-wrap items-center justify-between gap-3">
-        <Link href="/dashboard/orders" className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm font-bold text-indigo-600 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40">
+        <Link href="/dashboard/orders" className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm font-bold text-teal-600 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/40">
           <ArrowLeft size={16} /> חזרה להזמנות
         </Link>
         <button
           type="button"
           onClick={() => window.print()}
           disabled={loading || !!error || orders.length === 0}
-          className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Printer size={16} /> הדפסה / שמירה כ־PDF
         </button>
