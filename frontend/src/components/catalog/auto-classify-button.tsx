@@ -48,11 +48,11 @@ export function AutoClassifyButton() {
   };
 
   return (
-    <section className="mb-5 rounded-2xl border border-indigo-100 bg-gradient-to-l from-indigo-50 via-white to-white p-4 shadow-sm dark:border-indigo-900/50 dark:from-indigo-950/40 dark:via-slate-900 dark:to-slate-900">
+    <section className="mb-5 rounded-2xl border border-teal-100 bg-gradient-to-l from-teal-50 via-white to-white p-4 shadow-sm dark:border-teal-900/50 dark:from-teal-950/40 dark:via-slate-900 dark:to-slate-900">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-300">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-100 text-teal-600 dark:bg-teal-900/50 dark:text-teal-300">
               <Bot size={19} />
             </div>
             <div className="min-w-0">
@@ -100,7 +100,7 @@ export function AutoClassifyButton() {
                     {result.examples.map((item) => (
                       <div key={item.id} className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 last:border-b-0 dark:border-slate-800">
                         <span className="min-w-0 truncate text-xs text-slate-700 dark:text-slate-200">{item.name}</span>
-                        <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">{item.category}</span>
+                        <span className="shrink-0 rounded-full bg-teal-50 px-2 py-1 text-[11px] font-bold text-teal-700 dark:bg-teal-950/40 dark:text-teal-300">{item.category}</span>
                       </div>
                     ))}
                   </div>

@@ -37,7 +37,7 @@ export function OrderTimeline({ currentStatus }: { currentStatus: OrderStatus })
           <p className="text-sm font-extrabold text-slate-950 dark:text-white">תהליך ההזמנה</p>
           <p className="mt-1 text-xs text-slate-400">התקדמות ההזמנה לאורך מחזור הרכש</p>
         </div>
-        <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+        <span className="rounded-full bg-teal-50 px-2.5 py-1 text-[11px] font-bold text-teal-700 dark:bg-teal-950/60 dark:text-teal-300">
           שלב {activeIndex + 1} מתוך {STAGES.length}
         </span>
       </div>
@@ -46,7 +46,7 @@ export function OrderTimeline({ currentStatus }: { currentStatus: OrderStatus })
         <div className="relative px-5">
           <div className="absolute left-5 right-5 top-5 h-1 -translate-y-1/2 rounded-full bg-slate-100 dark:bg-slate-800" />
           <div
-            className="absolute right-5 top-5 h-1 -translate-y-1/2 rounded-full bg-indigo-600 transition-[width] duration-500 ease-out"
+            className="absolute right-5 top-5 h-1 -translate-y-1/2 rounded-full bg-teal-600 transition-[width] duration-500 ease-out"
             style={{ width: `${progress}%` }}
             aria-hidden="true"
           />
@@ -60,17 +60,17 @@ export function OrderTimeline({ currentStatus }: { currentStatus: OrderStatus })
                   <div
                     className={cn(
                       "relative flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white text-xs font-bold transition-all duration-300 dark:bg-slate-900",
-                      completed && "border-indigo-600 bg-indigo-600 text-white shadow-md shadow-indigo-600/20",
-                      current && "border-indigo-600 text-indigo-700 ring-4 ring-indigo-100 dark:bg-indigo-950 dark:text-indigo-300 dark:ring-indigo-950/70",
+                      completed && "border-teal-600 bg-teal-600 text-white shadow-md shadow-teal-600/20",
+                      current && "border-teal-600 text-teal-700 ring-4 ring-teal-100 dark:bg-teal-950 dark:text-teal-300 dark:ring-teal-950/70",
                       !completed && !current && "border-slate-200 text-slate-400 dark:border-slate-700"
                     )}
                   >
-                    {current && <span className="absolute inset-0 animate-ping rounded-full bg-indigo-400/20" aria-hidden="true" />}
+                    {current && <span className="absolute inset-0 animate-ping rounded-full bg-teal-400/20" aria-hidden="true" />}
                     <span className="relative z-10">
                       {completed ? <Check className="h-4 w-4" /> : current ? <Circle className="h-3 w-3 fill-current" /> : index + 1}
                     </span>
                   </div>
-                  <span className={cn("mt-3 text-xs font-bold", current ? "text-indigo-700 dark:text-indigo-300" : completed ? "text-slate-700 dark:text-slate-200" : "text-slate-400")}>{stage.label}</span>
+                  <span className={cn("mt-3 text-xs font-bold", current ? "text-teal-700 dark:text-teal-300" : completed ? "text-slate-700 dark:text-slate-200" : "text-slate-400")}>{stage.label}</span>
                   <span className="mt-1 text-[10px] text-slate-400">
                     {completed ? "הושלם" : current ? "שלב נוכחי" : "ממתין"}
                   </span>
@@ -87,19 +87,19 @@ export function OrderTimeline({ currentStatus }: { currentStatus: OrderStatus })
           const current = index === activeIndex;
 
           return (
-            <div key={stage.key} className={cn("flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors", current && "bg-indigo-50/70 dark:bg-indigo-950/30")}>
+            <div key={stage.key} className={cn("flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors", current && "bg-teal-50/70 dark:bg-teal-950/30")}>
               <div
                 className={cn(
                   "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold",
-                  completed && "border-indigo-600 bg-indigo-600 text-white",
-                  current && "border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300",
+                  completed && "border-teal-600 bg-teal-600 text-white",
+                  current && "border-teal-600 bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300",
                   !completed && !current && "border-slate-200 text-slate-400 dark:border-slate-700"
                 )}
               >
                 {completed ? <Check className="h-4 w-4" /> : index + 1}
               </div>
               <div className="min-w-0">
-                <p className={cn("text-sm font-bold", current ? "text-indigo-700 dark:text-indigo-300" : "text-slate-700 dark:text-slate-200")}>{stage.label}</p>
+                <p className={cn("text-sm font-bold", current ? "text-teal-700 dark:text-teal-300" : "text-slate-700 dark:text-slate-200")}>{stage.label}</p>
                 <p className="text-[11px] text-slate-400">{completed ? "הושלם" : current ? "שלב נוכחי" : "ממתין"}</p>
               </div>
             </div>

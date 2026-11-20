@@ -76,8 +76,8 @@ function renderOrderColumn(order: SearchableOrder, column: OrderColumnKey, remin
   switch (column) {
     case "order_number":
       return <>
-        <Link href={`/dashboard/orders/${order.id}`} className="font-extrabold text-indigo-600 hover:text-indigo-700 hover:underline dark:text-indigo-400">{order.order_number}</Link>
-        {!!order.search_provenance?.matched_fields.length && <p className="mt-1 max-w-56 text-[11px] text-indigo-600 dark:text-indigo-300">התאמה: {order.search_provenance.matched_fields.join(" · ")}</p>}
+        <Link href={`/dashboard/orders/${order.id}`} className="font-extrabold text-teal-600 hover:text-teal-700 hover:underline dark:text-teal-400">{order.order_number}</Link>
+        {!!order.search_provenance?.matched_fields.length && <p className="mt-1 max-w-56 text-[11px] text-teal-600 dark:text-teal-300">התאמה: {order.search_provenance.matched_fields.join(" · ")}</p>}
         {!!order.search_provenance?.missing_fields.length && <p className="mt-1 max-w-56 text-[11px] font-semibold text-amber-700 dark:text-amber-300">חסר: {order.search_provenance.missing_fields.join(" · ")}</p>}
       </>;
     case "supplier": return <span className="font-medium text-slate-700 dark:text-slate-200">{order.supplier_name}</span>;
@@ -87,7 +87,7 @@ function renderOrderColumn(order: SearchableOrder, column: OrderColumnKey, remin
     case "planned_order_date": return <span>{order.planned_order_date ? formatDate(order.planned_order_date) : "—"}</span>;
     case "reminder":
       return order.reminder_state !== "complete" && reminderAt
-        ? <Link href={`/dashboard/orders/${order.id}`} className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold ${reminderDue ? "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300" : "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"}`}><Bell size={13} /> {reminderDue ? "דורשת טיפול" : reminderAt}</Link>
+        ? <Link href={`/dashboard/orders/${order.id}`} className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold ${reminderDue ? "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300" : "bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300"}`}><Bell size={13} /> {reminderDue ? "דורשת טיפול" : reminderAt}</Link>
         : <span className="text-xs text-slate-400">אין תזכורת</span>;
     case "total": return <span className="font-bold text-slate-800 dark:text-slate-100">{order.currency} {order.final_total.toLocaleString("he-IL")}</span>;
     case "created_at": return <span className="text-sm text-slate-500">{formatDate(order.created_at)}</span>;
@@ -96,7 +96,7 @@ function renderOrderColumn(order: SearchableOrder, column: OrderColumnKey, remin
 
 function StatusSummary({ label, value, icon: Icon, tone, active, onClick }: StatusSummaryProps) {
   return (
-    <button type="button" onClick={onClick} className={`text-right rounded-2xl border p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${active ? "border-indigo-300 ring-2 ring-indigo-100 dark:border-indigo-700 dark:ring-indigo-950" : "border-slate-200/80 dark:border-slate-800"} bg-white dark:bg-slate-900`}>
+    <button type="button" onClick={onClick} className={`text-right rounded-2xl border p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${active ? "border-teal-300 ring-2 ring-teal-100 dark:border-teal-700 dark:ring-teal-950" : "border-slate-200/80 dark:border-slate-800"} bg-white dark:bg-slate-900`}>
       <div className="flex items-center justify-between gap-3">
         <div><p className="text-xs font-bold text-slate-400">{label}</p><p className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">{value}</p></div>
         <div className={`rounded-xl p-2.5 ${TONE_CLASSES[tone]}`}><Icon size={18} /></div>
@@ -308,7 +308,7 @@ export default function OrdersPage() {
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">הזמנות רכש</h1>
-            {orders && <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">{orders.length} הזמנות</span>}
+            {orders && <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-bold text-teal-700 dark:bg-teal-950/50 dark:text-teal-300">{orders.length} הזמנות</span>}
           </div>
           <p className="mt-1 text-sm text-slate-500">מרכז העבודה לניהול, מעקב ואישור הזמנות.</p>
         </div>
@@ -345,19 +345,19 @@ export default function OrdersPage() {
               <Columns3 size={15} /> עמודות
             </Button>
             <div className="flex gap-1.5 overflow-x-auto pb-1">
-              {STATUS_FILTERS.map((filter) => <button key={filter.value} type="button" onClick={() => changeStatus(filter.value)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition ${status === filter.value ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300"}`}>{filter.label}</button>)}
+              {STATUS_FILTERS.map((filter) => <button key={filter.value} type="button" onClick={() => changeStatus(filter.value)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition ${status === filter.value ? "bg-teal-600 text-white shadow-sm" : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300"}`}>{filter.label}</button>)}
             </div>
           </div>
           {showColumnSettings && (
             <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/60">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-xs font-extrabold text-slate-600 dark:text-slate-200">עמודות בטבלת ההזמנות</p>
-                <button type="button" onClick={() => setVisibleColumns(DEFAULT_ORDER_COLUMNS)} className="text-xs font-bold text-indigo-600 hover:underline dark:text-indigo-300">איפוס לברירת מחדל</button>
+                <button type="button" onClick={() => setVisibleColumns(DEFAULT_ORDER_COLUMNS)} className="text-xs font-bold text-teal-600 hover:underline dark:text-teal-300">איפוס לברירת מחדל</button>
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-2">
                 {ORDER_COLUMNS.map((column) => (
                   <label key={column.id} className="inline-flex min-h-8 items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                    <input type="checkbox" checked={visibleColumns.includes(column.id)} onChange={(event) => toggleColumn(column.id, event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    <input type="checkbox" checked={visibleColumns.includes(column.id)} onChange={(event) => toggleColumn(column.id, event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
                     {column.label}
                   </label>
                 ))}
@@ -368,16 +368,16 @@ export default function OrdersPage() {
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-md">
             <label className="flex flex-col gap-1 text-xs font-bold text-slate-500">
               מתאריך
-              <input type="date" value={startDate} max={endDate || undefined} onChange={(event) => { setStartDate(event.target.value); setSelectedSavedSearchId(""); setPage(0); }} className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-indigo-950" />
+              <input type="date" value={startDate} max={endDate || undefined} onChange={(event) => { setStartDate(event.target.value); setSelectedSavedSearchId(""); setPage(0); }} className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-teal-950" />
             </label>
             <label className="flex flex-col gap-1 text-xs font-bold text-slate-500">
               עד תאריך
-              <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => { setEndDate(event.target.value); setSelectedSavedSearchId(""); setPage(0); }} className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-indigo-950" />
+              <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => { setEndDate(event.target.value); setSelectedSavedSearchId(""); setPage(0); }} className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-teal-950" />
             </label>
           </div>
           {filteredOrders.length > 0 && (
             <div className="mt-2 flex justify-end">
-              <button type="button" onClick={() => togglePageSelection(!allPageOrdersSelected)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-indigo-600 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40">
+              <button type="button" onClick={() => togglePageSelection(!allPageOrdersSelected)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-teal-600 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/40">
                 {allPageOrdersSelected ? "בטל בחירת העמוד" : "בחר את כל ההזמנות בעמוד"}
               </button>
             </div>
@@ -385,7 +385,7 @@ export default function OrdersPage() {
           <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 dark:border-slate-800 sm:flex-row sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-bold text-slate-500">
               חיפושים שמורים ({savedSearches.length}/20)
-              <select value={selectedSavedSearchId} onChange={(event) => applySavedSearch(event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+              <select value={selectedSavedSearchId} onChange={(event) => applySavedSearch(event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-teal-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                 <option value="">בחירת חיפוש שמור...</option>
                 {savedSearches.map((saved) => <option key={saved.id} value={saved.id}>{saved.name}</option>)}
               </select>
@@ -403,7 +403,7 @@ export default function OrdersPage() {
             <form onSubmit={saveCurrentSearch} className="mt-2 flex flex-col gap-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60 sm:flex-row sm:items-end">
               <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-bold text-slate-500">
                 שם לחיפוש
-                <input required maxLength={80} value={saveSearchName} onChange={(event) => setSaveSearchName(event.target.value)} placeholder="לדוגמה: הזמנות חלב לשבת" className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" />
+                <input required maxLength={80} value={saveSearchName} onChange={(event) => setSaveSearchName(event.target.value)} placeholder="לדוגמה: הזמנות חלב לשבת" className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-teal-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" />
               </label>
               <div className="flex gap-2">
                 <Button type="submit" disabled={createSavedSearchMutation.isPending || savedSearches.length >= 20}>{createSavedSearchMutation.isPending ? "שומר..." : "שמור"}</Button>
@@ -413,8 +413,8 @@ export default function OrdersPage() {
           )}
           {savedSearchMessage && <p role="status" className="mt-2 px-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{savedSearchMessage}</p>}
           {selectedOrderIds.length > 0 && (
-            <div className="mt-3 flex flex-col gap-2 rounded-xl border border-indigo-200 bg-indigo-50/70 p-3 dark:border-indigo-900 dark:bg-indigo-950/30 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
+            <div className="mt-3 flex flex-col gap-2 rounded-xl border border-teal-200 bg-teal-50/70 p-3 dark:border-teal-900 dark:bg-teal-950/30 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-xs font-bold text-teal-900 dark:text-teal-200">
                 נבחרו {selectedOrderIds.length} הזמנות בעמוד הנוכחי
                 {!canBulkMarkSent && <p className="mt-1 font-medium text-amber-700 dark:text-amber-300">כדי לסמן כנשלח, כל ההזמנות שנבחרו חייבות להיות במצב "אושרה".</p>}
               </div>
@@ -444,7 +444,7 @@ export default function OrdersPage() {
               )}
             </div>
           )}
-          {hasFilters && <div className="mt-2 flex items-center justify-between px-1 text-xs"><span className="text-slate-400">נמצאו {totalResults.toLocaleString("he-IL")} הזמנות</span><button type="button" onClick={clearFilters} className="font-bold text-indigo-600 hover:underline">נקה סינון</button></div>}
+          {hasFilters && <div className="mt-2 flex items-center justify-between px-1 text-xs"><span className="text-slate-400">נמצאו {totalResults.toLocaleString("he-IL")} הזמנות</span><button type="button" onClick={clearFilters} className="font-bold text-teal-600 hover:underline">נקה סינון</button></div>}
           {exportError && <p role="alert" className="mt-2 px-1 text-xs font-semibold text-red-600">{exportError}</p>}
         </div>
 
@@ -464,11 +464,11 @@ export default function OrdersPage() {
                   <article key={order.id} className="min-w-0 rounded-xl border border-slate-200 p-4 shadow-sm dark:border-slate-800">
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <div className="flex min-w-0 items-start gap-2">
-                        <input type="checkbox" aria-label={`בחירת הזמנה ${order.order_number}`} checked={selectedOrderIds.includes(order.id)} onChange={(event) => toggleOrderSelection(order.id, event.target.checked)} className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                        <input type="checkbox" aria-label={`בחירת הזמנה ${order.order_number}`} checked={selectedOrderIds.includes(order.id)} onChange={(event) => toggleOrderSelection(order.id, event.target.checked)} className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
                         <div className="min-w-0">
-                          <Link href={`/dashboard/orders/${order.id}`} className="break-words font-extrabold text-indigo-600 hover:underline dark:text-indigo-400">{order.order_number}</Link>
+                          <Link href={`/dashboard/orders/${order.id}`} className="break-words font-extrabold text-teal-600 hover:underline dark:text-teal-400">{order.order_number}</Link>
                         <p className="mt-1 break-words text-sm font-semibold text-slate-700 dark:text-slate-200">{order.supplier_name}</p>
-                        {!!order.search_provenance?.matched_fields.length && <p className="mt-1 break-words text-[11px] text-indigo-600 dark:text-indigo-300">התאמה לפי: {order.search_provenance.matched_fields.join(" · ")}</p>}
+                        {!!order.search_provenance?.matched_fields.length && <p className="mt-1 break-words text-[11px] text-teal-600 dark:text-teal-300">התאמה לפי: {order.search_provenance.matched_fields.join(" · ")}</p>}
                           {!!order.search_provenance?.missing_fields.length && <p className="mt-1 flex items-start gap-1 break-words text-[11px] font-semibold text-amber-700 dark:text-amber-300"><AlertCircle size={12} className="mt-0.5 shrink-0" /> מידע חסר: {order.search_provenance.missing_fields.join(" · ")}</p>}
                         </div>
                       </div>
@@ -477,9 +477,9 @@ export default function OrdersPage() {
                     <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-sm dark:border-slate-800">
                       <div className="min-w-0"><p className="text-xs text-slate-500">סה״כ</p><p className="mt-1 break-words font-extrabold text-slate-900 dark:text-white">{order.currency} {order.final_total.toLocaleString("he-IL")}</p></div>
                       <div className="min-w-0"><p className="text-xs text-slate-500">נוצר בתאריך</p><p className="mt-1 text-slate-700 dark:text-slate-200">{formatDate(order.created_at)}</p></div>
-                      <div className="col-span-2 min-w-0"><p className="text-xs text-slate-500">תזכורת</p>{order.reminder_state !== "complete" && reminderAt ? <p className={`mt-1 break-words text-xs font-bold ${reminderDue ? "text-amber-700 dark:text-amber-300" : "text-indigo-700 dark:text-indigo-300"}`}>{reminderDue ? "דורשת טיפול" : reminderAt}</p> : <p className="mt-1 text-xs text-slate-400">אין תזכורת</p>}</div>
+                      <div className="col-span-2 min-w-0"><p className="text-xs text-slate-500">תזכורת</p>{order.reminder_state !== "complete" && reminderAt ? <p className={`mt-1 break-words text-xs font-bold ${reminderDue ? "text-amber-700 dark:text-amber-300" : "text-teal-700 dark:text-teal-300"}`}>{reminderDue ? "דורשת טיפול" : reminderAt}</p> : <p className="mt-1 text-xs text-slate-400">אין תזכורת</p>}</div>
                     </div>
-                    <Link href={`/dashboard/orders/${order.id}`} className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/70">פתיחת הזמנה <ArrowLeft size={15} /></Link>
+                    <Link href={`/dashboard/orders/${order.id}`} className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-teal-50 px-3 py-2 text-sm font-bold text-teal-700 hover:bg-teal-100 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:bg-teal-950/70">פתיחת הזמנה <ArrowLeft size={15} /></Link>
                   </article>
                 );
               })}
@@ -489,7 +489,7 @@ export default function OrdersPage() {
                 <thead className="border-b border-slate-100 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/40">
                   <tr>
                     <th className="px-4 py-3">
-                      <input type="checkbox" aria-label="בחירת כל ההזמנות בעמוד" checked={allPageOrdersSelected} onChange={(event) => togglePageSelection(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                      <input type="checkbox" aria-label="בחירת כל ההזמנות בעמוד" checked={allPageOrdersSelected} onChange={(event) => togglePageSelection(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
                     </th>
                     {visibleColumns.map((column) => <th key={column} className="whitespace-nowrap px-5 py-3 text-xs font-extrabold text-slate-500">{ORDER_COLUMNS.find((item) => item.id === column)?.label}</th>)}
                     <th className="px-5 py-3 text-xs font-extrabold text-slate-500">פעולות</th>
@@ -500,9 +500,9 @@ export default function OrdersPage() {
                     const reminderAt = formatReminder(order.next_reminder_at);
                     const reminderDue = !!order.next_reminder_at && new Date(order.next_reminder_at).getTime() <= Date.now() && order.reminder_state !== "complete";
                     return (
-                      <tr key={order.id} className="group transition-colors hover:bg-indigo-50/40 dark:hover:bg-slate-800/60">
+                      <tr key={order.id} className="group transition-colors hover:bg-teal-50/40 dark:hover:bg-slate-800/60">
                         <td className="px-4 py-4">
-                          <input type="checkbox" aria-label={`בחירת הזמנה ${order.order_number}`} checked={selectedOrderIds.includes(order.id)} onChange={(event) => toggleOrderSelection(order.id, event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                          <input type="checkbox" aria-label={`בחירת הזמנה ${order.order_number}`} checked={selectedOrderIds.includes(order.id)} onChange={(event) => toggleOrderSelection(order.id, event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
                         </td>
                         {visibleColumns.map((column) => (
                           <td key={column} className="max-w-64 px-5 py-4 align-top">
@@ -510,7 +510,7 @@ export default function OrdersPage() {
                           </td>
                         ))}
                         <td className="px-5 py-4">
-                          <Link href={`/dashboard/orders/${order.id}`} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-500 opacity-70 transition hover:bg-white hover:text-indigo-600 hover:opacity-100 dark:hover:bg-slate-900">פרטים <ArrowLeft size={13} /></Link>
+                          <Link href={`/dashboard/orders/${order.id}`} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-500 opacity-70 transition hover:bg-white hover:text-teal-600 hover:opacity-100 dark:hover:bg-slate-900">פרטים <ArrowLeft size={13} /></Link>
                         </td>
                       </tr>
                     );

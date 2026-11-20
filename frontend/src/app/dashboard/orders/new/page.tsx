@@ -172,7 +172,7 @@ export default function NewOrderPage() {
   };
 
   const inputClass =
-    "block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white";
+    "block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white";
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-10">
@@ -180,7 +180,7 @@ export default function NewOrderPage() {
         <div>
           <Link
             href="/dashboard/orders"
-            className="mb-2 inline-flex items-center gap-1 text-sm font-semibold text-slate-500 transition hover:text-indigo-600"
+            className="mb-2 inline-flex items-center gap-1 text-sm font-semibold text-slate-500 transition hover:text-teal-600"
           >
             <ArrowLeft size={16} />
             חזרה להזמנות
@@ -189,7 +189,7 @@ export default function NewOrderPage() {
           <p className="mt-1 text-sm text-slate-500">בנה את ההזמנה במהירות וקבל אינדיקציה מיידית לעלות.</p>
         </div>
         <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <ShoppingCart size={18} className="text-indigo-600" />
+          <ShoppingCart size={18} className="text-teal-600" />
           <div>
             <p className="text-[11px] font-bold text-slate-400">פריטים שנבחרו</p>
             <p className="font-extrabold text-slate-900 dark:text-white">{selectedCount}</p>
@@ -243,10 +243,10 @@ export default function NewOrderPage() {
               </div>
             );
             return (
-              <div className="mt-4 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/20">
+              <div className="mt-4 rounded-2xl border border-teal-100 bg-teal-50/60 p-4 dark:border-teal-900/60 dark:bg-teal-950/20">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">תנאי הספק להזמנה זו</h3>
-                  <Link href={`/dashboard/suppliers/${supplier.id}`} className="text-xs font-bold text-indigo-700 underline dark:text-indigo-300">עדכון פרטי ספק</Link>
+                  <Link href={`/dashboard/suppliers/${supplier.id}`} className="text-xs font-bold text-teal-700 underline dark:text-teal-300">עדכון פרטי ספק</Link>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {details.map(([label, value]) => (
@@ -286,7 +286,7 @@ export default function NewOrderPage() {
 
       <Card className="rounded-3xl border-slate-200/80 shadow-sm dark:border-slate-800">
         <CardHeader className="border-b border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/40">
-          <CardTitle className="flex items-center gap-2 text-base text-slate-900 dark:text-white"><CalendarDays size={17} className="text-indigo-600" /> מועד ביצוע ההזמנה</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base text-slate-900 dark:text-white"><CalendarDays size={17} className="text-teal-600" /> מועד ביצוע ההזמנה</CardTitle>
         </CardHeader>
         <CardContent className="p-5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -298,9 +298,9 @@ export default function NewOrderPage() {
       </Card>
 
       {supplierId !== "" && (
-        <section className="rounded-3xl border border-indigo-200 bg-indigo-50/60 p-5 dark:border-indigo-900/60 dark:bg-indigo-950/20">
+        <section className="rounded-3xl border border-teal-200 bg-teal-50/60 p-5 dark:border-teal-900/60 dark:bg-teal-950/20">
           <div className="flex items-start gap-3">
-            <div className="rounded-xl bg-indigo-600 p-2 text-white"><PackageSearch size={18} /></div>
+            <div className="rounded-xl bg-teal-600 p-2 text-white"><PackageSearch size={18} /></div>
             <div className="min-w-0 flex-1">
               <h2 className="font-extrabold text-slate-950 dark:text-white">הצעות לפי היסטוריית הזמנות</h2>
               <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
@@ -324,7 +324,7 @@ export default function NewOrderPage() {
               ) : historySuggestions.length > 0 ? (
                 <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {historySuggestions.slice(0, 6).map((item) => (
-                    <div key={item.product_id} className="rounded-2xl border border-indigo-100 bg-white p-3 dark:border-indigo-900/50 dark:bg-slate-900">
+                    <div key={item.product_id} className="rounded-2xl border border-teal-100 bg-white p-3 dark:border-teal-900/50 dark:bg-slate-900">
                       <div className="font-bold text-slate-900 dark:text-white">{item.product_name}</div>
                       <div className="mt-1 text-xs text-slate-500">
                         ממוצע שבוע רגיל: {item.normal_weekly_average.toLocaleString("he-IL", { maximumFractionDigits: 2 })} {item.unit}
@@ -338,7 +338,7 @@ export default function NewOrderPage() {
                       <button
                         type="button"
                         onClick={() => addSuggestedProduct(item.product_id, item.recommended_quantity)}
-                        className="mt-3 w-full rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700"
+                        className="mt-3 w-full rounded-xl bg-teal-600 px-3 py-2 text-xs font-bold text-white hover:bg-teal-700"
                       >
                         הוסף להזמנה · {item.recommended_quantity.toLocaleString("he-IL", { maximumFractionDigits: 2 })} {item.unit}
                       </button>
@@ -390,7 +390,7 @@ export default function NewOrderPage() {
                       </option>
                     ))}
                   </select>
-                  {line.quantity_unit === "carton" && <p className="mt-1 text-[11px] font-bold text-indigo-600">מחיר ההזמנה יחושב לפי קרטון; מחיר יחידה יומר לפי מספר היחידות באריזה.</p>}
+                  {line.quantity_unit === "carton" && <p className="mt-1 text-[11px] font-bold text-teal-600">מחיר ההזמנה יחושב לפי קרטון; מחיר יחידה יומר לפי מספר היחידות באריזה.</p>}
                 </div>
                 <div className="w-full md:w-28">
                   <label className="mb-1 block text-[11px] font-bold text-slate-400">{line.quantity_unit === "carton" ? "כמות (קרטונים)" : "כמות"}</label>
@@ -463,7 +463,7 @@ export default function NewOrderPage() {
         <Link href="/dashboard/orders" className="order-2 sm:order-1">
           <Button variant="ghost" disabled={createMutation.isPending}>ביטול</Button>
         </Link>
-        <Button onClick={handleSubmit} disabled={createMutation.isPending || supplierId === ""} className="order-1 min-w-40 shadow-lg shadow-indigo-500/20 sm:order-2">
+        <Button onClick={handleSubmit} disabled={createMutation.isPending || supplierId === ""} className="order-1 min-w-40 shadow-lg shadow-teal-500/20 sm:order-2">
           <ShoppingCart size={16} />
           {createMutation.isPending ? "יוצר..." : "יצירת הזמנה"}
         </Button>

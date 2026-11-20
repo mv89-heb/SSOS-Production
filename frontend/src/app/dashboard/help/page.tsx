@@ -240,13 +240,13 @@ export default function HelpPage() {
   const [open, setOpen] = useState("start");
   return (
     <main dir="rtl" className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-      <header className="rounded-3xl bg-gradient-to-br from-indigo-700 to-violet-700 p-6 text-white shadow-xl sm:p-8">
+      <header className="rounded-3xl bg-gradient-to-br from-teal-700 to-violet-700 p-6 text-white shadow-xl sm:p-8">
         <div className="flex items-start gap-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15"><HelpCircle className="h-6 w-6" /></div>
           <div>
-            <p className="text-sm font-bold text-indigo-100">ישיבת אוהבי ירושלים - ראשית</p>
+            <p className="text-sm font-bold text-teal-100">ישיבת אוהבי ירושלים - ראשית</p>
             <h1 className="mt-1 text-2xl font-black sm:text-3xl">מרכז העזרה</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-indigo-100">מדריך מעשי לפי המסכים הקיימים במערכת: רכש שוטף, קטלוג ומחירים, מלאי, ניתוח נתונים, מסמכים, מעקב וניהול.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-teal-100">מדריך מעשי לפי המסכים הקיימים במערכת: רכש שוטף, קטלוג ומחירים, מלאי, ניתוח נתונים, מסמכים, מעקב וניהול.</p>
           </div>
         </div>
       </header>
@@ -255,8 +255,8 @@ export default function HelpPage() {
         <div className="mb-4 flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-emerald-600" /><h2 className="font-black text-slate-900 dark:text-white">מסלול עבודה מומלץ</h2></div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {workflow.map((item, i) => (
-            <Link key={item.href} href={item.href} className="group rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-indigo-300 hover:bg-indigo-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-700 dark:hover:bg-indigo-950/30">
-              <div className="flex items-center justify-between gap-2"><span className="text-xs font-black text-indigo-600 dark:text-indigo-300">שלב {i + 1}</span><ArrowLeft className="h-4 w-4 text-slate-400 transition group-hover:-translate-x-1" /></div>
+            <Link key={item.href} href={item.href} className="group rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-teal-300 hover:bg-teal-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700 dark:hover:bg-teal-950/30">
+              <div className="flex items-center justify-between gap-2"><span className="text-xs font-black text-teal-600 dark:text-teal-300">שלב {i + 1}</span><ArrowLeft className="h-4 w-4 text-slate-400 transition group-hover:-translate-x-1" /></div>
               <div className="mt-2 font-black text-slate-900 dark:text-white">{item.label}</div>
               <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">{item.detail}</p>
             </Link>
@@ -271,7 +271,7 @@ export default function HelpPage() {
           return (
             <div key={id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
               <button type="button" onClick={() => setOpen(active ? "" : id)} aria-expanded={active} className="flex w-full items-center gap-3 px-4 py-4 text-right hover:bg-slate-50 dark:hover:bg-slate-900">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300"><Icon className="h-4 w-4" /></span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-600 dark:bg-teal-950/50 dark:text-teal-300"><Icon className="h-4 w-4" /></span>
                 <span className="flex-1 font-black text-slate-900 dark:text-white">{title}</span>
                 <ChevronDown className={`h-5 w-5 text-slate-400 transition-transform ${active ? "rotate-180" : ""}`} />
               </button>
@@ -282,7 +282,7 @@ export default function HelpPage() {
                     {steps.map((step) => <li key={step}>{step}</li>)}
                   </ol>
                   {tips?.length ? <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100"><p className="font-black">חשוב לדעת</p><ul className="mt-1 list-disc space-y-1 pe-5">{tips.map((tip) => <li key={tip}>{tip}</li>)}</ul></div> : null}
-                  {link ? <div className="mt-4"><Link href={link.href} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 font-bold text-white transition hover:bg-indigo-700"><span>{link.label}</span><ArrowLeft className="h-4 w-4" /></Link></div> : null}
+                  {link ? <div className="mt-4"><Link href={link.href} className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 font-bold text-white transition hover:bg-teal-700"><span>{link.label}</span><ArrowLeft className="h-4 w-4" /></Link></div> : null}
                 </div>
               )}
             </div>

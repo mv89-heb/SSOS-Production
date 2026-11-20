@@ -103,7 +103,7 @@ function ProgressBar({ value, max, label, suffix = "" }: { value: number; max: n
         <span className="shrink-0 text-slate-500">{number(value)}{suffix}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-        <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${percent}%` }} />
+        <div className="h-full rounded-full bg-teal-500 transition-all" style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
@@ -320,10 +320,10 @@ export default function ProcurementIntelligencePage() {
 
   return (
     <div dir="rtl" className="space-y-6 pb-10">
-      <header className="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-violet-50 p-6 shadow-sm dark:border-indigo-900 dark:from-indigo-950/30 dark:via-slate-950 dark:to-violet-950/20">
+      <header className="rounded-2xl border border-teal-200 bg-gradient-to-br from-teal-50 via-white to-violet-50 p-6 shadow-sm dark:border-teal-900 dark:from-teal-950/30 dark:via-slate-950 dark:to-violet-950/20">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-indigo-600">
+            <div className="mb-2 flex items-center gap-2 text-teal-600">
               <BrainCircuit size={18} />
               <span className="text-sm font-bold">Decision Center</span>
             </div>
@@ -348,7 +348,7 @@ export default function ProcurementIntelligencePage() {
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
         <StatCard label="דורש טיפול" value={number(actionRows.length)} hint={`${number(urgentStock.length)} דחופים · ${number(reorderStock.length)} להזמנה`} icon={<AlertTriangle className="text-red-500" size={18} />} tone={actionRows.length ? "red" : "emerald"} />
-        <StatCard label="סל רכש מומלץ" value={formatCurrencyTotals(basketTotalsByCurrency)} hint={`${number(purchaseBasket.length)} מוצרים · מוצג בנפרד לפי מטבע · לפני משלוח והתאמות ידניות`} icon={<ShoppingCart className="text-indigo-500" size={18} />} tone="blue" />
+        <StatCard label="סל רכש מומלץ" value={formatCurrencyTotals(basketTotalsByCurrency)} hint={`${number(purchaseBasket.length)} מוצרים · מוצג בנפרד לפי מטבע · לפני משלוח והתאמות ידניות`} icon={<ShoppingCart className="text-teal-500" size={18} />} tone="blue" />
         <StatCard label="פערי מחיר ליחידה" value={formatCurrencyTotals(opportunityGapByCurrency)} hint={`${number(data?.opportunity_products)} מוצרים עם חלופה זולה יותר · סכום פערים ליחידה, לא חיסכון מובטח`} icon={<TrendingDown className="text-emerald-500" size={18} />} tone="emerald" />
         <StatCard label="כיסוי מלאי ממוצע" value={averageCoverage == null ? "—" : `${number(averageCoverage)} ימים`} hint={`${number(coverageReady.length)} מוצרים עם נתוני צריכה מספיקים`} icon={<PackageSearch className="text-violet-500" size={18} />} tone="violet" />
         <StatCard label="נתוני מלאי חסרים" value={number(insufficientInventoryData)} hint="נדרשות לפחות שתי ספירות כדי לחשב צריכה" icon={<XCircle className="text-amber-500" size={18} />} tone="amber" />
@@ -357,19 +357,19 @@ export default function ProcurementIntelligencePage() {
         <StatCard label="הצעות שלא עודכנו 90 יום" value={number(readinessData?.price_intelligence.offers_not_updated_90d)} hint="הצעות פעילות שלא עודכנו; נדרש אימות לפני הסתמכות עליהן" icon={<Clock3 className="text-amber-500" size={18} />} tone="amber" />
         <StatCard label="תצפיות מחיר עדכניות" value={number(readinessData?.price_intelligence.recent_observations_90d)} hint={`${number(readinessData?.price_intelligence.older_observations_90d)} תצפיות בנות יותר מ־90 יום · מקור ותאריך אינם מבטיחים מחיר נוכחי`} icon={<RefreshCw className="text-blue-500" size={18} />} tone="blue" />
         <StatCard label="ספקים פעילים" value={number(readinessData?.suppliers.active)} hint={`${number(readinessData?.supplier_offers.suppliers_covered)} משתתפים בהשוואת מחירים`} icon={<Truck className="text-violet-500" size={18} />} tone="violet" />
-        <StatCard label="מוצרי אב מאוחדים" value={number(masterProductRows.length)} hint="קטלוג ללא שכפול לפי ספק" icon={<PackageSearch className="text-indigo-500" size={18} />} tone="blue" />
+        <StatCard label="מוצרי אב מאוחדים" value={number(masterProductRows.length)} hint="קטלוג ללא שכפול לפי ספק" icon={<PackageSearch className="text-teal-500" size={18} />} tone="blue" />
         <StatCard label="מוצרים עם כמה ספקים" value={number(masterProductsWithMultipleSuppliers)} hint={`${number(masterProductsWithPrice)} מוצרי אב עם מחיר תקף`} icon={<BarChart3 className="text-emerald-500" size={18} />} tone="emerald" />
       </section>
 
       <Section title="📦 פעילות הזמנות והוצאה בפועל" hint="הנתונים מבוססים על הזמנות שנשמרו בפועל במערכת.">
         <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-500">כל ההזמנות</div><div className="mt-1 text-2xl font-black">{number(orderRows.length)}</div><div className="mt-1 text-xs text-slate-500">{number(ordersWithValue)} עם סכום</div></div>
-          <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-500">בתהליך</div><div className="mt-1 text-2xl font-black text-indigo-600">{number(openOrders.length)}</div></div>
+          <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-500">בתהליך</div><div className="mt-1 text-2xl font-black text-teal-600">{number(openOrders.length)}</div></div>
           <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-500">הושלמו</div><div className="mt-1 text-2xl font-black">{number(completedOrders.length)}</div></div>
           <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-500">שווי הזמנות שהושלמו</div><div className="mt-1 text-2xl font-black">{hasCompletedOrderValue ? Object.entries(realizedSpendByCurrency).filter(([, value]) => value > 0).map(([currency, value]) => money(value, currency)).join(" · ") : "אין נתון"}</div><div className="mt-1 text-xs text-slate-500">{hasCompletedOrderValue ? "סכום הזמנות בסטטוס הושלמה; לא בהכרח שולם בפועל" : "אין כרגע הזמנות שהושלמו עם סכום חיובי"}</div></div>
         </div>
         {recentOrders.length ? <div className="overflow-x-auto border-t border-slate-100"><table className="w-full min-w-[760px] text-right text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-5 py-3">מס׳ הזמנה</th><th className="px-5 py-3">ספק</th><th className="px-5 py-3">תאריך</th><th className="px-5 py-3">סטטוס</th><th className="px-5 py-3">פריטים</th><th className="px-5 py-3">סכום</th></tr></thead><tbody className="divide-y">{recentOrders.map((order) => <tr key={order.id}><td className="px-5 py-3 font-bold">{order.order_number}</td><td className="px-5 py-3">{order.supplier_name || "—"}</td><td className="px-5 py-3">{order.planned_order_date || (order.created_at ? new Intl.DateTimeFormat("he-IL").format(new Date(order.created_at)) : "—")}</td><td className="px-5 py-3">{({ draft: "טיוטה", submitted: "ממתינה לאישור", approved: "אושרה", sent: "נשלחה לספק", completed: "הושלמה", cancelled: "בוטלה" } as Record<string, string>)[order.status] || order.status}</td><td className="px-5 py-3">{number(order.items?.length ?? 0)}</td><td className="px-5 py-3 font-bold">{Number(order.final_total ?? 0) > 0 ? money(order.final_total, order.currency || "ILS") : "ללא סכום"}</td></tr>)}</tbody></table></div> : <div className="p-8 text-center text-sm text-slate-500">אין הזמנות להצגה.</div>}
-        <div className="border-t p-4"><a href="/dashboard/orders" className="text-sm font-bold text-indigo-600">לכל הזמנות הרכש ←</a></div>
+        <div className="border-t p-4"><a href="/dashboard/orders" className="text-sm font-bold text-teal-600">לכל הזמנות הרכש ←</a></div>
       </Section>
 
       <Section title="🧩 קטלוג מאוחד — מוצרים והצעות מכל הספקים" hint="כל שורה מייצגת מוצר אחיד, עם מספר הספקים המקושרים והמחיר התקף הטוב ביותר כשקיימת הצעה שניתנת להשוואה.">
@@ -379,15 +379,15 @@ export default function ProcurementIntelligencePage() {
             <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">עם מחיר תקף</div><div className="text-xl font-black">{number(masterProductsWithPrice)}</div></div>
             <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">עם יותר מספק אחד</div><div className="text-xl font-black">{number(masterProductsWithMultipleSuppliers)}</div></div>
           </div>
-          <div className="relative"><Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input value={masterProductSearch} onChange={(event) => { setMasterProductSearch(event.target.value); setShowAllMasterProducts(false); }} placeholder="חיפוש מוצר מאוחד, מותג, קטגוריה, ברקוד או ספק..." className="w-full rounded-xl border border-slate-200 bg-white py-3 pr-10 pl-3 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900" /></div>
+          <div className="relative"><Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input value={masterProductSearch} onChange={(event) => { setMasterProductSearch(event.target.value); setShowAllMasterProducts(false); }} placeholder="חיפוש מוצר מאוחד, מותג, קטגוריה, ברקוד או ספק..." className="w-full rounded-xl border border-slate-200 bg-white py-3 pr-10 pl-3 text-sm outline-none focus:border-teal-400 dark:border-slate-700 dark:bg-slate-900" /></div>
         </div>
         <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-right text-sm"><thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900"><tr><th className="px-5 py-3">מוצר אחיד</th><th className="px-5 py-3">קטגוריה / מותג</th><th className="px-5 py-3">ספקים מקושרים</th><th className="px-5 py-3">המחיר הטוב הידוע</th><th className="px-5 py-3">ספק עדיף</th><th className="px-5 py-3">סטטוס נתונים</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{visibleMasterProducts.map((product) => <tr key={product.id}><td className="px-5 py-3 font-bold">{product.canonical_name}<div className="text-xs font-normal text-slate-400">{product.barcode || "ללא ברקוד"}{product.base_unit ? " · " + product.base_unit : ""}</div></td><td className="px-5 py-3">{product.category || "ללא קטגוריה"}{product.brand ? <div className="text-xs text-slate-500">{product.brand}</div> : null}</td><td className="px-5 py-3">{number(product.supplier_count ?? 0)}<div className="text-xs text-slate-500">{number(product.listing_count ?? 0)} הצעות/רשומות</div></td><td className="px-5 py-3 font-black">{product.has_price && Number(product.current_price ?? 0) > 0 ? <>{money(product.current_price, product.currency || "ILS")}<div className="text-xs font-normal text-slate-500">{product.comparison_unit ? `לפי ${product.comparison_unit}` : ""}{product.comparable_supplier_count ? ` · ${number(product.comparable_supplier_count)} הצעות ביחידת השוואה זו` : ""}</div></> : "אין מחיר בר־השוואה"}</td><td className="px-5 py-3">{product.best_supplier_name || "—"}</td><td className="px-5 py-3">{Number(product.supplier_count ?? 0) > 1 ? <span className="font-bold text-emerald-600">ניתן להשוות ספקים</span> : product.has_price ? <span className="text-amber-600">ספק יחיד</span> : <span className="text-slate-500">נדרש מידע</span>}</td></tr>)}</tbody></table></div>
-        {masterProductMatches.length > visibleMasterProducts.length && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllMasterProducts(true)} className="text-sm font-bold text-indigo-600">הצג את כל {number(masterProductMatches.length)} מוצרי האב</button></div>}
-        {showAllMasterProducts && masterProductMatches.length > 25 && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllMasterProducts(false)} className="text-sm font-bold text-indigo-600">צמצם ל־25 מוצרים</button></div>}
+        {masterProductMatches.length > visibleMasterProducts.length && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllMasterProducts(true)} className="text-sm font-bold text-teal-600">הצג את כל {number(masterProductMatches.length)} מוצרי האב</button></div>}
+        {showAllMasterProducts && masterProductMatches.length > 25 && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllMasterProducts(false)} className="text-sm font-bold text-teal-600">צמצם ל־25 מוצרים</button></div>}
       </Section>
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
-        <Section title="🔴 מה דורש טיפול עכשיו" hint="המערכת ממיינת לפי דחיפות ולא לפי סדר אלפביתי." action={<a href="/dashboard/inventory" className="text-sm font-bold text-indigo-600">תכנון מלאי ←</a>}>
+        <Section title="🔴 מה דורש טיפול עכשיו" hint="המערכת ממיינת לפי דחיפות ולא לפי סדר אלפביתי." action={<a href="/dashboard/inventory" className="text-sm font-bold text-teal-600">תכנון מלאי ←</a>}>
           {actionRows.length ? (
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {(showAllActions ? actionRows : actionRows.slice(0, 8)).map((row) => {
@@ -414,7 +414,7 @@ export default function ProcurementIntelligencePage() {
           ) : (
             <div className="p-10 text-center text-sm text-slate-500"><CheckCircle2 className="mx-auto text-emerald-500" size={32} /><div className="mt-3 font-bold">אין כרגע פריטי מלאי שסומנו לפעולה</div><div className="mt-1">זה לא אומר שאין צורך בספירה; רק שאין המלצת רכש מבוססת נתונים.</div></div>
           )}
-          {actionRows.length > 8 && <button type="button" onClick={() => setShowAllActions((value) => !value)} className="w-full border-t border-slate-100 p-3 text-sm font-bold text-indigo-600 dark:border-slate-800">{showAllActions ? "הצג פחות" : `הצג את כל ${number(actionRows.length)} הפריטים`}</button>}
+          {actionRows.length > 8 && <button type="button" onClick={() => setShowAllActions((value) => !value)} className="w-full border-t border-slate-100 p-3 text-sm font-bold text-teal-600 dark:border-slate-800">{showAllActions ? "הצג פחות" : `הצג את כל ${number(actionRows.length)} הפריטים`}</button>}
         </Section>
 
         <Section title="🛒 סל הרכש המומלץ" hint="כמות מומלצת לפי מנוע המלאי; המחיר נלקח מהמחיר הטוב ביותר הידוע כשקיימת השוואה.">
@@ -435,7 +435,7 @@ export default function ProcurementIntelligencePage() {
                 <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">עלות סל משוערת</div><div className="mt-1 text-lg font-black">{formatCurrencyTotals(basketTotalsByCurrency)}</div><div className="mt-1 text-xs text-slate-500">כל מטבע מחושב בנפרד; מוצרים ללא מחיר אינם נכללים בסכום</div>{basketRowsMissingPrice > 0 && <div className="mt-1 text-xs font-bold text-amber-600">{number(basketRowsMissingPrice)} מוצרים ללא מחיר ידוע</div>}</div>
                 <div className="rounded-xl bg-emerald-50 p-3 dark:bg-emerald-950/20"><div className="text-xs text-emerald-700 dark:text-emerald-300">פער מול המחיר הנוכחי בסל</div><div className="mt-1 text-lg font-black text-emerald-700 dark:text-emerald-300">{formatCurrencyTotals(basketSavingsByCurrency)}</div><div className="mt-1 text-xs text-emerald-700/80 dark:text-emerald-300/80">אומדן בלבד; לא כולל עלויות נלוות או תנאי ספק</div></div>
               </div>
-              <div className="border-t border-slate-100 p-4 dark:border-slate-800"><a href="/dashboard/orders" className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700">פתח הזמנות רכש <ArrowLeft size={15} /></a></div>
+              <div className="border-t border-slate-100 p-4 dark:border-slate-800"><a href="/dashboard/orders" className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-700">פתח הזמנות רכש <ArrowLeft size={15} /></a></div>
             </>
           ) : (
             <div className="p-10 text-center text-sm text-slate-500"><ShoppingCart className="mx-auto text-slate-300" size={32} /><div className="mt-3 font-bold">אין כרגע סל רכש מחושב</div><div className="mt-1">המערכת לא תייצר כמות הזמנה בלי נתוני ספירה וצריכה מספיקים.</div></div>
@@ -456,8 +456,8 @@ export default function ProcurementIntelligencePage() {
                   <div className="mt-3"><ProgressBar value={row.savings_percent} max={Math.max(10, Number(row.savings_percent))} label="פער המחיר" suffix="%" /></div>
                 </div>
               ))}
-              {data.top_opportunities.length > 15 && <button type="button" onClick={() => setShowAllOpportunities((value) => !value)} className="w-full rounded-xl border border-slate-200 p-3 text-sm font-bold text-indigo-600 dark:border-slate-800">{showAllOpportunities ? "הצג פחות הזדמנויות" : `הצג את כל ${number(data.top_opportunities.length)} ההזדמנויות`}</button>}
-              <a href="/dashboard/price-intelligence/overview" className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600">פתח את כל השוואות הספקים <ArrowLeft size={15} /></a>
+              {data.top_opportunities.length > 15 && <button type="button" onClick={() => setShowAllOpportunities((value) => !value)} className="w-full rounded-xl border border-slate-200 p-3 text-sm font-bold text-teal-600 dark:border-slate-800">{showAllOpportunities ? "הצג פחות הזדמנויות" : `הצג את כל ${number(data.top_opportunities.length)} ההזדמנויות`}</button>}
+              <a href="/dashboard/price-intelligence/overview" className="inline-flex items-center gap-2 text-sm font-bold text-teal-600">פתח את כל השוואות הספקים <ArrowLeft size={15} /></a>
             </div>
           ) : (
             <div className="p-10 text-center text-sm text-slate-500">אין כרגע הזדמנויות חיסכון שניתנות להשוואה.</div>
@@ -487,7 +487,7 @@ export default function ProcurementIntelligencePage() {
           <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
             {supplierData.suppliers.slice(0, showAllSuppliers ? supplierData.suppliers.length : 12).map((supplier) => (
               <div key={supplier.supplier_id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-                <div className="flex items-center justify-between gap-3"><div className="truncate font-bold">{supplier.supplier_name || `ספק #${supplier.supplier_id}`}</div><div className="text-lg font-black text-indigo-600">{number(supplier.score)}</div></div>
+                <div className="flex items-center justify-between gap-3"><div className="truncate font-bold">{supplier.supplier_name || `ספק #${supplier.supplier_id}`}</div><div className="text-lg font-black text-teal-600">{number(supplier.score)}</div></div>
                 <div className="mt-3 space-y-2">
                   <ProgressBar value={supplier.coverage_percent} max={100} label="כיסוי מוצרים" suffix="%" />
                   <ProgressBar value={supplier.win_rate_percent} max={100} label="ניצחונות מחיר" suffix="%" />
@@ -496,7 +496,7 @@ export default function ProcurementIntelligencePage() {
               </div>
             ))}
           </div>
-          {supplierData.suppliers.length > 12 && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllSuppliers((value) => !value)} className="text-sm font-bold text-indigo-600">{showAllSuppliers ? "הצג 12 ספקים מובילים" : `הצג את כל ${number(supplierData.suppliers.length)} הספקים`}</button></div>}
+          {supplierData.suppliers.length > 12 && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllSuppliers((value) => !value)} className="text-sm font-bold text-teal-600">{showAllSuppliers ? "הצג 12 ספקים מובילים" : `הצג את כל ${number(supplierData.suppliers.length)} הספקים`}</button></div>}
           </>
         ) : <div className="p-10 text-center text-sm text-slate-500">אין מספיק הצעות ספקים להשוואה.</div>}
       </Section>
@@ -528,9 +528,9 @@ export default function ProcurementIntelligencePage() {
       <Section title="🔎 חיפוש מוצר לצלילה מהירה" hint="רק כשצריך לעבור מהחלטה לפריט ספציפי.">
         <div className="border-b border-slate-100 p-5 dark:border-slate-800">
           <div className="mb-3 flex items-center justify-between gap-3"><span className="text-xs text-slate-500">נמצאו {number(filteredProducts.length)} מוצרים · מוצגים {number(visibleProducts.length)}</span><ProductSortToggle direction={sortDirection} onToggle={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} /></div>
-          <div className="relative"><Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input value={productSearch} onChange={(event) => { setProductSearch(event.target.value); setShowAllProducts(false); }} placeholder="מוצר, מק״ט, ברקוד, קטגוריה או ספק..." className="w-full rounded-xl border border-slate-200 bg-white py-3 pr-10 pl-3 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900" /></div>
+          <div className="relative"><Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input value={productSearch} onChange={(event) => { setProductSearch(event.target.value); setShowAllProducts(false); }} placeholder="מוצר, מק״ט, ברקוד, קטגוריה או ספק..." className="w-full rounded-xl border border-slate-200 bg-white py-3 pr-10 pl-3 text-sm outline-none focus:border-teal-400 dark:border-slate-700 dark:bg-slate-900" /></div>
           <div className="mt-3 flex flex-wrap gap-2">
-            {([{id:"all",label:"כל המוצרים"},{id:"missing-price",label:"ללא מחיר"},{id:"missing-category",label:"ללא קטגוריה"},{id:"missing-unit",label:"ללא יחידה"},{id:"stock-rules",label:"עם כללי מלאי"}] as const).map((filter) => <button key={filter.id} type="button" onClick={() => { setProductDataFilter(filter.id); setShowAllProducts(false); }} className={`rounded-full border px-3 py-1.5 text-xs font-bold ${productDataFilter === filter.id ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"}`}>{filter.label}</button>)}
+            {([{id:"all",label:"כל המוצרים"},{id:"missing-price",label:"ללא מחיר"},{id:"missing-category",label:"ללא קטגוריה"},{id:"missing-unit",label:"ללא יחידה"},{id:"stock-rules",label:"עם כללי מלאי"}] as const).map((filter) => <button key={filter.id} type="button" onClick={() => { setProductDataFilter(filter.id); setShowAllProducts(false); }} className={`rounded-full border px-3 py-1.5 text-xs font-bold ${productDataFilter === filter.id ? "border-teal-600 bg-teal-600 text-white" : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"}`}>{filter.label}</button>)}
           </div>
         </div>
         <div dir="rtl" className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
@@ -544,11 +544,11 @@ export default function ProcurementIntelligencePage() {
             </tbody>
           </table>
         </div>
-        {filteredProducts.length > visibleProducts.length && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllProducts(true)} className="text-sm font-bold text-indigo-600">הצג את כל {number(filteredProducts.length)} המוצרים</button></div>}
-        {showAllProducts && filteredProducts.length > 50 && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllProducts(false)} className="text-sm font-bold text-indigo-600">צמצם ל־50 מוצרים</button></div>}
+        {filteredProducts.length > visibleProducts.length && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllProducts(true)} className="text-sm font-bold text-teal-600">הצג את כל {number(filteredProducts.length)} המוצרים</button></div>}
+        {showAllProducts && filteredProducts.length > 50 && <div className="border-t border-slate-100 p-4 dark:border-slate-800"><button type="button" onClick={() => setShowAllProducts(false)} className="text-sm font-bold text-teal-600">צמצם ל־50 מוצרים</button></div>}
       </Section>
 
-      <section className="overflow-hidden rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-indigo-50 shadow-sm dark:border-violet-900 dark:from-violet-950/30 dark:via-slate-950 dark:to-indigo-950/20">
+      <section className="overflow-hidden rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-teal-50 shadow-sm dark:border-violet-900 dark:from-violet-950/30 dark:via-slate-950 dark:to-teal-950/20">
         <div className="flex flex-col gap-4 border-b border-violet-100 p-5 dark:border-violet-900/60 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3"><div className="rounded-xl bg-violet-600 p-2 text-white"><Sparkles size={20} /></div><div><h2 className="font-black text-violet-950 dark:text-violet-100">Gemini — סיכום מנהלים</h2><p className="mt-1 text-sm text-violet-900/70 dark:text-violet-200/70">שכבת הסבר בלבד על הנתונים הדטרמיניסטיים של המערכת.</p></div></div>
           <button type="button" onClick={runBriefing} disabled={aiLoading || !data} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"><BrainCircuit size={16} />{aiLoading ? "Gemini מנתח..." : "הפק סיכום"}</button>
@@ -556,7 +556,7 @@ export default function ProcurementIntelligencePage() {
         <div className="p-5">
           {aiError && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{aiError}</div>}
           {!briefing && !aiError && <div className="text-sm text-slate-500">לחיצה על "הפק סיכום" תציג הזדמנויות, סיכונים ופעולות על בסיס הנתונים הקיימים בלבד.</div>}
-          {briefing && <div className="grid gap-5 md:grid-cols-3"><div><div className="mb-2 font-bold text-emerald-700">הזדמנויות</div><ul className="space-y-2 text-sm">{briefing.briefing.highlights.map((x, i) => <li key={`h-${i}`}>• {x}</li>)}</ul></div><div><div className="mb-2 font-bold text-amber-700">סיכונים</div><ul className="space-y-2 text-sm">{briefing.briefing.risks.map((x, i) => <li key={`r-${i}`}>• {x}</li>)}</ul></div><div><div className="mb-2 font-bold text-indigo-700">פעולות</div><ul className="space-y-2 text-sm">{briefing.briefing.actions.map((x, i) => <li key={`a-${i}`}>→ {x}</li>)}</ul></div></div>}
+          {briefing && <div className="grid gap-5 md:grid-cols-3"><div><div className="mb-2 font-bold text-emerald-700">הזדמנויות</div><ul className="space-y-2 text-sm">{briefing.briefing.highlights.map((x, i) => <li key={`h-${i}`}>• {x}</li>)}</ul></div><div><div className="mb-2 font-bold text-amber-700">סיכונים</div><ul className="space-y-2 text-sm">{briefing.briefing.risks.map((x, i) => <li key={`r-${i}`}>• {x}</li>)}</ul></div><div><div className="mb-2 font-bold text-teal-700">פעולות</div><ul className="space-y-2 text-sm">{briefing.briefing.actions.map((x, i) => <li key={`a-${i}`}>→ {x}</li>)}</ul></div></div>}
         </div>
       </section>
 

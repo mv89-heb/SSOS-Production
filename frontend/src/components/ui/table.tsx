@@ -62,13 +62,13 @@ export function Table({
 
   return (
     <div className="w-full min-w-0">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-xs text-indigo-900 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-200">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-teal-100 bg-teal-50/70 px-3 py-2 text-xs text-teal-900 dark:border-teal-900/50 dark:bg-teal-950/30 dark:text-teal-200">
         <span className="font-semibold">הטבלה רחבה — השתמש בכפתורים כדי לראות את כל העמודות</span>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => viewportRef.current?.scrollBy({ left: -Math.max(240, (viewportRef.current?.clientWidth ?? 0) * 0.75), behavior: "smooth" })}
-            className="rounded-lg border border-indigo-200 bg-white px-3 py-2 font-bold hover:bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 dark:border-indigo-800 dark:bg-slate-900 dark:hover:bg-indigo-950"
+            className="rounded-lg border border-teal-200 bg-white px-3 py-2 font-bold hover:bg-teal-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 dark:border-teal-800 dark:bg-slate-900 dark:hover:bg-teal-950"
             aria-label="גלילה שמאלה להצגת עמודות נוספות"
           >
             ← גלילה שמאלה
@@ -76,7 +76,7 @@ export function Table({
           <button
             type="button"
             onClick={() => viewportRef.current?.scrollBy({ left: Math.max(240, (viewportRef.current?.clientWidth ?? 0) * 0.75), behavior: "smooth" })}
-            className="rounded-lg border border-indigo-200 bg-white px-3 py-2 font-bold hover:bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 dark:border-indigo-800 dark:bg-slate-900 dark:hover:bg-indigo-950"
+            className="rounded-lg border border-teal-200 bg-white px-3 py-2 font-bold hover:bg-teal-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 dark:border-teal-800 dark:bg-slate-900 dark:hover:bg-teal-950"
             aria-label="גלילה ימינה להצגת עמודות נוספות"
           >
             גלילה ימינה →
@@ -89,7 +89,7 @@ export function Table({
       role="region"
       aria-label="טבלה רחבה — ניתן לגלול אופקית"
       tabIndex={0}
-      className="block w-full min-w-0 max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/10"
+      className="block w-full min-w-0 max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/10"
       style={{
         direction: "ltr",
         inlineSize: "100%",
@@ -132,7 +132,7 @@ export function TableRow({ className, ...props }: HTMLAttributes<HTMLTableRowEle
   return (
     <tr
       className={cn(
-        "group transition-colors duration-150 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20",
+        "group transition-colors duration-150 hover:bg-teal-50/40 dark:hover:bg-teal-950/20",
         className,
       )}
       {...props}

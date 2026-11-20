@@ -76,11 +76,11 @@ export default function ProcurementBasketPage() {
   return (
     <div dir="rtl" className="space-y-6 pb-10">
       <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-        <a href="/dashboard/procurement-intelligence" className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:underline">
+        <a href="/dashboard/procurement-intelligence" className="inline-flex items-center gap-2 text-sm font-semibold text-teal-600 hover:underline">
           <ArrowLeft size={16} /> חזרה למרכז מודיעין רכש
         </a>
         <div className="mt-5 flex items-start gap-3">
-          <div className="rounded-xl bg-indigo-600 p-2 text-white"><Calculator size={20} /></div>
+          <div className="rounded-xl bg-teal-600 p-2 text-white"><Calculator size={20} /></div>
           <div>
             <h1 className="text-3xl font-black text-slate-900 dark:text-white">אופטימיזציית סל רכש</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
@@ -93,7 +93,7 @@ export default function ProcurementBasketPage() {
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="flex flex-col gap-3 border-b border-slate-100 p-5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
           <div><h2 className="font-black">מוצרי הסל</h2><p className="mt-1 text-xs text-slate-500">המחירים נלקחים מהשוואת הספקים הקיימת.</p></div>
-          <button type="button" onClick={addItem} disabled={!available.length || products.isLoading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"><Plus size={16} /> הוסף מוצר</button>
+          <button type="button" onClick={addItem} disabled={!available.length || products.isLoading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-50"><Plus size={16} /> הוסף מוצר</button>
         </div>
 
         {products.isError ? <div className="p-8 text-center text-sm text-amber-700">לא ניתן לטעון את הקטלוג כרגע.</div> : !items.length ? <div className="p-10 text-center"><PackageSearch className="mx-auto text-slate-300" size={40} /><div className="mt-3 font-bold">הסל עדיין ריק</div><div className="mt-1 text-sm text-slate-500">הוסף מוצרים כדי לחשב חלוקת ספקים.</div></div> : (
@@ -126,7 +126,7 @@ export default function ProcurementBasketPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="text-sm text-slate-500">עלות נוכחית</div><div className="mt-2 text-2xl font-black">{money(result.current_cost)}</div></div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"><div className="text-sm text-slate-500">עלות אופטימלית</div><div className="mt-2 text-2xl font-black text-emerald-600">{money(result.optimized_cost)}</div></div>
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/20"><div className="text-sm text-emerald-700">חיסכון פוטנציאלי</div><div className="mt-2 text-2xl font-black text-emerald-700">{money(result.savings)}</div></div>
-          <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/20"><div className="text-sm text-indigo-700">ספקים בסל</div><div className="mt-2 text-2xl font-black text-indigo-700">{number(result.supplier_count)}</div><div className="text-xs text-indigo-700/70">חיסכון {number(result.savings_percent)}%</div></div>
+          <div className="rounded-2xl border border-teal-200 bg-teal-50 p-5 shadow-sm dark:border-teal-900 dark:bg-teal-950/20"><div className="text-sm text-teal-700">ספקים בסל</div><div className="mt-2 text-2xl font-black text-teal-700">{number(result.supplier_count)}</div><div className="text-xs text-teal-700/70">חיסכון {number(result.savings_percent)}%</div></div>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           {result.suppliers.map((supplier) => <div key={supplier.supplier_id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"><h3 className="font-black">{supplier.supplier_name || `ספק #${supplier.supplier_id}`}</h3><div className="mt-4 space-y-3">{supplier.items.map((item) => <div key={item.product_id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-900"><span>{catalog.find((row) => row.id === item.product_id)?.name || `מוצר #${item.product_id}`} × {number(item.quantity)}</span><span className="font-bold">{money(item.line_total)}</span></div>)}</div></div>)}

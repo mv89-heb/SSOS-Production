@@ -42,7 +42,7 @@ export default function AdminAuditHealthPage() {
     <div dir="rtl" className="space-y-6 pb-10">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="mb-1 flex items-center gap-2 text-sm font-bold text-indigo-600"><ShieldCheck size={17} /> בקרה ואבטחה</div>
+          <div className="mb-1 flex items-center gap-2 text-sm font-bold text-teal-600"><ShieldCheck size={17} /> בקרה ואבטחה</div>
           <h1 className="text-2xl font-black text-slate-900">תקינות המערכת ויומן ביקורת</h1>
           <p className="mt-1 text-sm text-slate-500">בדיקת שלמות שרשרת הביקורת ועיון בפעולות האחרונות בארגון.</p>
         </div>
@@ -81,7 +81,7 @@ export default function AdminAuditHealthPage() {
       <section className="rounded-xl border bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
         <h2 className="text-lg font-black text-slate-900 dark:text-slate-100">עיון באירועי ביקורת</h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">רשימת הפעולות המלאה מוצגת במסך לוג הביקורת המרכזי, כדי לשמור על מקור אחד לפרטי האירועים ולמנוע הבדלים בין שתי רשימות.</p>
-        <Link href="/dashboard/audit" className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl border border-indigo-200 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-300 dark:hover:bg-indigo-950/30">
+        <Link href="/dashboard/audit" className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl border border-teal-200 px-4 py-2 text-sm font-bold text-teal-700 hover:bg-teal-50 dark:border-teal-900 dark:text-teal-300 dark:hover:bg-teal-950/30">
           <ExternalLink size={16} /> מעבר ללוג הביקורת המרכזי
         </Link>
       </section>

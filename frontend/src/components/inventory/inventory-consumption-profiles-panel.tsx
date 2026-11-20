@@ -88,9 +88,9 @@ export default function InventoryConsumptionProfilesPanel() {
   return <section dir="rtl" className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-5">
     <header className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="text-xl font-black">מעקב צריכה ותגבור שבתות</h2><p className="mt-1 text-sm text-slate-500">פרופילי תכנון עצמאיים לחד־פעמי, נייר, ניקיון וציוד. ניתן להוסיף מוצרים ולקשר אותם לקטלוג בהמשך.</p></div>
-      <button onClick={()=>{setEditingId(null);setForm(blankForm);setFormOpen(true);}} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-black text-white"><Plus size={16}/> מוצר לתכנון</button>
+      <button onClick={()=>{setEditingId(null);setForm(blankForm);setFormOpen(true);}} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-teal-600 px-4 text-sm font-black text-white"><Plus size={16}/> מוצר לתכנון</button>
     </header>
-    {message && <div role="status" className="rounded-xl bg-indigo-50 p-3 text-sm font-bold text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-200">{message}</div>}
+    {message && <div role="status" className="rounded-xl bg-teal-50 p-3 text-sm font-bold text-teal-800 dark:bg-teal-950/30 dark:text-teal-200">{message}</div>}
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">פרופילים פעילים</div><div className="text-2xl font-black">{profiles.data?.length ?? 0}</div></div>
       <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><div className="text-xs text-slate-500">ממתינים לשיוך לקטלוג</div><div className="text-2xl font-black">{profiles.data?.filter(p => p.mapping_status === "pending").length ?? 0}</div></div>
@@ -100,10 +100,10 @@ export default function InventoryConsumptionProfilesPanel() {
 
     {supplierTotals.length > 0 && <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
       <h3 className="mb-3 font-black">השוואת קצב צריכה משוקלל לפי ספק</h3>
-      <div className="space-y-3">{supplierTotals.map(item=><div key={item.id} className="grid grid-cols-[minmax(90px,150px)_1fr_70px] items-center gap-3 text-sm"><span className="truncate font-bold">{item.name}</span><div className="h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-indigo-500" style={{width:`${Math.max(2,item.weekly/maxSupplierWeekly*100)}%`}}/></div><span className="text-left font-black tabular-nums">{qty(item.weekly)}</span></div>)}</div>
+      <div className="space-y-3">{supplierTotals.map(item=><div key={item.id} className="grid grid-cols-[minmax(90px,150px)_1fr_70px] items-center gap-3 text-sm"><span className="truncate font-bold">{item.name}</span><div className="h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-teal-500" style={{width:`${Math.max(2,item.weekly/maxSupplierWeekly*100)}%`}}/></div><span className="text-left font-black tabular-nums">{qty(item.weekly)}</span></div>)}</div>
       <p className="mt-3 text-xs text-slate-500">ההשוואה מסכמת פרופילים המשויכים לכל ספק. בפרופיל עם יותר מספק אחד, הצריכה מוצגת לכל הספקים האפשריים ואינה מחולקת ביניהם.</p>
     </div>}
-    {formOpen && <div className="space-y-3 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 dark:border-indigo-900 dark:bg-indigo-950/20">
+    {formOpen && <div className="space-y-3 rounded-2xl border border-teal-200 bg-teal-50/50 p-4 dark:border-teal-900 dark:bg-teal-950/20">
       <div className="flex items-center justify-between"><h3 className="font-black">{editingId ? "עריכת פרופיל צריכה" : "הוספת פרופיל צריכה"}</h3><button onClick={reset} aria-label="סגירה" className="rounded-lg p-2"><X size={17}/></button></div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label className={labelClass}>שם מוצר / קבוצת מוצרים<input className={inputClass} value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="למשל: מגשי אלומיניום"/></label>
@@ -120,7 +120,7 @@ export default function InventoryConsumptionProfilesPanel() {
         <label className={labelClass}>סטטוס התחלתי<select className={inputClass} value={form.order_status} onChange={e=>setForm({...form,order_status:e.target.value as "healthy"|"reorder"})}><option value="healthy">תקין</option><option value="reorder">להזמנה</option></select></label>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3 text-sm dark:bg-slate-900"><span>צריכה שבועית משוקללת מחושבת: <strong>{qty(weighted)}</strong></span><span>חודש תכנון (4 שבועות): <strong>{qty(weighted*4)}</strong></span></div>
-      <div className="flex gap-2"><button disabled={busy} onClick={save} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-black text-white disabled:opacity-50"><Save size={16}/>{busy?"שומר…":"שמור פרופיל"}</button><button onClick={reset} className="rounded-xl border px-4 text-sm font-bold dark:border-slate-700">ביטול</button></div>
+      <div className="flex gap-2"><button disabled={busy} onClick={save} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-teal-600 px-4 text-sm font-black text-white disabled:opacity-50"><Save size={16}/>{busy?"שומר…":"שמור פרופיל"}</button><button onClick={reset} className="rounded-xl border px-4 text-sm font-bold dark:border-slate-700">ביטול</button></div>
     </div>}
 
     {profiles.isLoading ? <div className="p-8 text-center text-sm text-slate-500">טוען פרופילי צריכה…</div> : profiles.isError ? <div className="p-5 text-sm text-red-600">לא ניתן לטעון את פרופילי הצריכה.</div> : <>
