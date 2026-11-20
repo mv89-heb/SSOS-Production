@@ -9,6 +9,7 @@ import { Lock, Mail, Loader2, ShieldCheck, Sparkles, Boxes, TrendingUp } from 'l
 import { cn } from '@/lib/utils';
 import SsosLogo from '@/components/brand/ssos-logo';
 import ThemeSwitcher from '@/components/layout/theme-switcher';
+import { useTheme } from '@/providers/theme-provider';
 
 const loginSchema = z.object({
   email: z.string().email('כתובת אימייל לא תקינה'),
@@ -30,6 +31,7 @@ function loginErrorMessage(error: unknown): string {
 
 export default function LoginPage() {
   const { login, isLoggingIn, loginError } = useAuth();
+  const { resolvedTheme } = useTheme();
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema) });
   const onSubmit = (data: LoginFormValues) => login(data);
 
@@ -46,7 +48,7 @@ export default function LoginPage() {
 
       <div className="relative z-10 mx-auto grid w-full max-w-6xl items-center gap-8 lg:grid-cols-[1.05fr_.95fr] lg:gap-16">
         <section className="hidden text-slate-900 dark:text-white lg:block">
-          <div className="ssos-mark-arrive"><SsosLogo size="lg" light /></div>
+          <div className="ssos-mark-arrive"><SsosLogo size="lg" light={resolvedTheme === "dark"} /></div>
           <div className="ssos-rise mt-10 max-w-xl">
             <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-teal-200/20 bg-teal-200/10 px-4 py-2 text-xs font-bold text-teal-800 dark:text-teal-100"><Sparkles size={14} /> סביבת עבודה חכמה לניהול רכש</p>
             <h1 className="text-4xl font-black leading-[1.2] tracking-tight xl:text-5xl">כל שרשרת הרכש.<br /><span className="text-teal-300">בשליטה אחת.</span></h1>
