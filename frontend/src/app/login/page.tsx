@@ -61,7 +61,7 @@ export default function LoginPage() {
         <section className="ssos-rise w-full rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 shadow-[0_32px_100px_rgba(0,0,0,.35)] sm:p-10">
           <div className="mb-8 flex flex-col items-center text-center lg:items-start lg:text-right">
             <div className="mb-5 lg:hidden"><SsosLogo size="lg" /></div>
-            <div className="mb-3 hidden lg:block"><span className="rounded-full bg-teal-50 px-3 py-1.5 text-xs font-extrabold text-teal-800">כניסה מאובטחת</span></div>
+            <div className="mb-3 hidden lg:block"><span className="rounded-full bg-teal-50 px-3 py-1.5 text-xs font-extrabold text-teal-800 dark:bg-teal-950/50 dark:text-teal-200">כניסה מאובטחת</span></div>
             <h2 className="text-2xl font-black tracking-tight text-[#10263d] dark:text-white sm:text-3xl">ברוכים השבים</h2>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">התחברו כדי להמשיך לנהל את פעילות הרכש</p>
           </div>
@@ -76,10 +76,10 @@ export default function LoginPage() {
               {errors.email && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.email.message}</p>}
             </div>
             <div>
-              <label className="mb-2 block text-sm font-bold text-slate-700">סיסמה</label>
+              <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">סיסמה</label>
               <div className="relative">
                 <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400"><Lock size={18} /></span>
-                <input {...register('password')} type="password" autoComplete="current-password" className={cn("block w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-4 pr-11 text-slate-900 placeholder:text-slate-400 transition focus:border-teal-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-teal-600/10", errors.password && "border-red-500 focus:border-red-500 focus:ring-red-100")} placeholder="••••••••" />
+                <input {...register('password')} type="password" autoComplete="current-password" className={cn("block w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-4 pr-11 text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 transition focus:border-teal-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-teal-600/10", errors.password && "border-red-500 focus:border-red-500 focus:ring-red-100")} placeholder="••••••••" />
               </div>
               {errors.password && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.password.message}</p>}
             </div>
