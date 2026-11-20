@@ -308,7 +308,7 @@ export default function InventoryCountPage() {
 
   return (
     <div dir="rtl" className="min-h-screen space-y-4 pb-28">
-      <header className="rounded-3xl bg-gradient-to-br from-indigo-700 via-blue-600 to-cyan-600 p-5 text-white shadow-lg sm:p-7">
+      <header className="rounded-3xl bg-gradient-to-br from-teal-700 via-blue-600 to-cyan-600 p-5 text-white shadow-lg sm:p-7">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 text-xs font-bold text-blue-100"><Warehouse size={17}/> מחסן ומלאי</div>
@@ -325,7 +325,7 @@ export default function InventoryCountPage() {
       </header>
 
       {currentUser.data?.role === "employee" && countStatus.data && (
-        <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-indigo-950 dark:border-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-100">
+        <section className="rounded-2xl border border-teal-200 bg-teal-50 p-4 text-teal-950 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-100">
           <div className="flex items-start gap-3">
             <ClipboardCheck className="mt-1 shrink-0" size={22} />
             <div>
@@ -343,20 +343,20 @@ export default function InventoryCountPage() {
         </div>
       )}
       {latestCount.data?.has_count && (
-        <section className="overflow-hidden rounded-3xl border border-indigo-200 bg-white shadow-sm dark:border-indigo-900/60 dark:bg-slate-950">
+        <section className="overflow-hidden rounded-3xl border border-teal-200 bg-white shadow-sm dark:border-teal-900/60 dark:bg-slate-950">
           <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"><ClipboardCheck size={21}/></div>
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300"><ClipboardCheck size={21}/></div>
               <div>
-                <div className="text-xs font-bold text-indigo-600 dark:text-indigo-300">הספירה האחרונה שנשמרה</div>
+                <div className="text-xs font-bold text-teal-600 dark:text-teal-300">הספירה האחרונה שנשמרה</div>
                 <div className="mt-1 text-lg font-black">{latestCount.data.counted} מוצרים</div>
                 <div className="mt-1 text-xs text-slate-500">{latestCount.data.counted_at ? new Intl.DateTimeFormat("he-IL", { dateStyle: "medium", timeStyle: "short" }).format(new Date(latestCount.data.counted_at)) : ""}</div>
               </div>
             </div>
-            <button onClick={() => setShowLatestReport((current) => !current)} className="min-h-11 rounded-xl bg-indigo-600 px-4 text-sm font-black text-white">{showLatestReport ? "הסתר פירוט ספירה" : "הצג פירוט ספירה"}</button>
+            <button onClick={() => setShowLatestReport((current) => !current)} className="min-h-11 rounded-xl bg-teal-600 px-4 text-sm font-black text-white">{showLatestReport ? "הסתר פירוט ספירה" : "הצג פירוט ספירה"}</button>
           </div>
           {showLatestReport && (
-            <div className="border-t border-indigo-100 p-4 dark:border-indigo-950">
+            <div className="border-t border-teal-100 p-4 dark:border-teal-950">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-black">דוח ספירת המלאי האחרונה — כל המוצרים שנספרו</h3>
                 <span className="text-xs text-slate-500">תאריך הספירה: {latestCount.data.counted_at ? new Intl.DateTimeFormat("he-IL", { dateStyle: "medium", timeStyle: "short" }).format(new Date(latestCount.data.counted_at)) : "—"}</span>
@@ -410,7 +410,7 @@ export default function InventoryCountPage() {
                     <div className="font-black">{entry.counted_at ? new Intl.DateTimeFormat("he-IL", { dateStyle: "full" }).format(new Date(entry.counted_at)) : "תאריך לא ידוע"}</div>
                     <div className="mt-1 text-xs text-slate-500">{entry.counted_at ? new Intl.DateTimeFormat("he-IL", { timeStyle: "short" }).format(new Date(entry.counted_at)) : ""} · {entry.counted} רשומות מוצר</div>
                   </div>
-                  <div className="flex items-center gap-2 text-sm font-bold text-indigo-600">{expanded ? "הסתר פרטים" : "הצג פרטים"} {expanded ? <ChevronUp size={17}/> : <ChevronDown size={17}/>}</div>
+                  <div className="flex items-center gap-2 text-sm font-bold text-teal-600">{expanded ? "הסתר פרטים" : "הצג פרטים"} {expanded ? <ChevronUp size={17}/> : <ChevronDown size={17}/>}</div>
                 </button>
                 {expanded && (
                   <div className="px-3 pb-4 sm:px-4">
@@ -448,7 +448,7 @@ export default function InventoryCountPage() {
         {recommendations.isLoading ? <div className="p-5 text-sm text-slate-500">בודק אילו ספקים מתאימים ליצירת טיוטה…</div> :
           recommendations.isError ? <div className="p-5 text-sm text-red-600">לא ניתן לטעון את המלצות ההזמנה. אפשר לעבור למסך ניהול מלאי ולנסות שוב.</div> :
           <div className="space-y-3 p-4">
-            {orderMessage && <div className="rounded-xl bg-indigo-50 p-3 text-sm font-bold text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300">{orderMessage}</div>}
+            {orderMessage && <div className="rounded-xl bg-teal-50 p-3 text-sm font-bold text-teal-700 dark:bg-teal-950/30 dark:text-teal-300">{orderMessage}</div>}
             <div className="flex flex-wrap gap-2">
               {[...new Set((recommendations.data ?? []).filter((row) => row.data_ready && (row.status === "urgent" || row.status === "reorder") && Number(row.recommended_order) > 0).map((row) => Number(products.find((p) => p.id === row.product_id)?.supplier_id ?? row.supplier_schedule?.supplier_id)).filter((id) => Number.isInteger(id) && id > 0))].map((supplierId) => {
                 const count = (recommendations.data ?? []).filter((row) => Number(products.find((p) => p.id === row.product_id)?.supplier_id ?? row.supplier_schedule?.supplier_id) === supplierId && row.data_ready && (row.status === "urgent" || row.status === "reorder") && Number(row.recommended_order) > 0 && Number(products.find((p) => p.id === row.product_id)?.current_price ?? 0) > 0).length;
@@ -464,9 +464,9 @@ export default function InventoryCountPage() {
         <div className="flex gap-2">
           <label className="relative min-w-0 flex-1">
             <Search className="absolute right-3 top-3.5 text-slate-400" size={18}/>
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="חפש מוצר / מק״ט / ברקוד" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pr-10 pl-3 text-base font-bold outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900"/>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="חפש מוצר / מק״ט / ברקוד" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pr-10 pl-3 text-base font-bold outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900"/>
           </label>
-          <button onClick={openScanner} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm" aria-label="סריקת ברקוד"><Camera size={21}/></button>
+          <button onClick={openScanner} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white shadow-sm" aria-label="סריקת ברקוד"><Camera size={21}/></button>
         </div>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
           <FilterButton active={filter === "remaining"} onClick={() => setFilter("remaining")} label={`נשארו ${remainingCount}`} />
@@ -516,7 +516,7 @@ export default function InventoryCountPage() {
             <div className="truncate text-sm font-black">{allCounted} מתוך {products.length} מוצרים · {differenceCount} הפרשים</div>
           </div>
           <button onClick={() => setShowReset(true)} disabled={!allCounted} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 disabled:opacity-30 dark:border-slate-700" aria-label="נקה ספירה"><Trash2 size={19}/></button>
-          <button onClick={save} disabled={!allCounted || saving} className="flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 font-black text-white shadow-lg disabled:opacity-40">
+          <button onClick={save} disabled={!allCounted || saving} className="flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 font-black text-white shadow-lg disabled:opacity-40">
             {saving ? <Loader2 className="animate-spin" size={18}/> : <ClipboardCheck size={18}/>}
             שמור {allCounted}
           </button>
@@ -571,9 +571,9 @@ function CountCard({
   const delta = countedValue === null ? null : countedValue - current;
   const unit = productUnit(product);
   return (
-    <article id={`product-${product.id}`} className={`overflow-hidden rounded-2xl border shadow-sm transition ${counted ? "border-indigo-200 bg-indigo-50/40 dark:border-indigo-900/60 dark:bg-indigo-950/20" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"}`}>
+    <article id={`product-${product.id}`} className={`overflow-hidden rounded-2xl border shadow-sm transition ${counted ? "border-teal-200 bg-teal-50/40 dark:border-teal-900/60 dark:bg-teal-950/20" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"}`}>
       <button onClick={onExpand} className="flex w-full items-center gap-3 p-4 text-right">
-        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${counted ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-800"}`}>
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${counted ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-800"}`}>
           {counted ? <Check size={21}/> : <Package size={21}/>}
         </div>
         <div className="min-w-0 flex-1">
@@ -593,7 +593,7 @@ function CountCard({
             <button onClick={() => onAdjust(-1)} className="flex h-14 items-center justify-center rounded-2xl bg-slate-100 text-2xl font-black active:scale-95 dark:bg-slate-800" aria-label="הפחת אחת"><Minus/></button>
             <div className="w-28 text-center">
               <label className="text-xs font-bold text-slate-500">כמות שנספרה</label>
-              <input autoFocus inputMode="numeric" type="number" min="0" step="1" value={value} onChange={(e) => onChange(e.target.value)} placeholder={String(current)} className="mt-1 h-16 w-full rounded-2xl border-2 border-indigo-200 bg-white text-center text-3xl font-black outline-none focus:border-indigo-600 dark:border-indigo-900 dark:bg-slate-900"/>
+              <input autoFocus inputMode="numeric" type="number" min="0" step="1" value={value} onChange={(e) => onChange(e.target.value)} placeholder={String(current)} className="mt-1 h-16 w-full rounded-2xl border-2 border-teal-200 bg-white text-center text-3xl font-black outline-none focus:border-teal-600 dark:border-teal-900 dark:bg-slate-900"/>
               <div className="mt-1 text-[11px] text-slate-400">{unit}</div>
             </div>
             <button onClick={() => onAdjust(1)} className="flex h-14 items-center justify-center rounded-2xl bg-slate-100 text-2xl font-black active:scale-95 dark:bg-slate-800" aria-label="הוסף אחת"><Plus/></button>
@@ -614,5 +614,5 @@ function MiniStat({ label, value }: { label: string; value: number }) {
 }
 
 function FilterButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
-  return <button onClick={onClick} className={`shrink-0 rounded-full px-4 py-2 text-xs font-black transition ${active ? "bg-indigo-600 text-white shadow" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}>{label}</button>;
+  return <button onClick={onClick} className={`shrink-0 rounded-full px-4 py-2 text-xs font-black transition ${active ? "bg-teal-600 text-white shadow" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}>{label}</button>;
 }
