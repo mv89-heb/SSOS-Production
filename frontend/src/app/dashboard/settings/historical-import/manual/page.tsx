@@ -111,9 +111,9 @@ export default function ManualHistoricalImportPage() {
   </section>
   <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
    <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold">נתוני הייבוא · 14 הזמנות</h2><span className="text-xs text-slate-500">ניתן לערוך לפני הבדיקה</span></div>
-   <textarea value={json} onChange={e=>{setJson(e.target.value);setPreview(null);setPreviewedJson("");setMessage("");}} spellCheck={false} className="min-h-[420px] w-full rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-6 text-slate-900 focus:border-indigo-500 focus:outline-none"/>
+   <textarea value={json} onChange={e=>{setJson(e.target.value);setPreview(null);setPreviewedJson("");setMessage("");}} spellCheck={false} className="min-h-[420px] w-full rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-6 text-slate-900 focus:border-teal-500 focus:outline-none"/>
    <div className="flex flex-wrap gap-2">
-    <button onClick={previewOrders} disabled={busy} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-bold text-indigo-800 disabled:opacity-50"><Search size={17}/>{busy?"בודק...":"בדוק התאמות לפני ייבוא"}</button>
+    <button onClick={previewOrders} disabled={busy} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-bold text-teal-800 disabled:opacity-50"><Search size={17}/>{busy?"בודק...":"בדוק התאמות לפני ייבוא"}</button>
     <button onClick={importOrders} disabled={!canImport} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"><Upload size={17}/>{busy?"שומר...":"אשר וייבא הזמנות היסטוריות"}</button>
    </div>
    {preview&&previewedJson===json&&<p className="text-xs text-emerald-700">הבדיקה מתייחסת בדיוק לתוכן שמופיע בעורך. כל שינוי מחייב בדיקה חוזרת.</p>}
@@ -123,7 +123,7 @@ export default function ManualHistoricalImportPage() {
 
   {preview&&<>
    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-    <div className="flex items-center gap-2"><ClipboardCheck size={19} className="text-indigo-600"/><h2 className="font-bold">תוצאות בדיקת התאמות</h2></div>
+    <div className="flex items-center gap-2"><ClipboardCheck size={19} className="text-teal-600"/><h2 className="font-bold">תוצאות בדיקת התאמות</h2></div>
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
      {[
       ["הזמנות",summary.order_count],
@@ -147,7 +147,7 @@ export default function ManualHistoricalImportPage() {
       <div><div className="font-bold">הזמנה {order.order_index} · {order.supplier_name}</div><div className="text-xs text-slate-500">{order.order_date}</div></div>
       <span className={order.supplier_matched?"text-xs font-bold text-emerald-700":"text-xs font-bold text-red-700"}>{order.supplier_matched?"ספק משויך":"ספק דורש שיוך"}</span>
      </header>
-     {!order.supplier_matched&&order.supplier_candidates?.length>0&&<div className="border-b border-slate-100 p-3"><p className="mb-2 text-xs font-semibold text-slate-600">הצעות ספק — בחר רק אם זו אותה ישות עסקית:</p><div className="flex flex-wrap gap-2">{order.supplier_candidates.map((candidate:any)=><button key={candidate.supplier_id} onClick={()=>applySupplierSuggestion(order.order_index,candidate.supplier_id)} className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-800 hover:bg-indigo-100">{candidate.supplier_name} · ID {candidate.supplier_id} · {Math.round(candidate.score*100)}%</button>)}</div></div>}
+     {!order.supplier_matched&&order.supplier_candidates?.length>0&&<div className="border-b border-slate-100 p-3"><p className="mb-2 text-xs font-semibold text-slate-600">הצעות ספק — בחר רק אם זו אותה ישות עסקית:</p><div className="flex flex-wrap gap-2">{order.supplier_candidates.map((candidate:any)=><button key={candidate.supplier_id} onClick={()=>applySupplierSuggestion(order.order_index,candidate.supplier_id)} className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800 hover:bg-teal-100">{candidate.supplier_name} · ID {candidate.supplier_id} · {Math.round(candidate.score*100)}%</button>)}</div></div>}
      <div className="overflow-x-auto">
       <table className="w-full min-w-[640px] text-right text-xs">
        <thead className="bg-white text-slate-500"><tr><th className="px-3 py-2">תיאור מקור</th><th className="px-3 py-2">כמות</th><th className="px-3 py-2">יחידה</th><th className="px-3 py-2">התאמת מוצר</th></tr></thead>
@@ -158,7 +158,7 @@ export default function ManualHistoricalImportPage() {
         <td className="px-3 py-2">
          {line.product_id?<span className="font-bold text-emerald-700">{line.product_name} · ID {line.product_id} ({line.product_match})</span>:<div className="space-y-2">
           <span className="font-semibold text-amber-700">לא משויך</span>
-          {line.product_candidates?.length>0&&<div className="flex flex-wrap gap-1.5">{line.product_candidates.map((candidate:any)=><button key={candidate.product_id} onClick={()=>applyProductSuggestion(order.order_index,line.line_index,candidate.product_id)} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:border-indigo-300 hover:bg-indigo-50">{candidate.product_name} · ID {candidate.product_id} · {Math.round(candidate.score*100)}%</button>)}</div>}
+          {line.product_candidates?.length>0&&<div className="flex flex-wrap gap-1.5">{line.product_candidates.map((candidate:any)=><button key={candidate.product_id} onClick={()=>applyProductSuggestion(order.order_index,line.line_index,candidate.product_id)} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:border-teal-300 hover:bg-teal-50">{candidate.product_name} · ID {candidate.product_id} · {Math.round(candidate.score*100)}%</button>)}</div>}
          </div>}
         </td>
        </tr>)}</tbody>
