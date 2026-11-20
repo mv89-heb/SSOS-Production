@@ -12,7 +12,7 @@ const assistant = { variable: "" };
 
 export const metadata: Metadata = {
   title: "SSOS - מערכת ניהול הזמנות ספקים",
-  description: "פלטפורמת ניהול הזמנות רכש",
+  description: "SSOS — סביבת עבודה חכמה לניהול רכש, ספקים, מלאי ומסמכים.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
