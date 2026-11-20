@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import SsosLogo from '@/components/brand/ssos-logo';
 import ThemeSwitcher from '@/components/layout/theme-switcher';
 import { useTheme } from '@/providers/theme-provider';
+import { useTheme } from '@/providers/theme-provider';
 
 const loginSchema = z.object({
   email: z.string().email('כתובת אימייל לא תקינה'),
@@ -31,6 +32,7 @@ function loginErrorMessage(error: unknown): string {
 
 export default function LoginPage() {
   const { login, isLoggingIn, loginError } = useAuth();
+  const { resolvedTheme } = useTheme();
   const { resolvedTheme } = useTheme();
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema) });
   const onSubmit = (data: LoginFormValues) => login(data);
