@@ -113,7 +113,7 @@ function SpendCard({ title, description, icon: Icon, basis, empty }: {
                   <div key={document.id} className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
                     <span className="min-w-0 break-words">{document.reference} · {document.date ?? "ללא תאריך"}</span>
                     <span className="shrink-0 tabular-nums">{money(document.amount, group.currency)}</span>
-                    {document.order_id && <Link className="text-indigo-600 hover:underline" href={`/dashboard/orders/${document.order_id}`}>להזמנה</Link>}
+                    {document.order_id && <Link className="text-teal-600 hover:underline" href={`/dashboard/orders/${document.order_id}`}>להזמנה</Link>}
                   </div>
                 ))}
               </div>
@@ -147,7 +147,7 @@ export default function ProcurementAnalyticsPage() {
     <div className="space-y-6 pb-10">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="mb-2 flex items-center gap-2 text-sm font-bold text-indigo-600"><BarChart3 size={17} /> ניתוח וקבלת החלטות</div>
+          <div className="mb-2 flex items-center gap-2 text-sm font-bold text-teal-600"><BarChart3 size={17} /> ניתוח וקבלת החלטות</div>
           <h1 className="page-title">הוצאות רכש</h1>
           <p className="page-subtitle">הפרדה ברורה בין הזמנות שאושרו, חשבוניות שנרשמו ותשלומים שבוצעו.</p>
         </div>
