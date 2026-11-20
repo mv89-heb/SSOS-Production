@@ -28,9 +28,9 @@ function SettingsCard({ title, description, href, icon: Icon, tag }: SettingsLin
   return (
     <Link
       href={href}
-      className="group flex min-w-0 items-start gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-800"
+      className="group flex min-w-0 items-start gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-800"
     >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300">
         <Icon size={21} aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
@@ -40,7 +40,7 @@ function SettingsCard({ title, description, href, icon: Icon, tag }: SettingsLin
         </span>
         <span className="mt-1 block text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</span>
       </span>
-      <ArrowLeft size={17} className="mt-1 shrink-0 text-slate-400 transition group-hover:-translate-x-1 group-hover:text-indigo-600" aria-hidden="true" />
+      <ArrowLeft size={17} className="mt-1 shrink-0 text-slate-400 transition group-hover:-translate-x-1 group-hover:text-teal-600" aria-hidden="true" />
     </Link>
   );
 }
@@ -66,10 +66,10 @@ export default function SettingsPage() {
 
   return (
     <div dir="rtl" className="space-y-8 pb-10">
-      <header className="overflow-hidden rounded-3xl bg-gradient-to-l from-[#071d33] via-[#12375a] to-indigo-800 p-6 text-white shadow-lg sm:p-8">
+      <header className="overflow-hidden rounded-3xl bg-gradient-to-l from-[#071d33] via-[#12375a] to-teal-800 p-6 text-white shadow-lg sm:p-8">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-2xl">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-indigo-100">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-teal-100">
               <Settings2 size={14} /> מרכז הגדרות ותחזוקה
             </div>
             <h1 className="text-2xl font-black sm:text-3xl">הגדרות המערכת</h1>
@@ -103,7 +103,7 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400"><ShieldCheck size={15} /> גישה ואבטחה</div>
           <p className="mt-3 text-base font-bold text-slate-900 dark:text-white">{canManageUsers ? "ניהול משתמשים זמין" : "גישה לפי תפקיד"}</p>
           <p className="mt-1 text-sm leading-5 text-slate-500 dark:text-slate-400">{canManageUsers ? "אפשר לנהל משתמשים והרשאות במרכז הניהול." : "האפשרויות המוצגות מותאמות להרשאות החשבון שלך."}</p>
-          {canManageUsers && <Link className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-indigo-700 hover:text-indigo-900 dark:text-indigo-300" href="/dashboard/admin">ניהול משתמשים והרשאות <ArrowLeft size={14} /></Link>}
+          {canManageUsers && <Link className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-teal-700 hover:text-teal-900 dark:text-teal-300" href="/dashboard/admin">ניהול משתמשים והרשאות <ArrowLeft size={14} /></Link>}
         </div>
       </section>
 
@@ -138,7 +138,7 @@ export default function SettingsPage() {
             <p className="mt-1 leading-6 text-slate-600 dark:text-slate-400">עריכת פרטי ארגון, העדפות התראות אישיות, שפה ואזור זמן, ומדיניות סיסמאות מרוכזת דורשים מסכי הגדרות ייעודיים. לא הוספנו מתגים דמה שאינם שומרים שינוי בפועל.</p>
           </div>
         </div>
-        <Link href="/dashboard/help" className="inline-flex shrink-0 items-center gap-2 font-bold text-indigo-700 hover:text-indigo-900 dark:text-indigo-300">הנחיות שימוש <ArrowLeft size={15} /></Link>
+        <Link href="/dashboard/help" className="inline-flex shrink-0 items-center gap-2 font-bold text-teal-700 hover:text-teal-900 dark:text-teal-300">הנחיות שימוש <ArrowLeft size={15} /></Link>
       </div>
     </div>
   );
