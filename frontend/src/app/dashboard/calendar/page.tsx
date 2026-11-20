@@ -161,7 +161,7 @@ export default function CalendarPage() {
     <div className="space-y-6 pb-8" dir="rtl">
       <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"><CalendarDays className="h-3.5 w-3.5" /> מרכז פעולות רכש</div>
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-700 dark:bg-teal-950/60 dark:text-teal-300"><CalendarDays className="h-3.5 w-3.5" /> מרכז פעולות רכש</div>
           <h1 className="text-2xl font-black text-slate-950 dark:text-white">לוח רכש — תכנון ופעולות</h1>
           <p className="mt-1 text-sm text-slate-500">בחר יום כדי ליצור הזמנה, לפתוח הזמנה קיימת או לבצע את הפעולה הבאה שלה — בלי לצאת מהלוח.</p>
         </div>
@@ -181,7 +181,7 @@ export default function CalendarPage() {
       <Card className="overflow-hidden">
         <CardHeader className="border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="flex items-center gap-3 text-base font-black"><CalendarDays className="h-5 w-5 text-indigo-600" /> {monthTitle(cursor)} <span className="text-xs font-bold text-slate-400">· {new Intl.DateTimeFormat("he-IL-u-ca-hebrew", { month: "long", year: "numeric" }).format(cursor)}</span></CardTitle>
+            <CardTitle className="flex items-center gap-3 text-base font-black"><CalendarDays className="h-5 w-5 text-teal-600" /> {monthTitle(cursor)} <span className="text-xs font-bold text-slate-400">· {new Intl.DateTimeFormat("he-IL-u-ca-hebrew", { month: "long", year: "numeric" }).format(cursor)}</span></CardTitle>
             <div className="flex items-center gap-2">
               <Button variant="outline" className="h-9 px-3" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}><ChevronRight className="h-4 w-4" /> קודם</Button>
               <Button variant="outline" className="h-9 px-3" onClick={() => { const now = new Date(); setCursor(new Date(now.getFullYear(), now.getMonth(), 1)); }}>היום</Button>
@@ -226,7 +226,7 @@ export default function CalendarPage() {
 
       <div className="text-xs text-slate-400">
         מקור מועדי החגים: Hebcal
-        {holidays.data?.find((h) => h.link)?.link && <><span> · </span><a href={holidays.data.find((h) => h.link)?.link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-bold text-indigo-500 hover:underline">פרטי המועד <ExternalLink className="h-3 w-3" /></a></>}
+        {holidays.data?.find((h) => h.link)?.link && <><span> · </span><a href={holidays.data.find((h) => h.link)?.link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-bold text-teal-500 hover:underline">פרטי המועד <ExternalLink className="h-3 w-3" /></a></>}
       </div>
     </div>
   );
@@ -234,9 +234,9 @@ export default function CalendarPage() {
 
 function CalendarCell({ day, today, onClick }: { day: CalendarDay; today: boolean; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className={`min-h-[128px] border-b border-l border-slate-100 p-2.5 text-right align-top transition hover:bg-indigo-50/60 dark:border-slate-800 dark:hover:bg-indigo-950/30 ${today ? "bg-indigo-50/70 dark:bg-indigo-950/20" : "bg-white dark:bg-slate-900"}`}>
+    <button type="button" onClick={onClick} className={`min-h-[128px] border-b border-l border-slate-100 p-2.5 text-right align-top transition hover:bg-teal-50/60 dark:border-slate-800 dark:hover:bg-teal-950/30 ${today ? "bg-teal-50/70 dark:bg-teal-950/20" : "bg-white dark:bg-slate-900"}`}>
       <div className="flex items-start justify-between gap-2">
-        <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-black ${today ? "bg-indigo-600 text-white" : "text-slate-700 dark:text-slate-200"}`}>{day.date.getDate()}</div>
+        <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-black ${today ? "bg-teal-600 text-white" : "text-slate-700 dark:text-slate-200"}`}>{day.date.getDate()}</div>
         <div className="text-left text-[10px] font-semibold text-slate-400">{day.hebrew}</div>
       </div>
       {day.holiday && <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] font-extrabold text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">🎉 {day.holiday.title}</div>}
@@ -283,14 +283,14 @@ function OrderActionCard({ order, onAction, busy }: { order: Order; onAction: (a
     </div>
     <div className="mt-3 flex flex-wrap gap-2">
       <Link href={`/dashboard/orders/${order.id}`} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-black dark:border-slate-700"><Pencil size={15}/> פתיחה</Link>
-      {action && <button disabled={busy} onClick={() => onAction(action, order.id)} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-indigo-600 px-3 text-xs font-black text-white disabled:opacity-50"><Send size={15}/> {busy ? "מבצע..." : actionText}</button>}
+      {action && <button disabled={busy} onClick={() => onAction(action, order.id)} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-teal-600 px-3 text-xs font-black text-white disabled:opacity-50"><Send size={15}/> {busy ? "מבצע..." : actionText}</button>}
       {order.status === "completed" && <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 px-3 text-xs font-black text-emerald-700"><CheckCircle2 size={15}/> הושלמה</span>}
     </div>
   </div>;
 }
 
 function StatCard({ icon: Icon, label, value }: { icon: typeof CalendarDays; label: string; value: number }) {
-  return <Card><CardContent className="flex items-center gap-3 p-4"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300"><Icon className="h-5 w-5" /></div><div><div className="text-xs font-bold text-slate-500">{label}</div><div className="mt-0.5 text-xl font-black text-slate-950 dark:text-white">{value}</div></div></CardContent></Card>;
+  return <Card><CardContent className="flex items-center gap-3 p-4"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-50 text-teal-600 dark:bg-teal-950/40 dark:text-teal-300"><Icon className="h-5 w-5" /></div><div><div className="text-xs font-bold text-slate-500">{label}</div><div className="mt-0.5 text-xl font-black text-slate-950 dark:text-white">{value}</div></div></CardContent></Card>;
 }
 
 function LegendCard({ icon: Icon, title, text }: { icon: typeof CalendarDays; title: string; text: string }) {
