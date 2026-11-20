@@ -165,7 +165,7 @@ export default function CostCalculatorPage() {
   const reset = () => { setSearch(""); setProductId(""); setManualPackagePrice(""); setPackageQuantity(""); setPackageUnit(""); setAmountToCost(""); setAmountUnit(""); setAdditionalAmount(""); setAdditionalUnit(""); setUseManualPackage(false); setCalculationItems([]); };
 
   return <div dir="rtl" className="mx-auto max-w-5xl space-y-6 pb-10 text-slate-900 dark:text-slate-100">
-    <header className="overflow-hidden rounded-3xl bg-gradient-to-l from-slate-950 via-indigo-950 to-blue-900 p-6 text-white shadow-xl sm:p-8">
+    <header className="overflow-hidden rounded-3xl bg-gradient-to-l from-slate-950 via-teal-950 to-blue-900 p-6 text-white shadow-xl sm:p-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-bold text-blue-100"><Calculator className="h-4 w-4"/> כלי עזר לרכש</div>
           <h1 className="text-2xl font-black tracking-tight sm:text-3xl">מחשבון עלויות מוצרים גולמיים</h1>
@@ -177,7 +177,7 @@ export default function CostCalculatorPage() {
 
     <div className="grid gap-4 md:grid-cols-2">
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center gap-2"><Package className="h-5 w-5 text-indigo-600"/><h2 className="text-lg font-extrabold">בחירת מוצר ומחיר</h2></div>
+        <div className="flex items-center gap-2"><Package className="h-5 w-5 text-teal-600"/><h2 className="text-lg font-extrabold">בחירת מוצר ומחיר</h2></div>
         <label className="block text-sm font-bold">חיפוש בכל מוצרי הקטלוג
           <span className="relative mt-1 block"><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="שם, מק״ט, ברקוד, ספק או כמה מילים…" autoComplete="off" className={inputClass + " pr-9"}/></span>
           <span className="mt-1 block text-xs font-normal text-slate-500">{search.trim() ? `נמצאו ${filteredProducts.length} מוצרים מתאימים` : `כל ${products.length} מוצרי הקטלוג זמינים לבחירה`}</span>
@@ -193,13 +193,13 @@ export default function CostCalculatorPage() {
         {isError && <div role="alert" className="text-sm text-rose-600">לא ניתן לטעון את הקטלוג המלא. <button onClick={() => refetch()} className="font-bold underline">נסו שוב</button></div>}
         {selected && <div className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800/70"><div className="font-extrabold">{selected.name}</div><div className="mt-1 text-slate-500">ספק: {supplierName(selected)}</div><div className="mt-1">מחיר בקטלוג: <strong>{selected.current_price != null && selected.current_price > 0 ? money(selected.current_price, selected.currency) : "לא הוגדר מחיר תקין"}</strong>{selected.unit ? ` לכל ${selected.unit}` : ""}</div><div className="mt-3 grid gap-2 sm:grid-cols-2"><div className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"><div className="text-xs text-slate-500">יחידת הזמנה/מלאי</div><div className="mt-1 font-bold">{selected.stock_unit || "לא הוגדרה"}</div></div><div className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"><div className="text-xs text-slate-500">יחידות בקרטון</div><div className="mt-1 font-bold">{selected.stock_unit === "יחידה" ? "לא נדרש" : selected.units_per_carton != null && selected.units_per_carton > 0 ? selected.units_per_carton : "לא הוגדר"}</div></div></div>{(!selected.stock_unit || (selected.stock_unit === "ארגז" && (selected.units_per_carton == null || selected.units_per_carton <= 0))) && <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">חסרים נתוני אריזה למוצר הזה. לפני שמחליטים כמה להזמין, השלימו בקטלוג את יחידת ההזמנה ואת מספר היחידות בקרטון, אם רלוונטי. המחשבון לא ינחש את תכולת האריזה.</div>}</div>}
         <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
-          <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={useManualPackage} onChange={e => setUseManualPackage(e.target.checked)} className="h-4 w-4 accent-indigo-600"/> לחשב לפי מחיר אריזה וכמות אריזה אחרת</label>
+          <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={useManualPackage} onChange={e => setUseManualPackage(e.target.checked)} className="h-4 w-4 accent-teal-600"/> לחשב לפי מחיר אריזה וכמות אריזה אחרת</label>
           {useManualPackage && <div className="mt-3 grid gap-3 sm:grid-cols-2"><Field label="מחיר אריזה (₪)" value={manualPackagePrice} onChange={setManualPackagePrice}/><Field label="כמות ביחידת המחיר" value={packageQuantity} onChange={setPackageQuantity}/><label className="block text-sm font-bold">יחידת המידה של המחיר<select value={packageUnit} onChange={e => { setPackageUnit(e.target.value); setAmountUnit(""); setAdditionalUnit(""); }} className={inputClass + " mt-1"}><option value="">בחרו יחידת מידה</option>{[...(selected?.unit ? [{ value: selected.unit, label: `${selected.unit} (מהקטלוג)` }] : []), ...commonUnitOptions.filter(option => unitKey(option.value) !== unitKey(selected?.unit ?? ""))].map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label></div>}
         </div>
       </section>
 
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center gap-2"><Scale className="h-5 w-5 text-indigo-600"/><h2 className="text-lg font-extrabold">חישוב עלות כמות</h2></div>
+        <div className="flex items-center gap-2"><Scale className="h-5 w-5 text-teal-600"/><h2 className="text-lg font-extrabold">חישוב עלות כמות</h2></div>
         <p className="text-sm leading-6 text-slate-500">תחילה בדקו מהי יחידת המחיר שמוגדרת בקטלוג. לאחר בחירת מוצר, רשימת היחידות תציג רק יחידות תואמות: משקל עם משקל, נפח עם נפח, או אותה יחידה בדיוק. קרטון/מארז לא יומרו ליחידות אחרות בלי נתוני תכולה ידועים.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="כמות עיקרית" value={amountToCost} onChange={setAmountToCost} placeholder="למשל 1"/>
@@ -214,17 +214,17 @@ export default function CostCalculatorPage() {
           <p className="mt-2 text-xs text-slate-500">לדוגמה: כמות עיקרית 1 ק״ג ותוספת 250 גרם. המחשבון ימיר את שתיהן לאותה יחידת בסיס לפני חישוב העלות.</p>
         </div>
         {selected && !useManualPackage && <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"><strong>יחידת המחיר/הרכש בקטלוג:</strong> {selected.unit || "לא הוגדרה"}. זה הנתון הקובע איך המחיר נשמר. אם הספק מוכר בקרטון אך הקטלוג מציין יחידה אחרת, יש לוודא ולעדכן את נתוני המוצר/האריזה בקטלוג לפני שמסתמכים על החישוב.</div>}
-        <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 dark:border-indigo-900/60 dark:bg-indigo-950/30">
-          <div className="text-sm font-bold text-indigo-800 dark:text-indigo-200">עלות הכמות המבוקשת</div>
-          <div className="mt-2 text-3xl font-black tabular-nums text-indigo-950 dark:text-white">{totalCost == null ? "—" : money(totalCost, useManualPackage ? "ILS" : selected?.currency ?? "ILS")}</div>
-          {totalCost != null && baseQty != null && baseQty > 0 && <p className="mt-2 text-xs leading-5 text-indigo-800 dark:text-indigo-200">מחיר יחידת המידה: {money(basePrice! / baseQty!, useManualPackage ? "ILS" : selected?.currency ?? "ILS")} לכל {baseUnit}. כמות מחושבת: {hasMainQuantity ? `${mainQuantity} ${amountUnit}` : ""}{hasMainQuantity && hasAdditionalQuantity ? " + " : ""}{hasAdditionalQuantity ? `${extraQuantity} ${additionalUnit}` : ""}</p>}
+        <div className="rounded-2xl border border-teal-200 bg-teal-50 p-5 dark:border-teal-900/60 dark:bg-teal-950/30">
+          <div className="text-sm font-bold text-teal-800 dark:text-teal-200">עלות הכמות המבוקשת</div>
+          <div className="mt-2 text-3xl font-black tabular-nums text-teal-950 dark:text-white">{totalCost == null ? "—" : money(totalCost, useManualPackage ? "ILS" : selected?.currency ?? "ILS")}</div>
+          {totalCost != null && baseQty != null && baseQty > 0 && <p className="mt-2 text-xs leading-5 text-teal-800 dark:text-teal-200">מחיר יחידת המידה: {money(basePrice! / baseQty!, useManualPackage ? "ILS" : selected?.currency ?? "ILS")} לכל {baseUnit}. כמות מחושבת: {hasMainQuantity ? `${mainQuantity} ${amountUnit}` : ""}{hasMainQuantity && hasAdditionalQuantity ? " + " : ""}{hasAdditionalQuantity ? `${extraQuantity} ${additionalUnit}` : ""}</p>}
           {selected && !useManualPackage && !(selected.current_price != null && selected.current_price > 0) && <p className="mt-2 text-sm font-bold text-amber-700">למוצר הזה אין מחיר תקין בקטלוג. לא מוצג חישוב המבוסס על מחיר חסר.</p>}
           {hasMainQuantity && !amountUnit && <p className="mt-2 text-sm font-bold text-amber-700">בחרו יחידת מידה לכמות העיקרית.</p>}
           {hasMainQuantity && amountUnit && baseUnit && conversionFactor == null && <p className="mt-2 text-sm font-bold text-amber-700">לא ניתן להמיר בין יחידות המידה האלה. בחרו יחידות זהות או יחידות משקל/נפח תואמות.</p>}
           {hasAdditionalQuantity && !additionalUnit && <p className="mt-2 text-sm font-bold text-amber-700">בחרו יחידת מידה לכמות הנוספת.</p>}
           {hasAdditionalQuantity && additionalUnit && baseUnit && additionalConversionFactor == null && <p className="mt-2 text-sm font-bold text-amber-700">יחידת התוספת אינה תואמת ליחידת המחיר.</p>}
         </div>
-        <button type="button" onClick={addToCalculation} disabled={!selected || totalCost == null || (!hasMainQuantity && !hasAdditionalQuantity) || useManualPackage} className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500">הוספת המוצר לרשימת החישוב</button>
+        <button type="button" onClick={addToCalculation} disabled={!selected || totalCost == null || (!hasMainQuantity && !hasAdditionalQuantity) || useManualPackage} className="w-full rounded-xl bg-teal-600 px-4 py-3 font-bold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500">הוספת המוצר לרשימת החישוב</button>
         {useManualPackage && <p className="text-xs text-amber-700">כדי להוסיף מוצר לרשימה, בחרו מוצר מהקטלוג וכבו את מצב המחיר הידני.</p>}
       </section>
     </div>
@@ -232,7 +232,7 @@ export default function CostCalculatorPage() {
     <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="text-lg font-extrabold">רשימת המוצרים לחישוב</h2><p className="mt-1 text-sm text-slate-500">הוסיפו מוצרים ושנו כמויות ישירות בטבלה; העלות מתעדכנת אוטומטית.</p></div>
-        <span className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">{calculationItems.length} פריטים</span>
+        <span className="rounded-full bg-teal-50 px-3 py-1 text-sm font-bold text-teal-700 dark:bg-teal-950 dark:text-teal-200">{calculationItems.length} פריטים</span>
       </div>
       {calculationItems.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700">עדיין לא הוספתם מוצרים. בחרו מוצר, הזינו כמות ולחצו על „הוספת המוצר לרשימת החישוב”.</div> : <>
         <div className="overflow-x-auto">
@@ -254,19 +254,19 @@ export default function CostCalculatorPage() {
               </div></td><td className="px-3 py-3">{money(item.unitCost, item.currency)} / {item.priceUnit}</td><td className="px-3 py-3 font-extrabold">{money(item.totalCost, item.currency)}</td><td className="px-3 py-3"><button type="button" onClick={() => removeCalculationItem(item.key)} className="rounded-lg px-2 py-1 font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">הסר</button></td></tr>)}</tbody>
           </table>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/30">
-          <div><div className="text-sm font-bold text-indigo-800 dark:text-indigo-200">סך העלות לכל המוצרים</div><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-2xl font-black text-indigo-950 dark:text-white">{Object.entries(calculationTotals).map(([currency, total]) => <span key={currency}>{money(total, currency)}</span>)}</div></div>
-          <button type="button" onClick={() => setCalculationItems([])} className="rounded-xl border border-indigo-200 px-3 py-2 text-sm font-bold text-indigo-800 hover:bg-white dark:border-indigo-800 dark:text-indigo-200 dark:hover:bg-indigo-900">נקה רשימה</button>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-teal-200 bg-teal-50 p-4 dark:border-teal-900/60 dark:bg-teal-950/30">
+          <div><div className="text-sm font-bold text-teal-800 dark:text-teal-200">סך העלות לכל המוצרים</div><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-2xl font-black text-teal-950 dark:text-white">{Object.entries(calculationTotals).map(([currency, total]) => <span key={currency}>{money(total, currency)}</span>)}</div></div>
+          <button type="button" onClick={() => setCalculationItems([])} className="rounded-xl border border-teal-200 px-3 py-2 text-sm font-bold text-teal-800 hover:bg-white dark:border-teal-800 dark:text-teal-200 dark:hover:bg-teal-900">נקה רשימה</button>
         </div>
       </>}
     </section>
 
-    <div className="flex flex-wrap gap-3 text-sm"><Link href="/dashboard/catalog" className="rounded-xl border border-slate-200 px-4 py-2.5 font-bold hover:border-indigo-300 dark:border-slate-700">חזרה לקטלוג ולמחירים</Link><Link href="/dashboard/inventory" className="rounded-xl border border-slate-200 px-4 py-2.5 font-bold hover:border-indigo-300 dark:border-slate-700">מעבר למלאי</Link></div>
+    <div className="flex flex-wrap gap-3 text-sm"><Link href="/dashboard/catalog" className="rounded-xl border border-slate-200 px-4 py-2.5 font-bold hover:border-teal-300 dark:border-slate-700">חזרה לקטלוג ולמחירים</Link><Link href="/dashboard/inventory" className="rounded-xl border border-slate-200 px-4 py-2.5 font-bold hover:border-teal-300 dark:border-slate-700">מעבר למלאי</Link></div>
     <p className="text-xs leading-5 text-slate-500">הערה: החישוב משתמש במחיר המוצר הנוכחי שמוצג בקטלוג, ואינו מחליף בדיקת מחיר מול ספק. אין כאן שמירה של חישובים או שינוי מחירי מקור.</p>
   </div>;
 }
 
-const inputClass = "block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
+const inputClass = "block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
 function Field({ label, value, onChange, placeholder = "" }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) {
   return <label className="block text-sm font-bold">{label}<input type="number" min="0" step="any" value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={inputClass + " mt-1"} /></label>;
 }
